@@ -1,0 +1,6 @@
+include README.md CHANGELOG.md REVIEW_TR.md NEXT_PHASES.md requirements.txt VALIDATION.txt
+include ANALIZ_RAPORU_TR.md BIRLIKTE_DINLE_TR.md DAGITIM_REHBERI_TR.md
+recursive-include relay_server *.py *.txt
+recursive-include tests *.py
+recursive-include packaging *.spec *.iss *.ico *.py
+include .github/workflows/ci.yml

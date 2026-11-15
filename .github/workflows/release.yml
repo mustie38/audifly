@@ -1,0 +1,52 @@
+name: Release
+# Etiket atınca (örn. v0.4.3) Windows kurulum dosyasını üretip GitHub Release'e yükler.
+# Uygulamanın "Güncellemeleri Denetle" özelliği bu Release'i kullanır:
+#   AudiflySetup.exe + AudiflySetup.exe.sha256 (doğrulama için ZORUNLU).
+# Kullanım:  pyproject.toml, constants.py (APP_VERSION) ve .iss sürümünü yükselt →
+#            git tag v0.4.3 && git push origin v0.4.3
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: mustiefly_qt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Etiket sürümü pyproject ile aynı mı?
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $line = (Select-String -Path mustiefly_qt/pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($tag -ne $line) { throw "Etiket ($tag) ile pyproject sürümü ($line) farklı" }
+          "VERSION=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - run: python -m pip install -e "./mustiefly_qt[dev]" pyinstaller pypresence ytmusicapi winsdk
+      - run: python -m pytest -q mustiefly_qt/tests
+      - run: python mustiefly_qt/packaging/make_icon.py
+      - run: pyinstaller --noconfirm mustiefly_qt/packaging/audifly.spec
+      - name: Inno Setup ile kurulum dosyası
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" mustiefly_qt/packaging/audifly.iss
+          if (-not (Test-Path mustiefly_qt/packaging/Output/AudiflySetup.exe)) { throw "AudiflySetup.exe üretilmedi" }
+      - name: SHA-256 özeti
+        shell: pwsh
+        run: |
+          $f = "mustiefly_qt/packaging/Output/AudiflySetup.exe"
+          $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+          "$h  AudiflySetup.exe" | Out-File -FilePath "$f.sha256" -Encoding ascii
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            mustiefly_qt/packaging/Output/AudiflySetup.exe
+            mustiefly_qt/packaging/Output/AudiflySetup.exe.sha256
+          generate_release_notes: true

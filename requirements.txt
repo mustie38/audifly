@@ -1,0 +1,20 @@
+PySide6>=6.6
+python-vlc>=3.0.18
+yt-dlp>=2024.1
+requests>=2.31
+Pillow>=10.0
+packaging>=23.2
+keyring>=24.0
+
+# Opsiyonel (kurulu değilse ilgili özellik sessizce devre dışı kalır):
+# pypresence      -> Discord Rich Presence
+# keyboard        -> global medya tuşları (eski yöntem; SMTC varsa gerekmez)
+# Windows medya denetimleri (SMTC: ses açılır penceresi + klavye medya
+#   tuşları) — iki alternatiften biri kurulu olsun:
+#   Python 3.9-3.12 : winsdk
+#   Python 3.13+    : winrt-Windows.Foundation winrt-Windows.Media
+#                     winrt-Windows.Storage.Streams winrt-Windows.Media.Interop
+# ytmusicapi      -> Keşfet sayfası için gerçek "Charts" verisi
+
+# NOT: VLC oynatma motorunun çalışabilmesi için sistemde ayrıca VLC Media
+# Player kurulu olmalı (python-vlc sadece Python bağlayıcısıdır).

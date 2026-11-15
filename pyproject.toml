@@ -1,0 +1,44 @@
+[project]
+name = "audifly"
+version = "0.4.2"
+description = "Spotify tarzı yerel müzik oynatıcı (PySide6/Qt, YouTube arka uçlu)"
+readme = "README.md"
+requires-python = ">=3.11"   # packaging/audifly.spec tomllib kullanır; CI 3.11 ve 3.13 test eder
+dependencies = [
+    "PySide6>=6.6",
+    "python-vlc>=3.0.18",
+    "yt-dlp>=2024.1",
+    "requests>=2.31",
+    "Pillow>=10.0",
+    "packaging>=23.2",
+    "keyring>=24.0",
+]
+
+[project.optional-dependencies]
+discord = ["pypresence"]
+mediakeys = ["keyboard"]
+explore = ["ytmusicapi"]
+smtc = [   # Windows medya denetimleri (ses açılır penceresi + medya tuşları)
+    "winsdk; sys_platform == 'win32' and python_version < '3.13'",
+    "winrt-Windows.Foundation; sys_platform == 'win32' and python_version >= '3.13'",
+    "winrt-Windows.Media; sys_platform == 'win32' and python_version >= '3.13'",
+    "winrt-Windows.Storage.Streams; sys_platform == 'win32' and python_version >= '3.13'",
+    "winrt-Windows.Media.Interop; sys_platform == 'win32' and python_version >= '3.13'",
+]
+dev = ["pytest>=8.0", "pytest-qt>=4.4", "build>=1.2", "ruff>=0.9"]
+
+[project.scripts]
+audifly = "mustiefly_qt.main:main"
+mustiefly = "mustiefly_qt.main:main"   # eski komut adı (geriye dönük uyumluluk)
+
+[tool.setuptools]
+packages = ["mustiefly_qt", "mustiefly_qt.auth", "mustiefly_qt.helpers", "mustiefly_qt.services", "mustiefly_qt.views", "mustiefly_qt.widgets"]
+package-dir = {"mustiefly_qt" = "."}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,319 @@
+"""Audifly "Birlikte Dinle" röle sunucusu.
+
+Ses AKTARMAZ. Yalnızca aynı oda kodundaki istemciler arasında küçük JSON
+mesajları (hangi şarkı, çalıyor mu, kaçıncı saniye) iletir. Her istemci şarkıyı
+kendi bilgisayarında YouTube'dan çalar.
+
+Çalıştırma:   python server.py            (PORT ortam değişkeni, varsayılan 8765)
+Sağlık kontrolü: GET /health -> 200 (Render/Fly/Railway için)
+"""
+from __future__ import annotations
+
+import asyncio
+import hmac
+import json
+import logging
+import os
+import re
+import secrets
+import time
+from http import HTTPStatus
+
+from websockets.asyncio.server import serve
+
+log = logging.getLogger("relay")
+
+PROTOCOL_VERSION = 1
+MAX_ROOM_MEMBERS = 8
+MAX_QUEUE = 50
+MAX_CHAT_CHARS = 200
+EMOJIS = {"❤️", "🔥", "👏", "😂", "😍", "🎉", "👍", "😭"}
+MAX_MESSAGE_BYTES = 8192
+RATE_WINDOW_S = 10.0
+RATE_MAX_MESSAGES = 40
+CODE_RE = re.compile(r"^[A-Z0-9]{4,12}$")
+MAX_ROOMS = int(os.environ.get("MAX_ROOMS", "500"))     # bellek tüketme saldırısına karşı üst sınır
+FAIL_WINDOW_S = 300.0                                    # yanlış şifre denemeleri bu pencerede sayılır
+FAIL_MAX = 8                                             # pencerede istemci başına izin verilen yanlış deneme
+_SONG_FIELDS = {"title": 200, "uploader": 120, "webpage_url": 300, "thumbnail": 400}
+
+
+class Member:
+    def __init__(self, ws, name: str):
+        self.id = secrets.token_hex(4)
+        self.ws = ws
+        self.name = name
+        self.recent: list[float] = []
+
+
+class Room:
+    def __init__(self, code: str):
+        self.code = code
+        self.members: dict[str, Member] = {}   # ekleme sırası = katılma sırası (ilk üye = sahip)
+        self.state: dict | None = None
+        self.queue: list[dict] = []            # ortak sıra
+        self.pw_hash: str = ""                 # boşsa şifresiz oda (ilk giren belirler)
+        self.state_at = 0.0
+
+    @property
+    def host_id(self) -> str:
+        return next(iter(self.members), "")
+
+    def members_payload(self) -> list[dict]:
+        return [{"id": m.id, "name": m.name} for m in self.members.values()]
+
+
+ROOMS: dict[str, Room] = {}
+_FAILS: dict[str, list[float]] = {}      # istemci IP → yanlış şifre zamanları (monotonic)
+
+
+def client_ip(ws) -> str:
+    """Proxy arkasında (Render/Fly) son X-Forwarded-For girdisi, değilse doğrudan bağlantı adresi."""
+    try:
+        forwarded = ws.request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[-1].strip()
+    except Exception:
+        pass
+    try:
+        return str(ws.remote_address[0])
+    except Exception:
+        return ""
+
+
+def too_many_failures(ip: str, now: float | None = None) -> bool:
+    if not ip:
+        return False
+    now = time.monotonic() if now is None else now
+    recent = [t for t in _FAILS.get(ip, []) if now - t < FAIL_WINDOW_S]
+    if recent:
+        _FAILS[ip] = recent
+    else:
+        _FAILS.pop(ip, None)
+    return len(recent) >= FAIL_MAX
+
+
+def record_failure(ip: str, now: float | None = None) -> None:
+    if not ip:
+        return
+    if len(_FAILS) > 10_000:       # sınırsız büyümesin
+        _FAILS.clear()
+    _FAILS.setdefault(ip, []).append(time.monotonic() if now is None else now)
+
+
+def clean_name(raw) -> str:
+    name = re.sub(r"\s+", " ", str(raw or "")).strip()[:24]
+    return name or "Misafir"
+
+
+def clean_song(raw) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    out: dict = {}
+    for key, limit in _SONG_FIELDS.items():
+        value = raw.get(key)
+        if isinstance(value, str):
+            out[key] = value[:limit]
+    url = out.get("webpage_url", "")
+    if not url.startswith(("http://", "https://")):
+        return None
+    duration = raw.get("duration")
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool) and 0 <= duration < 86400:
+        out["duration"] = int(duration)
+    return out
+
+
+def _clean_ms(value, limit: int) -> int:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(0, min(int(value), limit))
+    return 0
+
+
+def clean_pw(raw) -> str:
+    """İstemci SHA-256 özeti yollar (64 hex); düz şifre sunucuya hiç gelmez."""
+    value = str(raw or "")
+    return value if re.fullmatch(r"[0-9a-f]{64}", value) else ""
+
+
+def clean_state(raw: dict) -> dict | None:
+    song = clean_song(raw.get("song"))
+    if song is None:
+        return None
+    seq, pos = raw.get("seq"), raw.get("pos_ms")
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0 or seq > 2**31:
+        return None
+    if not isinstance(pos, (int, float)) or isinstance(pos, bool):
+        return None
+    return {
+        "t": "state", "seq": seq, "song": song,
+        "playing": bool(raw.get("playing")),
+        "pos_ms": max(0, min(int(pos), 86_400_000)),
+        "hb": bool(raw.get("hb")),
+        "sync": bool(raw.get("sync")),
+        "lat": _clean_ms(raw.get("lat"), 5000),
+    }
+
+
+async def send(ws, payload: dict):
+    try:
+        await ws.send(json.dumps(payload, ensure_ascii=False))
+    except Exception:
+        pass   # kopan bağlantı kendi handler'ında temizlenir
+
+
+async def broadcast(room: Room, payload: dict, skip: str | None = None):
+    await asyncio.gather(*(send(m.ws, payload) for mid, m in room.members.items() if mid != skip))
+
+
+def rate_limited(member: Member) -> bool:
+    now = time.monotonic()
+    member.recent = [t for t in member.recent if now - t < RATE_WINDOW_S]
+    if len(member.recent) >= RATE_MAX_MESSAGES:
+        return True
+    member.recent.append(now)
+    return False
+
+
+async def handler(ws):
+    member: Member | None = None
+    room: Room | None = None
+    try:
+        async for raw in ws:
+            try:
+                msg = json.loads(raw)
+                if not isinstance(msg, dict):
+                    raise ValueError
+            except ValueError:
+                continue
+            kind = msg.get("t")
+
+            if member is None:
+                if kind != "join":
+                    await send(ws, {"t": "error", "msg": "Önce odaya katılmalısın."})
+                    return
+                code = str(msg.get("room", "")).upper()
+                if msg.get("v") != PROTOCOL_VERSION:
+                    await send(ws, {"t": "error", "msg": "Uygulama sürümü sunucuyla uyumsuz."})
+                    return
+                if not CODE_RE.match(code):
+                    await send(ws, {"t": "error", "msg": "Oda kodu 4-12 harf/rakam olmalı."})
+                    return
+                pw = clean_pw(msg.get("pw"))
+                room = ROOMS.get(code)
+                if room is None:
+                    if len(ROOMS) >= MAX_ROOMS:
+                        await send(ws, {"t": "error", "msg": "Sunucu şu an çok dolu, biraz sonra tekrar dene."})
+                        return
+                    room = ROOMS[code] = Room(code)
+                    room.pw_hash = pw                 # odayı açan şifreyi belirler
+                elif room.pw_hash:
+                    ip = client_ip(ws)
+                    if too_many_failures(ip):
+                        await send(ws, {"t": "error",
+                                        "msg": "Çok fazla yanlış deneme. Birkaç dakika sonra tekrar dene."})
+                        room = None
+                        return
+                    if not hmac.compare_digest(room.pw_hash, pw):
+                        record_failure(ip)
+                        await send(ws, {"t": "error", "msg": "Oda şifresi yanlış."})
+                        room = None
+                        return
+                if len(room.members) >= MAX_ROOM_MEMBERS:
+                    await send(ws, {"t": "error", "msg": "Oda dolu."})
+                    room = None
+                    return
+                member = Member(ws, clean_name(msg.get("name")))
+                room.members[member.id] = member
+                state = None
+                if room.state is not None:
+                    state = {**room.state, "from": room.host_id,
+                             "age_ms": int((time.monotonic() - room.state_at) * 1000)}
+                await send(ws, {"t": "joined", "id": member.id, "host": room.host_id,
+                                "members": room.members_payload(), "state": state,
+                                "queue": room.queue, "locked": bool(room.pw_hash)})
+                await broadcast(room, {"t": "members", "host": room.host_id,
+                                       "members": room.members_payload()}, skip=member.id)
+                log.info("%s odaya katıldı (%s), üye sayısı: %d", member.name, code, len(room.members))
+                continue
+
+            if rate_limited(member):
+                continue
+            if kind == "state":
+                state = clean_state(msg)
+                if state is None:
+                    continue
+                room.state, room.state_at = state, time.monotonic()
+                room.state["from"] = member.id
+                await broadcast(room, {**state, "from": member.id, "age_ms": 0}, skip=member.id)
+            elif kind == "ping":
+                echo = msg.get("c")
+                await send(ws, {"t": "pong", "c": echo if isinstance(echo, (int, float))
+                                and not isinstance(echo, bool) else 0})
+            elif kind == "transfer":
+                # Yalnız oda sahibi sahipliği devredebilir: hedef üye listenin başına geçer.
+                target = str(msg.get("to", ""))
+                if member.id == room.host_id and target in room.members and target != member.id:
+                    room.members = {target: room.members[target],
+                                    **{k: v for k, v in room.members.items() if k != target}}
+                    await broadcast(room, {"t": "members", "host": room.host_id,
+                                           "members": room.members_payload()})
+            elif kind == "sync_req":
+                host = room.members.get(room.host_id)
+                if host is not None and host.id != member.id:
+                    await send(host.ws, {"t": "sync_req", "from": member.id})
+            elif kind == "chat":
+                text = re.sub(r"\s+", " ", str(msg.get("text", ""))).strip()[:MAX_CHAT_CHARS]
+                if text:
+                    await broadcast(room, {"t": "chat", "from": member.id,
+                                           "name": member.name, "text": text}, skip=member.id)
+            elif kind == "emoji":
+                if msg.get("e") in EMOJIS:
+                    await broadcast(room, {"t": "emoji", "from": member.id,
+                                           "name": member.name, "e": msg["e"]}, skip=member.id)
+            elif kind == "queue_add":
+                song = clean_song(msg.get("song"))
+                if song is not None and len(room.queue) < MAX_QUEUE:
+                    room.queue.append({**song, "by": member.name})
+                    await broadcast(room, {"t": "queue", "items": room.queue})
+            elif kind == "queue_remove":
+                url = str(msg.get("url", ""))
+                for i, item in enumerate(room.queue):
+                    if item.get("webpage_url") == url:
+                        del room.queue[i]
+                        await broadcast(room, {"t": "queue", "items": room.queue})
+                        break
+            elif kind == "queue_pop":
+                # Yalnız baştaki şarkı çalınmak üzere alınmışsa düşer (çift istek zararsız)
+                if room.queue and room.queue[0].get("webpage_url") == str(msg.get("url", "")):
+                    room.queue.pop(0)
+                    await broadcast(room, {"t": "queue", "items": room.queue})
+    finally:
+        if member is not None and room is not None:
+            room.members.pop(member.id, None)
+            if not room.members:
+                ROOMS.pop(room.code, None)
+            else:
+                await broadcast(room, {"t": "members", "host": room.host_id,
+                                       "members": room.members_payload()})
+            log.info("%s ayrıldı (%s)", member.name, room.code)
+
+
+def process_request(connection, request):
+    """Düz HTTP istekleri (sağlık kontrolü) için; WebSocket yükseltmeleri geçer."""
+    if request.headers.get("Upgrade", "").lower() != "websocket":
+        if request.path in ("/", "/health"):
+            return connection.respond(HTTPStatus.OK, "Audifly relay OK\n")
+        return connection.respond(HTTPStatus.NOT_FOUND, "Not found\n")
+    return None
+
+
+async def run(host: str = "0.0.0.0", port: int = 8765):
+    async with serve(handler, host, port, process_request=process_request,
+                     max_size=MAX_MESSAGE_BYTES, ping_interval=20, ping_timeout=20):
+        log.info("Röle sunucusu %s:%d üzerinde dinliyor", host, port)
+        await asyncio.Future()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    asyncio.run(run(port=int(os.environ.get("PORT", "8765"))))

@@ -1,0 +1,53 @@
+name: Tests and package
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.13']
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Qt system libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -r relay_server/requirements.txt
+      - run: python -m pytest -q
+      - run: ruff check . --select E9,F821,F822,F823
+      - run: python -m build
+  package-windows:
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: mustiefly_qt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e "./mustiefly_qt[dev]" pyinstaller pypresence ytmusicapi winsdk
+      - run: python mustiefly_qt/packaging/make_icon.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: pyinstaller --noconfirm mustiefly_qt/packaging/audifly.spec
+      - name: Çıktıyı doğrula
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/Audifly/Audifly.exe)) { throw "Audifly.exe üretilmedi" }
+          (Get-Item dist/Audifly/Audifly.exe).VersionInfo | Format-List ProductName, FileVersion
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Audifly-windows
+          path: dist/Audifly
