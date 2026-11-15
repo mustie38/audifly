@@ -1,5 +1,8 @@
 # Değişiklikler
 
+## 0.4.4
+- Pencere başlığı artık sürüm numarasını gösterir (hangi sürümün kurulu olduğu bir bakışta görülür).
+
 ## 0.4.3
 - **CI:** testler dosyaları açıkça UTF-8 okur/yazar (Windows'ta varsayılan cp1252 Türkçe karakterleri bozuyordu; uygulama kodu zaten UTF-8 kullanıyor).
 - **CI:** libvlc kurulu olmayan ortamlarda (GitHub Actions) testler sahte `vlc` modülüyle çalışır; önceden `import vlc` yüzünden 4 test dosyası toplanamıyor ve Release akışı duruyordu.

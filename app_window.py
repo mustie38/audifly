@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         self.paths = paths
         self.settings = settings
 
-        self.setWindowTitle(f"{APP_DISPLAY_NAME} - {username}")
+        self.setWindowTitle(f"{APP_DISPLAY_NAME} {APP_VERSION} - {username}")
         self.resize(1250, 780)
         self.setMinimumSize(980, 760)
 

@@ -2,7 +2,7 @@
 
 > Eski adı Mustiefly. Kaynak paket adı `mustiefly_qt` olarak kaldı (iç ad); kullanıcıya görünen her yerde Audifly kullanılır.
 
-## Çalıştırma (0.4.3)
+## Çalıştırma (0.4.4)
 
 Python 3.11+ gerekir. Proje klasöründe:
 

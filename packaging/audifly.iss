@@ -22,7 +22,7 @@
 
 #define MyAppName "Audifly"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.3"   ; pyproject.toml ile aynı tut (release.yml /DMyAppVersion=... ile ezer)
+  #define MyAppVersion "0.4.4"   ; pyproject.toml ile aynı tut (release.yml /DMyAppVersion=... ile ezer)
 #endif
 #define MyAppPublisher "Audifly"
 #define MyAppExeName "Audifly.exe"
