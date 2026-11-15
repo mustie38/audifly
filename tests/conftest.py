@@ -79,6 +79,41 @@ def _install_fake_vlc_if_needed():
 
 _install_fake_vlc_if_needed()
 
+_exit_status = {"code": 0}
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Testler bitince Qt nesnelerini düzenle temizle: yorumlayıcı kapanırken
+    PySide6 nesneleri rastgele sırayla yıkılınca arada segfault çıkabiliyordu."""
+    _exit_status["code"] = int(exitstatus)
+    try:
+        import gc
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            for widget in app.topLevelWidgets():
+                widget.close()
+                widget.deleteLater()
+            app.processEvents()
+        gc.collect()
+        if app is not None:
+            app.processEvents()
+    except Exception:
+        pass
+
+
+def pytest_unconfigure(config):
+    """Tüm sonuçlar yazıldıktan sonra süreci doğrudan sonlandır: Qt'nin kapanış sırasındaki
+    olası çökmesi (testler geçmiş olsa bile) CI'ı kırmızıya boyamasın.
+    Gerçek test sonucu (çıkış kodu) aynen korunur."""
+    import sys
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(_exit_status["code"])
+
 
 @pytest.fixture()
 def library_store(tmp_path):
