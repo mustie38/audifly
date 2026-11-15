@@ -112,7 +112,25 @@ def pytest_unconfigure(config):
         sys.stderr.flush()
     except Exception:
         pass
-    os._exit(_exit_status["code"])
+    _terminate_process(_exit_status["code"])
+
+
+def _terminate_process(code: int):
+    """Süreci kapanış kancaları (atexit / DLL_PROCESS_DETACH) çalışmadan sonlandırır.
+    Windows'ta os._exit bile ExitProcess çağırıp Qt DLL'lerinin kapanış koduna giriyor ve
+    'access violation' veriyor; TerminateProcess bu aşamayı atlar. Diğer sistemlerde os._exit yeter."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            kernel32.TerminateProcess.restype = wintypes.BOOL
+            kernel32.TerminateProcess(kernel32.GetCurrentProcess(), code & 0xFFFFFFFF)
+        except Exception:
+            pass   # olmazsa aşağıdaki os._exit denenir
+    os._exit(code)
 
 
 @pytest.fixture()
