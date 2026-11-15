@@ -1,6 +1,9 @@
 # Değişiklikler
 
-## Yayınlanmamış (0.4.2 sonrası hata düzeltmeleri)
+## 0.4.3
+- **Kapanış:** Küçük resim indirmeleri kapanışta iptal edilir; uygulama arka plan thread'leri yüzünden açık kalmaz (güncelleme kurulumunun çalışan `Audifly.exe`'yi bulmasını önler).
+
+## 0.4.2 (hata düzeltmeleri ve güncelleme özelliği)
 - **Uygulama güncellemesi (yeni):** Araçlar → "🔄 Güncellemeleri Denetle…" ve açılışta otomatik denetim (Ayarlar'dan kapatılabilir). GitHub Releases (`mustie38/audifly`) üzerinden son sürüm sorulur; paketlenmiş Windows uygulamasında kurulum dosyası indirilir, **SHA-256 ile doğrulanır** ve kurulum başlatılır (kullanıcı verisi korunur). Doğrulanamayan dosya asla çalıştırılmaz; kaynaktan çalışırken indirme sayfası açılır. "Bu sürümü atla" desteklenir.
 - `.github/workflows/release.yml`: `v*` etiketi atınca `AudiflySetup.exe` + `.sha256` üretip Release'e yükler.
 - **Doğrudan seçilen şarkı çalınamazsa** artık listede ileri atlanmaz (hata gösterilir); geçici link çözme hatası bir kez yeniden denenir. Otomatik geçişte atlama davranışı değişmedi.

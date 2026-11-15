@@ -1,9 +1,9 @@
-Audifly 0.4.2 (+ hata düzeltmeleri) — Yerel doğrulama
+Audifly 0.4.3 — Yerel doğrulama
 Ortam: Ubuntu 24.04, Python 3.12.3, Qt offscreen. libvlc yok: VLC, Windows (SMTC/tepsi/medya tuşları)
 ve PyInstaller/Inno paketi BU ortamda doğrulanmadı; oynatma sahte VLC nesneleriyle sınandı.
 
 pytest:
-288 passed
+289 passed
 
 Statik hata kontrolü (ruff E9,F821,F822,F823):
 All checks passed!

@@ -42,3 +42,12 @@ def test_missing_local_file_produces_actionable_error_without_network(tmp_path):
     from mustiefly_qt.helpers.constants import resolve_stream_url
     with pytest.raises(FileNotFoundError, match="Yerel ses dosyası bulunamadı"):
         resolve_stream_url({"local_path": str(tmp_path / "missing.mp3"), "webpage_url": "local://missing"})
+
+
+def test_thumbnail_service_shutdown_is_safe_and_idempotent():
+    from mustiefly_qt.services.thumbnails import ThumbnailService
+    service = ThumbnailService(max_workers=1)
+    service.shutdown()
+    service.shutdown()                                     # iki kez çağrılabilir
+    service.request({"webpage_url": "https://x.example/1", "thumbnail": "https://x.example/t.jpg"})
+    assert service._fetching == set()                      # kapandıktan sonra iş alınmaz, hata atmaz

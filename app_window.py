@@ -1080,6 +1080,7 @@ class MainWindow(QMainWindow):
         if self.smtc is not None:
             self.smtc.stop()
         self.downloads.shutdown()
+        self.thumbnails.shutdown()
         self.store.flush_now()
         try:
             self.playback.shutdown()

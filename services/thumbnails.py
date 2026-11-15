@@ -56,6 +56,7 @@ class ThumbnailService(QObject):
         super().__init__(parent)
         workers = max_workers or THUMBNAIL_MAX_WORKERS
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+        self._closed = False
         self.disk_cache_dir = disk_cache_dir
         # LRU: en son erişilen öne taşınır; limit aşılınca en bayatı atılır
         self._pil_cache: collections.OrderedDict[str, Image.Image] = collections.OrderedDict()
@@ -142,7 +143,7 @@ class ThumbnailService(QObject):
         with self._lock:
             if key not in self._fetching:
                 self._fetching.add(key)
-                self._executor.submit(self._download, key, url)
+                self._submit(key, url)
         return None
 
     def request(self, song: dict):
@@ -157,7 +158,22 @@ class ThumbnailService(QObject):
             if key in self._fetching:
                 return
             self._fetching.add(key)
+            self._submit(key, url)
+
+    def _submit(self, key: str, url: str):
+        if self._closed:
+            self._fetching.discard(key)
+            return
+        try:
             self._executor.submit(self._download, key, url)
+        except RuntimeError:        # kapanış sırasında havuz kapanmış olabilir
+            self._fetching.discard(key)
+
+    def shutdown(self):
+        """Kapanışta bekleyen indirmeleri iptal eder: işlem süreci takılı thread yüzünden
+        açık kalmasın (güncelleme kurulumu çalışan Audifly.exe'yi bulmasın)."""
+        self._closed = True
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
     # --- Arka plan ---
     def _download(self, key: str, url: str):
