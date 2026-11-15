@@ -25,4 +25,4 @@ for size in ICON_SIZES:
     frames.append(Image.open(io.BytesIO(bytes(buf.data()))).convert("RGBA"))
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audifly.ico")
 frames[-1].save(out, format="ICO", sizes=[(s, s) for s in ICON_SIZES], append_images=frames[:-1])
-print("yazıldı:", out)
+print("yazildi:", out)   # ASCII: Windows konsolu (cp1252) Türkçe karakterleri yazamaz
