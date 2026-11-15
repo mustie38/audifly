@@ -1,6 +1,7 @@
 # Değişiklikler
 
 ## 0.4.3
+- **CI:** libvlc kurulu olmayan ortamlarda (GitHub Actions) testler sahte `vlc` modülüyle çalışır; önceden `import vlc` yüzünden 4 test dosyası toplanamıyor ve Release akışı duruyordu.
 - **Kapanış:** Küçük resim indirmeleri kapanışta iptal edilir; uygulama arka plan thread'leri yüzünden açık kalmaz (güncelleme kurulumunun çalışan `Audifly.exe`'yi bulmasını önler).
 
 ## 0.4.2 (hata düzeltmeleri ve güncelleme özelliği)

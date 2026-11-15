@@ -38,6 +38,48 @@ def pytest_configure(config):
 import pytest
 
 
+def _install_fake_vlc_if_needed():
+    """CI'da (GitHub Actions) libvlc kurulu değil: 'import vlc' modül yüklenirken patlar ve
+    playback.py'yi içe aktaran testler toplanamaz. Gerçek vlc yüklenemiyorsa (ya da
+    AUDIFLY_FAKE_VLC=1 ise) testler için asgari bir sahte 'vlc' modülü yerleştirilir.
+    Testler zaten vlc.Instance'ı kendileri taklit eder (monkeypatch)."""
+    if not os.environ.get("AUDIFLY_FAKE_VLC"):
+        try:
+            import vlc  # noqa: F401
+            return
+        except Exception:
+            pass
+    import enum
+    import types
+    from unittest.mock import MagicMock
+
+    class State(enum.IntEnum):
+        NothingSpecial = 0
+        Opening = 1
+        Buffering = 2
+        Playing = 3
+        Paused = 4
+        Stopped = 5
+        Ended = 6
+        Error = 7
+
+    fake = types.ModuleType("vlc")
+    fake.State = State
+    fake.Instance = lambda *a, **k: None
+    fake.Media = MagicMock
+    fake.AudioEqualizer = MagicMock
+    fake.libvlc_get_version = lambda: b"fake-vlc"
+    fake.libvlc_audio_equalizer_get_band_count = lambda: 10
+    fake.libvlc_audio_equalizer_get_preset_count = lambda: 0
+    fake.libvlc_audio_equalizer_get_preset_name = lambda i: b""
+    fake.libvlc_audio_equalizer_get_band_frequency = lambda i: 60.0
+    fake.libvlc_audio_equalizer_new_from_preset = lambda i: MagicMock()
+    sys.modules["vlc"] = fake
+
+
+_install_fake_vlc_if_needed()
+
+
 @pytest.fixture()
 def library_store(tmp_path):
     pytest.importorskip("PySide6")
