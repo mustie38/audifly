@@ -3,7 +3,7 @@ Ortam: Ubuntu 24.04, Python 3.12.3, Qt offscreen. libvlc yok: VLC, Windows (SMTC
 ve PyInstaller/Inno paketi BU ortamda doğrulanmadı; oynatma sahte VLC nesneleriyle sınandı.
 
 pytest:
-300 passed
+301 passed
 
 Statik hata kontrolü (ruff E9,F821,F822,F823):
 All checks passed!

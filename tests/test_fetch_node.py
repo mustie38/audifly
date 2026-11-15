@@ -73,3 +73,12 @@ def test_main_returns_error_code_instead_of_crashing(fn, tmp_path, monkeypatch, 
     monkeypatch.setattr(fn, "fetch", lambda *a, **k: (_ for _ in ()).throw(OSError("ag yok")))
     assert fn.main(["--dest", str(tmp_path / "b")]) == 1
     assert "HATA" in capsys.readouterr().err
+
+
+def test_install_node_never_touches_network_when_get_is_mocked(fn, tmp_path, monkeypatch):
+    """Varsayılan 'fetch' çağrı anında çözülmeli: bu test gerçek ağ erişimi olsa da geçmeli."""
+    calls = []
+    monkeypatch.setattr(fn, "fetch", lambda url, *a, **k: calls.append(url) or (_ for _ in ()).throw(OSError("yok")))
+    with pytest.raises(OSError):
+        fn.install_node(tmp_path / "bin")
+    assert calls == ["https://nodejs.org/dist/index.json"]

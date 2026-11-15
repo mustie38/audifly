@@ -58,8 +58,10 @@ def fetch(url: str, timeout: int = 120) -> bytes:
         return resp.read()
 
 
-def install_node(dest: Path, version: str | None = None, get=fetch) -> tuple[str, Path]:
+def install_node(dest: Path, version: str | None = None, get=None) -> tuple[str, Path]:
     """node.exe ve LICENSE'i dest altina yazar. (surum, node.exe yolu) doner."""
+    if get is None:
+        get = fetch              # cagri aninda cozulur (varsayilan arguman olsaydi testler taklit edemezdi)
     if version is None:
         version = pick_lts(json.loads(get(f"{DIST}/index.json").decode("utf-8")))
     name = f"node-{version}-{PLATFORM}.zip"
