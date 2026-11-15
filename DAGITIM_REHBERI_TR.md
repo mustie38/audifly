@@ -14,10 +14,10 @@ CI (`.github/workflows/ci.yml → package-windows`) aynı adımları Windows'ta 
 |---|---|---|
 | VLC | **Zorunlu**, pakete dahil değil | Kurulumda ve açılışta denetlenir; yoksa açıklayıcı hata ve çıkış. 64-bit uygulama için 64-bit VLC. |
 | FFmpeg + ffprobe | İsteğe bağlı (indirme için) | `packaging/bin/` altına koyarsan kurulumla gelir; yoksa açılışta bir kez uyarılır. |
-| Node.js | İsteğe bağlı (YouTube çözümleme) | Aynı şekilde `packaging/bin/node.exe`. |
-| yt-dlp | Pakete gömülü | **Donmuş EXE'de pip ile güncellenemez** → bkz. 4. |
+| Node.js | **Pakete dahil** (YouTube çözümleme için gerekli) | CI, `packaging/fetch_node.py` ile güncel LTS `node.exe`'yi (SHA-256 doğrulamalı) indirip `packaging/bin/`'e koyar; LICENSE-node.txt ile birlikte pakete girer. Elle derlerken önce `python packaging/fetch_node.py` çalıştır. |
+| yt-dlp + yt-dlp-ejs | Pakete gömülü | YouTube JS koruması için `yt-dlp-ejs` betikleri de pakete alınır (spec bunu doğrular). **Donmuş EXE'de pip ile güncellenemez** → bkz. 4. |
 
-FFmpeg (LGPL/GPL) ve Node.js (MIT) dağıtırken lisans metinlerini kurulum paketine eklemelisin.
+FFmpeg (LGPL/GPL) dağıtırken; Node.js (MIT) için `LICENSE-node.txt` pakete otomatik eklenir. FFmpeg dağıtırken lisans metinlerini kurulum paketine eklemelisin.
 
 ## 3. Temiz Windows testi (otomatikleştirilemeyenler — elle yap)
 Temiz bir Windows 10/11 sanal makinesinde:

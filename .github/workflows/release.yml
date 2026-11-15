@@ -31,12 +31,21 @@ jobs:
       - run: python -m pip install -e "./mustiefly_qt[dev]" pyinstaller pypresence ytmusicapi winsdk
       - run: python -m pytest -q mustiefly_qt/tests
       - run: python mustiefly_qt/packaging/make_icon.py
+      - name: Node.js'i pakete ekle (yt-dlp YouTube çözümü için)
+        run: python mustiefly_qt/packaging/fetch_node.py
       - run: pyinstaller --noconfirm mustiefly_qt/packaging/audifly.spec
+      - name: Pakette Node.js ve yt-dlp-ejs var mı?
+        shell: pwsh
+        run: |
+          if (-not (Get-ChildItem dist/Audifly -Recurse -Filter node.exe)) { throw "node.exe pakete girmedi" }
+          if (-not (Get-ChildItem dist/Audifly -Recurse -Filter core.min.js)) { throw "yt-dlp-ejs betikleri (core.min.js) pakete girmedi" }
       - name: Inno Setup ile kurulum dosyası
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" mustiefly_qt/packaging/audifly.iss
+          python mustiefly_qt/packaging/set_iss_version.py $env:VERSION
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" mustiefly_qt/packaging/audifly.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC hata verdi (cikis kodu $LASTEXITCODE)" }
           if (-not (Test-Path mustiefly_qt/packaging/Output/AudiflySetup.exe)) { throw "AudiflySetup.exe üretilmedi" }
       - name: SHA-256 özeti
         shell: pwsh

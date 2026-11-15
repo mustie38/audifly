@@ -2,7 +2,7 @@
 
 > Eski adı Mustiefly. Kaynak paket adı `mustiefly_qt` olarak kaldı (iç ad); kullanıcıya görünen her yerde Audifly kullanılır.
 
-## Çalıştırma (0.4.4)
+## Çalıştırma (0.4.5)
 
 Python 3.11+ gerekir. Proje klasöründe:
 
@@ -149,8 +149,9 @@ cd ..                                   # mustiefly_qt/'yi İÇEREN klasöre ge�
 pyinstaller mustiefly_qt/packaging/audifly.spec
 ```
 
-Çıktı `dist/Audifly/` altında olur. VLC yine de ayrıca kurulu olmalı —
-PyInstaller onu pakete dahil etmez.
+Çıktı `dist/Audifly/` altında olur. Derlemeden önce `python packaging/fetch_node.py` ile
+Node.js (YouTube şarkı çözümü için) pakete eklenir; GitHub Release akışı bunu otomatik yapar.
+VLC yine de ayrıca kurulu olmalı — PyInstaller onu pakete dahil etmez.
 
 Ayrıntılı faz geçmişi için `NEXT_PHASES.md` dosyasına bak.
 ## Güncelleme

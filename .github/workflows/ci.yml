@@ -41,7 +41,14 @@ jobs:
       - run: python mustiefly_qt/packaging/make_icon.py
         env:
           QT_QPA_PLATFORM: offscreen
+      - name: Node.js'i pakete ekle (yt-dlp YouTube çözümü için)
+        run: python mustiefly_qt/packaging/fetch_node.py
       - run: pyinstaller --noconfirm mustiefly_qt/packaging/audifly.spec
+      - name: Pakette Node.js ve yt-dlp-ejs var mı?
+        shell: pwsh
+        run: |
+          if (-not (Get-ChildItem dist/Audifly -Recurse -Filter node.exe)) { throw "node.exe pakete girmedi" }
+          if (-not (Get-ChildItem dist/Audifly -Recurse -Filter core.min.js)) { throw "yt-dlp-ejs betikleri (core.min.js) pakete girmedi" }
       - name: Çıktıyı doğrula
         shell: pwsh
         run: |

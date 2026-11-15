@@ -19,7 +19,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 PACKAGE_ROOT = Path(SPECPATH).parent
@@ -61,14 +61,22 @@ VERSION_FILE.write_text(f"""VSVersionInfo(
   ])
 """, encoding="utf-8")
 
+# yt-dlp-ejs: YouTube JS korumasini cozen betikler (core.min.js / lib.min.js) PAKETE girmezse
+# Node.js olsa bile sarkilar cozulemez; bu yuzden veri dosyalari ve alt modulleri acikca eklenir.
+_HAS_EJS = importlib.util.find_spec("yt_dlp_ejs") is not None
+EJS_DATAS = collect_data_files("yt_dlp_ejs") if _HAS_EJS else []
+EJS_IMPORTS = collect_submodules("yt_dlp_ejs") if _HAS_EJS else []
+
 a = Analysis(
     [str(PACKAGE_ROOT / "main.py")],
     pathex=[str(PROJECT_PARENT)],
     binaries=[],
     datas=(collect_data_files("ytmusicapi") if importlib.util.find_spec("ytmusicapi") else [])
+          + EJS_DATAS
           + ([(str(BIN_DIR), "bin")] if BIN_DIR.is_dir() else []),
     hiddenimports=[
         "yt_dlp",
+        *EJS_IMPORTS,
         "vlc",
         "PIL",
         "PySide6.QtNetwork",

@@ -1,4 +1,4 @@
-; ============================================================================
+﻿; ============================================================================
 ;  Audifly - Inno Setup Kurulum Betiği
 ; ============================================================================
 ;  Bu betik, PyInstaller ile üretilmiş "dist\Audifly\" klasörünü tek bir
@@ -21,9 +21,8 @@
 ; ============================================================================
 
 #define MyAppName "Audifly"
-#ifndef MyAppVersion
-  #define MyAppVersion "0.4.4"   ; pyproject.toml ile aynı tut (release.yml /DMyAppVersion=... ile ezer)
-#endif
+; Sürüm pyproject.toml ile aynı olmalı; release.yml bunu packaging/set_iss_version.py ile günceller.
+#define MyAppVersion "0.4.5"
 #define MyAppPublisher "Audifly"
 #define MyAppExeName "Audifly.exe"
 #define MyAppURL "https://github.com/mustie38/audifly"
@@ -43,7 +42,8 @@ DisableProgramGroupPage=yes
 ; Varsayılan: kullanıcı klasörüne kurulum (yönetici izni gerekmez); kurulum sihirbazı
 ; isterse yönetici seçeneğini sunar.
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog   ; kullanıcı isterse tüm kullanıcılar için (yönetici) kurabilir
+; Kullanıcı isterse tüm kullanıcılar için (yönetici) kurabilir:
+PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=Output
 OutputBaseFilename=AudiflySetup
 ; Kurulum sihirbazı ikonu (python mustiefly_qt/packaging/make_icon.py ile üretilir):
@@ -102,8 +102,7 @@ begin
   begin
     MsgBox('VLC Media Player sisteminizde bulunamadı.' + #13#10 + #13#10 +
       'Audifly''nin müzik çalabilmesi için VLC Media Player''ın ayrıca ' +
-      'kurulu olması gerekir (64-bit Python/uygulama için 64-bit VLC).' +
-      #13#10#13#10 +
+      'kurulu olması gerekir (64-bit Python/uygulama için 64-bit VLC).' + #13#10 + #13#10 +
       'Kuruluma devam edebilirsiniz, ancak VLC''yi https://www.videolan.org/vlc/ ' +
       'adresinden ayrıca indirip kurmayı unutmayın.',
       mbInformation, MB_OK);

@@ -1,5 +1,10 @@
 # Değişiklikler
 
+## 0.4.5
+- **Kurulum dosyası (Inno Setup) derleme hataları düzeltildi:** satır başında `#13#10` ("Unknown preprocessor directive"), `[Setup]` satırında geçersiz satır sonu yorumu ve eksik UTF-8 BOM (Türkçe metin bozuk çıkardı). `packaging/set_iss_version.py` etiket sürümünü .iss'e yazar; `tests/test_installer_script.py` bu hata sınıfını artık her push'ta yakalar.
+- **Kurulum dosyası artık Node.js içerir** ve YouTube JS çözücüsü `yt-dlp-ejs` pakete dahildir: ayrıca Node.js kurmadan şarkılar çalar. (Önceden `yt-dlp-ejs` bağımlılıklarda yoktu; Node kurulu olsa bile paketli sürümde YouTube çözümü başarısız olabiliyordu.) `packaging/fetch_node.py` node.exe'yi SHA-256 doğrulamasıyla indirir; CI paketin içinde node.exe ve `core.min.js` olduğunu denetler.
+- `pyproject.toml`/`requirements.txt`: `yt-dlp[default]` ve `yt-dlp-ejs` eklendi.
+
 ## 0.4.4
 - Pencere başlığı artık sürüm numarasını gösterir (hangi sürümün kurulu olduğu bir bakışta görülür).
 
