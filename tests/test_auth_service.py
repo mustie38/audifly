@@ -116,7 +116,7 @@ def test_windows_reserved_and_ambiguous_names_rejected(service, username):
 def test_malformed_account_does_not_crash(service, entry):
     import json
     from pathlib import Path
-    Path(service.USERS_FILE).write_text(json.dumps({"testuser": entry}))
+    Path(service.USERS_FILE).write_text(json.dumps({"testuser": entry}), encoding="utf-8")
     assert not service.login("testuser", "password")[0]
 
 
@@ -129,9 +129,9 @@ def test_failed_account_write_does_not_claim_success(service, monkeypatch):
 def test_corrupt_account_file_is_not_overwritten(service):
     from pathlib import Path
     path = Path(service.USERS_FILE)
-    path.write_text("broken accounts")
+    path.write_text("broken accounts", encoding="utf-8")
     assert not service.register("newuser", "password")[0]
-    assert path.read_text() == "broken accounts"
+    assert path.read_text(encoding="utf-8") == "broken accounts"
 
 
 def test_case_insensitive_duplicate_is_rejected(service):

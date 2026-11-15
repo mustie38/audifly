@@ -130,16 +130,16 @@ def test_playlist_switch_is_persisted(library_store):
     store.active_playlist = "A"
     store.switch_playlist("B")
     store.flush_now()
-    assert json.loads(Path(store.paths.playlist_file).read_text())["active_playlist"] == "B"
+    assert json.loads(Path(store.paths.playlist_file).read_text(encoding="utf-8"))["active_playlist"] == "B"
 
 
 def test_schema_invalid_main_and_backup_skipped(library_store):
     store = library_store
-    Path(store.paths.playlist_file).write_text('{"playlists":"invalid"}')
+    Path(store.paths.playlist_file).write_text('{"playlists":"invalid"}', encoding="utf-8")
     backups = Path(store.paths.dir) / "backups"
     backups.mkdir(exist_ok=True)
-    (backups / "playlists.bak1.json").write_text("123")
-    (backups / "playlists.bak2.json").write_text(json.dumps({"playlists": {"Recovered": [None, song(), 123]}}))
+    (backups / "playlists.bak1.json").write_text("123", encoding="utf-8")
+    (backups / "playlists.bak2.json").write_text(json.dumps({"playlists": {"Recovered": [None, song(), 123]}}), encoding="utf-8")
     store.load()
     assert list(store.playlists) == ["Recovered"]
     assert len(store.playlists["Recovered"]) == 1

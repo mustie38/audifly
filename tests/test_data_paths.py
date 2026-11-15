@@ -24,7 +24,7 @@ def test_source_run_without_legacy_data_uses_user_storage_not_project_parent(tmp
 
 
 def test_existing_legacy_accounts_are_not_moved(tmp_path):
-    (tmp_path / "users.json").write_text("{}")
+    (tmp_path / "users.json").write_text("{}", encoding="utf-8")
     assert default_data_root(tmp_path / "mustiefly_qt", environ={}, home=tmp_path, frozen=False) == str(tmp_path)
 
 
@@ -52,16 +52,16 @@ def test_migration_copies_data_fixes_offline_paths_and_stops_using_legacy(tmp_pa
     legacy, target = tmp_path / "Desktop", tmp_path / "Local" / "Audifly"
     user = legacy / "users" / "ali"
     user.mkdir(parents=True)
-    (legacy / "users.json").write_text('{"ali": {}}')
-    (legacy / "last_session.json").write_text('{"user": "ali"}')
-    (user / "settings.json").write_text('{"theme": "crimson"}')
+    (legacy / "users.json").write_text('{"ali": {}}', encoding="utf-8")
+    (legacy / "last_session.json").write_text('{"user": "ali"}', encoding="utf-8")
+    (user / "settings.json").write_text('{"theme": "crimson"}', encoding="utf-8")
     cached = str(legacy / "users" / "ali" / "audio_cache" / "a.mp3")
     (user / "spotify_lite_playlist.json").write_text(json.dumps(
-        {"Liste": [{"title": "x", "cached_path": cached, "local_path": "D:/muzik/b.mp3"}]}))
+        {"Liste": [{"title": "x", "cached_path": cached, "local_path": "D:/muzik/b.mp3"}]}), encoding="utf-8")
     assert migrate_legacy_data(legacy, target) is True
-    assert (target / "users.json").read_text() == '{"ali": {}}'
-    assert json.loads((target / "users/ali/settings.json").read_text()) == {"theme": "crimson"}
-    song = json.loads((target / "users/ali/spotify_lite_playlist.json").read_text())["Liste"][0]
+    assert (target / "users.json").read_text(encoding="utf-8") == '{"ali": {}}'
+    assert json.loads((target / "users/ali/settings.json").read_text(encoding="utf-8")) == {"theme": "crimson"}
+    song = json.loads((target / "users/ali/spotify_lite_playlist.json").read_text(encoding="utf-8"))["Liste"][0]
     assert song["cached_path"] == str(target / "users" / "ali" / "audio_cache" / "a.mp3")
     assert song["local_path"] == "D:/muzik/b.mp3"                  # dış yol aynen kalır
     assert (legacy / "users.json").exists()                         # eski veri silinmez
@@ -75,7 +75,7 @@ def test_migration_never_overwrites_existing_user_data(tmp_path):
     legacy, target = tmp_path / "old", tmp_path / "new"
     legacy.mkdir()
     target.mkdir()
-    (legacy / "users.json").write_text('{"eski": {}}')
-    (target / "users.json").write_text('{"yeni": {}}')
+    (legacy / "users.json").write_text('{"eski": {}}', encoding="utf-8")
+    (target / "users.json").write_text('{"yeni": {}}', encoding="utf-8")
     assert migrate_legacy_data(legacy, target) is False
-    assert (target / "users.json").read_text() == '{"yeni": {}}'
+    assert (target / "users.json").read_text(encoding="utf-8") == '{"yeni": {}}'

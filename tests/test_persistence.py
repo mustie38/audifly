@@ -9,29 +9,29 @@ from mustiefly_qt.helpers.persistence import atomic_write_json
 def test_atomic_write_creates_parent_and_keeps_unicode(tmp_path):
     path = tmp_path / "nested" / "data.json"
     atomic_write_json(path, {"title": "Şarkı"})
-    assert json.loads(path.read_text()) == {"title": "Şarkı"}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"title": "Şarkı"}
     assert list(path.parent.glob("*.tmp")) == []
 
 
 def test_serialization_failure_preserves_original(tmp_path):
     path = tmp_path / "data.json"
-    path.write_text('{"original":true}')
+    path.write_text('{"original":true}', encoding="utf-8")
     with pytest.raises(TypeError):
         atomic_write_json(path, {"broken": object()})
-    assert json.loads(path.read_text()) == {"original": True}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"original": True}
     assert list(tmp_path.iterdir()) == [path]
 
 
 def test_replace_failure_preserves_original(tmp_path, monkeypatch):
     from mustiefly_qt.helpers import persistence
     path = tmp_path / "data.json"
-    path.write_text("old")
+    path.write_text("old", encoding="utf-8")
     def fail(*args):
         raise OSError("disk failure")
     monkeypatch.setattr(persistence.os, "replace", fail)
     with pytest.raises(OSError):
         atomic_write_json(path, {"new": True})
-    assert path.read_text() == "old"
+    assert path.read_text(encoding="utf-8") == "old"
     assert list(tmp_path.iterdir()) == [path]
 
 
@@ -59,7 +59,7 @@ def test_final_flush_waits_for_older_background_write(library_store, monkeypatch
     store.save()
     release.set()
     assert store.flush_now()
-    assert json.loads(Path(store.paths.playlist_file).read_text())["active_playlist"] == "latest"
+    assert json.loads(Path(store.paths.playlist_file).read_text(encoding="utf-8"))["active_playlist"] == "latest"
 
 
 def test_failed_write_retained_for_flush_retry(library_store, monkeypatch):

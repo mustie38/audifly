@@ -83,7 +83,7 @@ def test_corrupt_library_is_quarantined_and_backup_not_rotated(library_store):
     import pathlib
     store = library_store
     store.backup_enabled = True
-    pathlib.Path(store.paths.playlist_file).write_text("{bozuk")
+    pathlib.Path(store.paths.playlist_file).write_text("{bozuk", encoding="utf-8")
     store._backup_playlist_file()
     assert not (pathlib.Path(store.paths.dir) / "backups" / "playlists.bak1.json").exists()
     store.load()
