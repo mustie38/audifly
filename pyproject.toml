@@ -1,6 +1,6 @@
 [project]
 name = "audifly"
-version = "0.4.7"
+version = "0.4.8"
 description = "Spotify tarzı yerel müzik oynatıcı (PySide6/Qt, YouTube arka uçlu)"
 readme = "README.md"
 requires-python = ">=3.11"   # packaging/audifly.spec tomllib kullanır; CI 3.11 ve 3.13 test eder

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import yt_dlp
-from mustiefly_qt.helpers.dependencies import prepend_bundled_bin_to_path
+from mustiefly_qt.helpers.dependencies import bundled_bin_dir, prepend_bundled_bin_to_path
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
@@ -41,9 +41,22 @@ DISCORD_CLIENT_ID_DEFAULT = "1536007378783436922"
 # Paketle gelen bin/ (ffmpeg, node) varsa PATH'e ekle — aşağıdaki Node denetiminden ÖNCE
 prepend_bundled_bin_to_path()
 
-# yt-dlp JS runtime (YouTube "n challenge" için) - Node varsa kullan
-_NODE_AVAILABLE = shutil.which("node") is not None
-YT_DLP_JS_RUNTIMES = {"node": {}} if _NODE_AVAILABLE else {}
+
+def _detect_node_path() -> str | None:
+    """Önce kurulum paketindeki `bin/node.exe`'yi, yoksa PATH'teki `node`'u döndürür."""
+    exe = "node.exe" if sys.platform == "win32" else "node"
+    bundled = os.path.join(bundled_bin_dir(), exe)
+    if os.path.isfile(bundled):
+        return bundled
+    return shutil.which("node")
+
+
+# yt-dlp JS runtime (YouTube "n challenge" için) — açık yol verilir ki PyInstaller
+# ortamında sysconfig.get_path('scripts') yüzünden veya eski bir sistem Node sürümü
+# yüzünden çözümleme bozulmasın.
+_NODE_PATH = _detect_node_path()
+_NODE_AVAILABLE = _NODE_PATH is not None
+YT_DLP_JS_RUNTIMES = {"node": {"path": _NODE_PATH}} if _NODE_PATH else {}
 if not _NODE_AVAILABLE:
     log.warning(
         "Node.js bulunamadı (PATH'te 'node' yok). YouTube bazı videolarda "
@@ -52,15 +65,21 @@ if not _NODE_AVAILABLE:
     )
 
 
-APP_VERSION = "0.4.7"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
+APP_VERSION = "0.4.8"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
 APP_DISPLAY_NAME = "Audifly"   # kullanıcıya görünen ad (tek nokta)
 LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (göç uyumluluğu)
 
 
 def yt_dlp_base_opts(**overrides) -> dict:
-    # socket_timeout: ağ takılırsa arayüzdeki "Yükleniyor" sonsuza dek sürmesin
-    opts = {"js_runtimes": dict(YT_DLP_JS_RUNTIMES),
-            "socket_timeout": 15, "no_warnings": True}
+    # socket_timeout: ağ takılırsa arayüzdeki "Yükleniyor" sonsuza dek sürmesin.
+    # extractor_args: YouTube CDN, tv_samsung (c=TVHTML5) akışlarına HTTP 403 Forbidden
+    # döndürdüğü için devre dışı bırakılır; visionos / web_embedded / web istemcileri kullanılır.
+    opts = {
+        "js_runtimes": dict(YT_DLP_JS_RUNTIMES),
+        "socket_timeout": 15,
+        "no_warnings": True,
+        "extractor_args": {"youtube": {"player_client": ["default", "-tv_samsung"]}},
+    }
     opts.update(overrides)
     return opts
 
@@ -224,7 +243,7 @@ def stream_url_expiry(url: str | None) -> float | None:
 def stream_url_is_fresh(song: dict, now: float | None = None) -> bool:
     """Önbellekteki stream linki hâlâ güvenle kullanılabilir mi?"""
     url = song.get("stream_url")
-    if not url:
+    if not url or "c=TVHTML5" in url:
         return False
     now = time.time() if now is None else now
     if (now - (song.get("resolved_at") or 0)) >= STREAM_URL_TTL:
@@ -263,10 +282,17 @@ def resolve_stream_url(song: dict) -> tuple[str, bool]:
     if cached_url and stream_url_is_fresh(song, now):
         return cached_url, False
 
-    ydl_opts = yt_dlp_base_opts(format="bestaudio/best", quiet=True, noplaylist=True)
+    # VLC'de m4a (AAC) doğrudan HTTPS akışları, WebM/Opus parçalı akışlarına ve HLS'e
+    # göre çok daha kararlı açılır; bulunamazsa diğer ses formatlarına düşülür.
+    ydl_opts = yt_dlp_base_opts(
+        format="bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio/best",
+        quiet=True,
+        noplaylist=True,
+    )
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(song["webpage_url"], download=False)
         url = info.get("url")
+        best = None
         if not url:
             formats = info.get("formats") or []
             audio_formats = [f for f in formats if f.get("url") and f.get("acodec") not in (None, "none")]
@@ -278,6 +304,10 @@ def resolve_stream_url(song: dict) -> tuple[str, bool]:
             raise KeyError(
                 f"'{song.get('title', '?')}' için çalınabilir bir ses linki bulunamadı."
             )
+        headers = info.get("http_headers") or (best.get("http_headers") if best else None) or {}
+        ua = headers.get("User-Agent")
+        if ua:
+            song["http_user_agent"] = ua
         song["stream_url"] = url
         song["resolved_at"] = now
         return url, False

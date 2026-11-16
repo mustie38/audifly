@@ -390,3 +390,44 @@ def test_player_bar_and_now_playing_sync_like_and_recover_from_play_error(librar
         bar.close()
         panel.close()
         engine.shutdown()
+
+
+def test_tv_samsung_excluded_and_premature_ended_triggers_stream_refresh(library_store, monkeypatch):
+    from mustiefly_qt.helpers.constants import yt_dlp_base_opts
+    from mustiefly_qt.services import playback as pb_mod
+
+    opts = yt_dlp_base_opts()
+    clients = opts.get("extractor_args", {}).get("youtube", {}).get("player_client", [])
+    assert "-tv_samsung" in clients
+
+    now = time.time()
+    bad_tv_url = f"https://rr1---sn.googlevideo.com/videoplayback?expire={int(now + 7200)}&c=TVHTML5&id=1"
+    assert not stream_url_is_fresh({"stream_url": bad_tv_url, "resolved_at": now}, now=now)
+
+    instance = MagicMock()
+    instance.media_player_new.side_effect = [MagicMock(), MagicMock()]
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: instance)
+    monkeypatch.setattr(pb_mod.threading, "Thread", MagicMock())
+    song = {
+        "title": "Test", "webpage_url": "https://youtu.be/x1",
+        "stream_url": "https://rr1.googlevideo.com/videoplayback?id=1",
+        "resolved_at": now, "http_user_agent": "CustomUA/1.0",
+    }
+    library_store.playlists["Varsayılan"] = [song]
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+    try:
+        engine._play_generation = 1
+        engine._start_playback(1, song, "Varsayılan", 0, song["stream_url"], False)
+        media = instance.media_new.return_value
+        media.add_option.assert_any_call(":http-user-agent=CustomUA/1.0")
+
+        # VLC 403/TLS hatasında length=0, pos=0 ile doğrudan State.Ended döndürürse
+        # doğal bitiş sanmak yerine akış yenilenmeli:
+        engine.player.is_playing.return_value = False
+        engine.player.get_state.return_value = pb_mod.vlc.State.Ended
+        engine.player.get_length.return_value = 0
+        engine.player.get_time.return_value = 0
+        engine._update_ui_loop()
+        assert "stream_url" not in song and engine.is_loading
+    finally:
+        engine.shutdown()

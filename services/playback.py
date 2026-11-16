@@ -121,7 +121,7 @@ class PlaybackEngine(QObject):
         self._play_generation = 0
         self._xfade_generation = 0
 
-        self.vlc_instance = vlc.Instance("--no-video", "--quiet")
+        self.vlc_instance = vlc.Instance("--no-video", "--quiet", "--network-caching=1500")
         self.player = self.vlc_instance.media_player_new()
 
         self.playing_playlist: str | None = None
@@ -476,6 +476,18 @@ class PlaybackEngine(QObject):
         self.statusMessage.emit(f"\"{song.get('title', 'Şarkı')}\" çalınamadı: {error}", "error")
         self.playError.emit(*location)
 
+    def _prepare_media(self, url: str, song: dict | None = None):
+        """VLC medyası oluşturur; YouTube CDN'in User-Agent kontrolü ve ses dengeleme seçeneklerini ekler."""
+        media = self.vlc_instance.media_new(url)
+        if isinstance(song, dict):
+            ua = song.get("http_user_agent")
+            if ua and isinstance(url, str) and url.startswith(("http://", "https://")):
+                media.add_option(f":http-user-agent={ua}")
+        if self.settings.get("audio_normalization"):
+            media.add_option(":audio-filter=normvol")
+            media.add_option(":norm-buff-size=20")
+        return media
+
     def _start_playback(self, generation, song, playlist_name, index, url, is_offline=False):
         if self._closed or generation != self._play_generation:
             return
@@ -488,10 +500,7 @@ class PlaybackEngine(QObject):
         self._consecutive_play_failures = 0
 
         old_media = self.player.get_media()
-        media = self.vlc_instance.media_new(url)
-        if self.settings.get("audio_normalization"):
-            media.add_option(":audio-filter=normvol")
-            media.add_option(":norm-buff-size=20")
+        media = self._prepare_media(url, song)
         # ÖNEMLİ: çalan / duraklatılmış / bitmiş bir player'a doğrudan
         # set_media + play() VLC 3'te yarışa giriyor ve yeni şarkı çoğu zaman
         # "hazır ama duruyor" kalıyordu (▶'a basmadan başlamama hatası).
@@ -824,10 +833,7 @@ class PlaybackEngine(QObject):
         playlist_name, index = location
 
         old_media = self.player_b.get_media()
-        media = self.vlc_instance.media_new(url)
-        if self.settings.get("audio_normalization"):
-            media.add_option(":audio-filter=normvol")
-            media.add_option(":norm-buff-size=20")
+        media = self._prepare_media(url, song)
         self.player_b.set_media(media)
         if old_media is not None:
             try:
@@ -1299,6 +1305,22 @@ class PlaybackEngine(QObject):
                 log.warning("VLC player serbest bırakılamadı: %s", e)
         self.vlc_instance.release()
 
+    def _ended_without_opening(self) -> bool:
+        """VLC 3.x bazen HTTP 403 / TLS hatasında State.Error yerine doğrudan State.Ended
+        (length=0, time=0, dinlenen süre < 1 sn) döndürür. Bunu doğal şarkı sonu
+        sanıp sessizce sıradakine atlamak yerine akış hatası olarak işle."""
+        if self.radio_playing is not None:
+            return False
+        session = self._listen
+        if session is None or session.get("seconds", 0.0) >= 1.0:
+            return False
+        try:
+            length = self.player.get_length()
+            pos = self.player.get_time()
+        except Exception:
+            return False
+        return isinstance(length, int) and isinstance(pos, int) and length <= 0 and pos <= 0
+
     def _update_ui_loop(self):
         if self._closed:
             return
@@ -1325,7 +1347,10 @@ class PlaybackEngine(QObject):
                 else:
                     state = self.player.get_state()
                     if state == vlc.State.Ended and not self.is_loading and self.playing_playlist is not None:
-                        self.handle_song_end()
+                        if self._ended_without_opening():
+                            self._handle_player_error()
+                        else:
+                            self.handle_song_end()
                     elif state == vlc.State.Playing:
                         self._error_retry_song = None  # sağlıklı çalıyor: yeniden deneme hakkı yenilenir
                     elif (state == vlc.State.Error and not self.is_loading

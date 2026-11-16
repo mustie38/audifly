@@ -108,7 +108,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,   # UPX sıkıştırması node.exe (V8) ve libvlc/plugin DLL'lerini bozabiliyor
     console=False,   # pencereli mod: hatalar artık log dosyasına düşüyor (bkz. helpers/logging_setup.py)
     disable_windowed_traceback=False,
     icon=str(ICON) if ICON.is_file() else None,
@@ -120,7 +120,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="Audifly",
 )

@@ -75,6 +75,10 @@ def configure_bundled_vlc(environ: dict | None = None) -> bool:
         return False
     plugins = os.path.join(path, "plugins")
     lib = os.path.join(path, "libvlc.dll")
+    core = os.path.join(path, "libvlccore.dll")
+    parts = environ.get("PATH", "").split(os.pathsep)
+    if path not in parts:
+        environ["PATH"] = os.pathsep.join([path, *parts]) if parts != [""] else path
     if environ is os.environ:
         if hasattr(os, "add_dll_directory"):
             try:   # libvlccore.dll'nin libvlc.dll yanından bulunması için
@@ -82,9 +86,11 @@ def configure_bundled_vlc(environ: dict | None = None) -> bool:
             except OSError:
                 pass
         # python-vlc, PYTHON_VLC_LIB_PATH yüklenemezse sys.exit(1) çağırıyor (sessiz
-        # kapanma). Önce burada deniyoruz; olmazsa sistemdeki VLC'ye geri düşülür.
+        # kapanma). Önce libvlccore + libvlc'yi burada deniyoruz; olmazsa sistemdeki VLC'ye düşülür.
         try:
             import ctypes
+            if os.path.isfile(core):
+                ctypes.CDLL(core)
             ctypes.CDLL(lib)
         except OSError:
             return False
