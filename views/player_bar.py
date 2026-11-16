@@ -85,6 +85,15 @@ class _DualWaveform:
         self._strip.set_playing(playing)
 
 
+class _ClickableBox(QWidget):
+    clicked = Signal()
+
+    def mousePressEvent(self, event):  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class _HoverRevealBox(QWidget):
     """İçindeki widget'ı sadece üzerine gelindiğinde (hover) genişleterek
     gösterir. Volume slider'ı varsayılan olarak gizli/kompakt tutmak için
@@ -254,11 +263,11 @@ class PlayerBar(QWidget):
         self._apply_cover_placeholder("?")
         layout.addWidget(self.cover_label)
 
-        self.now_box = QWidget()
+        self.now_box = _ClickableBox()
         self.now_box.setFixedWidth(NOW_INFO_WIDTH_FULL)
         self.now_box.setCursor(Qt.PointingHandCursor)
         self.now_box.setToolTip("Çalan şarkının listedeki yerine git")
-        self.now_box.mousePressEvent = lambda _e: self.jumpToPlayingRequested.emit()
+        self.now_box.clicked.connect(self.jumpToPlayingRequested.emit)
 
         now_col = QVBoxLayout(self.now_box)
         now_col.setContentsMargins(0, 0, 0, 0)
@@ -656,9 +665,22 @@ class PlayerBar(QWidget):
         return scaled.copy(x, y, size, size)
 
     def _fade_in_cover(self):
-        self._cover_opacity.setOpacity(0.35)
         self._cover_fade.stop()
+        if not self.isVisible():
+            self._cover_opacity.setOpacity(1.0)
+            return
+        self._cover_opacity.setOpacity(0.35)
         self._cover_fade.start()
+
+    def hideEvent(self, event):  # noqa: N802
+        self._cover_fade.stop()
+        self._cover_opacity.setOpacity(1.0)
+        super().hideEvent(event)
+
+    def closeEvent(self, event):  # noqa: N802
+        self._cover_fade.stop()
+        self.sleep_timer.cancel()
+        super().closeEvent(event)
 
     def _set_now_text(self, title: str, subtitle: str):
         self._now_title_raw = title

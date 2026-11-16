@@ -75,24 +75,15 @@ class SpotifyImportDialog(QDialog):
 
     @staticmethod
     def prompt_and_run(store: PlaylistStore, settings: dict, save_settings_fn, parent=None):
-        """Giriş doğrulama + link sorma dahil tam akış. Ayarlarda client bilgisi
-        yoksa kullanıcıya nasıl bulunacağını anlatıp vazgeçer."""
+        """Giriş doğrulama + link sorma dahil tam akış. Client ID girilmemişse bile
+        herkese açık (public) tüm Spotify listeleri doğrudan embed üzerinden çekilir."""
         client_id = settings.get("spotify_client_id", "").strip()
         client_secret = settings.get("spotify_client_secret", "").strip()
-        if not client_id:
-            QMessageBox.information(
-                parent, "Spotify Bağlantısı Gerekli",
-                "Spotify playlist içe aktarmak için önce Ayarlar'dan bir Spotify "
-                "Client ID girmelisin (Client Secret artık gerekmez).\n\n"
-                "https://developer.spotify.com/dashboard adresinden ücretsiz bir uygulama "
-                "oluşturup bu iki değeri oradan kopyalayabilirsin (Redirect URI olarak\n"
-                "http://127.0.0.1:8888/callback\neklenebilir)."
-            )
-            return
 
         url, ok = QInputDialog.getText(
             parent, "Spotify Playlist İçe Aktar",
-            "Spotify playlist linkini yapıştır:\n(örn. https://open.spotify.com/playlist/...)",
+            "Spotify playlist linkini yapıştır (senin, başka bir kullanıcının ya da Spotify'ın listesi):\n"
+            "(örn. https://open.spotify.com/playlist/...)",
             QLineEdit.Normal)
         if not ok or not url.strip():
             return
@@ -108,7 +99,7 @@ class SpotifyImportDialog(QDialog):
 
     # --- Adım 1: Spotify'dan şarkı listesini çek ---
     def _start_fetch(self, playlist_id: str, client_id: str, client_secret: str):
-        if not self.settings.get("spotify_refresh_token"):
+        if client_id and not self.settings.get("spotify_refresh_token"):
             self.progress_label.setText(
                 "🌐 Spotify hesabınla giriş yapman gerekiyor — tarayıcıda bir sekme "
                 "açılacak, giriş yapıp 'Anlaştık'a bas. Bu sadece ilk seferde gerekiyor.")

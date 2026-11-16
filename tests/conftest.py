@@ -160,4 +160,13 @@ def library_store(tmp_path):
     store._save_timer.stop()
     for timer in store._pending_file_deletions.values():
         timer.stop()
+    for widget in list(app.topLevelWidgets()):
+        try:
+            widget.close()
+            widget.deleteLater()
+        except Exception:
+            pass
+    app.processEvents()
+    import gc
+    gc.collect()
     app.processEvents()

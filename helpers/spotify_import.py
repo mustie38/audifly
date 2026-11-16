@@ -14,6 +14,7 @@ from __future__ import annotations
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
 import base64
 import hashlib
+import json
 import re
 import secrets
 import time
@@ -219,41 +220,107 @@ def search_spotify_playlist(query, client_id, client_secret, settings, save_sett
     return first["id"], first.get("name")
 
 
+def fetch_spotify_playlist_embed(playlist_id: str, get=None) -> tuple[str, list[str]]:
+    """Spotify'ın herkese açık gömülü sayfasından (`open.spotify.com/embed/playlist/<id>`)
+    liste adını ve şarkı sorgularını ('Sanatçı - Şarkı Adı') çeker.
+
+    Neden: Şubat 2026'dan itibaren Spotify Development Mode API'si (`/v1/playlists/{id}/items`)
+    başka kullanıcıların herkese açık listelerine ve Spotify'ın kendi resmi listelerine
+    403/404 döndürüyor. Gömülü sayfa ise Client ID veya giriş gerektirmeden tüm herkese
+    açık listelerin `__NEXT_DATA__` JSON verisini doğrudan döndürür.
+    """
+    if get is None:
+        get = requests.get
+    resp = get(
+        f"https://open.spotify.com/embed/playlist/{playlist_id}",
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        timeout=12,
+    )
+    if not resp.ok:
+        raise SpotifyApiError(resp.status_code, _spotify_error_detail(resp))
+    match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, re.S)
+    if not match:
+        raise SpotifyApiError(404, "Playlist verisi okunamadı (liste gizli veya mevcut değil).")
+    try:
+        data = json.loads(match.group(1))
+        entity = (
+            ((data.get("props") or {}).get("pageProps") or {})
+            .get("state", {})
+            .get("data", {})
+            .get("entity")
+        ) or {}
+    except Exception as e:
+        raise SpotifyApiError(500, f"Embed JSON ayrıştırılamadı: {e}") from e
+
+    playlist_name = (entity.get("name") or entity.get("title") or "Spotify Playlist").strip()[:50]
+    queries: list[str] = []
+    for item in entity.get("trackList") or []:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").replace("\xa0", " ").strip()
+        artists = (item.get("subtitle") or "").replace("\xa0", " ").strip()
+        if title:
+            queries.append(f"{artists} - {title}" if artists else title)
+    if not queries:
+        raise SpotifyApiError(404, "Bu playlist boş veya gizli.")
+    return playlist_name, queries
+
+
 def fetch_spotify_playlist(playlist_id, client_id, client_secret, settings, save_settings_fn):
     """Bir Spotify playlist'inin adını ve tüm şarkılarını ('Sanatçı - Şarkı Adı'
-    arama sorguları olarak) çeker. Sayfalama ('next') takip edilir."""
-    token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
-    headers = {"Authorization": f"Bearer {token}"}
+    arama sorguları olarak) çeker.
 
-    meta_resp = requests.get(
-        f"{SPOTIFY_API_BASE}/playlists/{playlist_id}",
-        headers=headers, params={"fields": "name"}, timeout=10,
-    )
-    if not meta_resp.ok:
-        raise SpotifyApiError(meta_resp.status_code, _spotify_error_detail(meta_resp))
-    playlist_name = (meta_resp.json().get("name") or "Spotify Playlist").strip()[:50]
+    Önce (Client ID tanımlıysa) resmi Web API'yi dener (100+ şarkılık kendi listelerin
+    ve gizli/ortak listelerin için). Eğer Client ID girilmemişse ya da liste başka bir
+    kullanıcıya / Spotify'a ait olduğu için API 403/404/401 döndürürse otomatik olarak
+    herkese açık embed sayfasına (`fetch_spotify_playlist_embed`) düşer.
+    """
+    if not (client_id or "").strip():
+        return fetch_spotify_playlist_embed(playlist_id)
 
-    queries = []
-    url = f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items"
-    params = {"fields": "next,items(item(name,artists(name)))", "limit": 100}
+    try:
+        token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
+        headers = {"Authorization": f"Bearer {token}"}
 
-    while url:
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-        if not resp.ok:
-            raise SpotifyApiError(resp.status_code, _spotify_error_detail(resp))
-        data = resp.json()
-        for entry in data.get("items", []):
-            track = entry.get("item") or entry.get("track")  # eski API'den kalma yedek alan
-            if not track:
-                continue
-            name = track.get("name")
-            artists = ", ".join(a["name"] for a in track.get("artists", []) if a.get("name"))
-            if name:
-                queries.append(f"{artists} - {name}" if artists else name)
-        url = data.get("next")
-        params = None  # 'next' URL'si tüm parametreleri zaten içeriyor
+        meta_resp = requests.get(
+            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}",
+            headers=headers, params={"fields": "name"}, timeout=10,
+        )
+        if not meta_resp.ok:
+            raise SpotifyApiError(meta_resp.status_code, _spotify_error_detail(meta_resp))
+        playlist_name = (meta_resp.json().get("name") or "Spotify Playlist").strip()[:50]
 
-    return playlist_name, queries
+        queries = []
+        url = f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items"
+        params = {"fields": "next,items(item(name,artists(name)))", "limit": 100}
+
+        while url:
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            if not resp.ok:
+                raise SpotifyApiError(resp.status_code, _spotify_error_detail(resp))
+            data = resp.json()
+            for entry in data.get("items", []):
+                track = entry.get("item") or entry.get("track")  # eski API'den kalma yedek alan
+                if not track:
+                    continue
+                name = track.get("name")
+                artists = ", ".join(a["name"] for a in track.get("artists", []) if a.get("name"))
+                if name:
+                    queries.append(f"{artists} - {name}" if artists else name)
+            url = data.get("next")
+            params = None  # 'next' URL'si tüm parametreleri zaten içeriyor
+
+        if queries:
+            return playlist_name, queries
+    except (SpotifyApiError, SpotifyAuthError):
+        # Başka bir kullanıcının veya Spotify'ın herkese açık listesi (403/404) ya da
+        # henüz giriş yapılmamış durum: embed üzerinden çekmeyi dene.
+        try:
+            return fetch_spotify_playlist_embed(playlist_id)
+        except Exception:
+            raise
+
+    return fetch_spotify_playlist_embed(playlist_id)
 
 
 # --- M3U dışa/içe aktarma ---
