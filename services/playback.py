@@ -561,6 +561,9 @@ class PlaybackEngine(QObject):
             # Yavaş ağ: biraz daha bekle ama sonsuza dek değil
             if attempt < 8:
                 QTimer.singleShot(1500, lambda: self._ensure_started(generation, attempt + 1))
+            else:
+                log.warning("Akış açma/tamponlama zaman aşımına uğradı (durum=%s).", state)
+                self._handle_player_error()
             return
         if state == vlc.State.Error:
             return  # _update_ui_loop hata akışını yönetir
@@ -999,6 +1002,9 @@ class PlaybackEngine(QObject):
         self._resume_ms = int(session.get("position_ms") or 0)
         self.songStarted.emit(playlist, index, song, bool(offline_path_for(song)))
         self.playStateChanged.emit(False)
+        total_ms = int((song.get("duration") or 0) * 1000)
+        if total_ms > 0 and self._resume_ms > 0:
+            self.positionChanged.emit(min(self._resume_ms, total_ms), total_ms)
         return True
 
     def set_rate(self, rate: float):
@@ -1278,10 +1284,21 @@ class PlaybackEngine(QObject):
     def seek(self, ms: int):
         if self._xfade_active:
             self._complete_crossfade_instant()
-        length = self.player.get_length()
-        if length > 0:
+        raw_length = self.player.get_length()
+        length = raw_length
+        if (not isinstance(length, int) or length <= 0) and self._current_song_ref is not None:
+            length = int((self._current_song_ref.get("duration") or 0) * 1000)
+        if isinstance(length, int) and length > 0:
             clamped = max(0, min(int(ms), length))
-            self.player.set_time(clamped)
+            if isinstance(raw_length, int) and raw_length <= 0:
+                try:
+                    self.player.set_position(clamped / float(length))
+                except Exception:
+                    self.player.set_time(clamped)
+            else:
+                self.player.set_time(clamped)
+            if self._listen is not None:
+                self._listen["seconds"] = clamped / 1000.0
             self.seeked.emit(clamped)
 
     def shutdown(self):
@@ -1339,7 +1356,20 @@ class PlaybackEngine(QObject):
                 if playing and not self.is_seeking:
                     current = src.get_time()
                     total = src.get_length()
+                    if (not isinstance(total, int) or total <= 0) and self._current_song_ref is not None:
+                        total = int((self._current_song_ref.get("duration") or 0) * 1000)
+                    if isinstance(current, int) and current <= 0:
+                        try:
+                            pos_frac = src.get_position()
+                        except Exception:
+                            pos_frac = 0.0
+                        if isinstance(pos_frac, float) and 0.0 < pos_frac <= 1.0 and isinstance(total, int) and total > 0:
+                            current = int(pos_frac * total)
+                        elif self._listen is not None and self._listen.get("seconds", 0.0) > 0:
+                            current = int(self._listen["seconds"] * 1000)
                     if total > 0:
+                        if isinstance(current, int) and isinstance(total, int):
+                            current = max(0, min(current, total))
                         self.positionChanged.emit(current, total)
 
                 if self._xfade_active:

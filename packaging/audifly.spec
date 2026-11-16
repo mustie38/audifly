@@ -97,6 +97,9 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+# PyInstaller, datas içindeki vlc/libvlc.dll'nin bağımlılığı olarak _internal/ köküne
+# ikinci bir libvlccore.dll kopyalayabiliyor; kök dizinde kopya oluşmasını engelle.
+a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in ("libvlc.dll", "libvlccore.dll")]
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(

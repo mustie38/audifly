@@ -65,7 +65,7 @@ if not _NODE_AVAILABLE:
     )
 
 
-APP_VERSION = "0.4.8"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
+APP_VERSION = "0.4.9"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
 APP_DISPLAY_NAME = "Audifly"   # kullanıcıya görünen ad (tek nokta)
 LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (göç uyumluluğu)
 
@@ -73,7 +73,7 @@ LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (gö�
 def yt_dlp_base_opts(**overrides) -> dict:
     # socket_timeout: ağ takılırsa arayüzdeki "Yükleniyor" sonsuza dek sürmesin.
     # extractor_args: YouTube CDN, tv_samsung (c=TVHTML5) akışlarına HTTP 403 Forbidden
-    # döndürdüğü için devre dışı bırakılır; visionos / web_embedded / web istemcileri kullanılır.
+    # döndürdüğü için devre dışı bırakılır; visionos / web istemcileri kullanılır.
     opts = {
         "js_runtimes": dict(YT_DLP_JS_RUNTIMES),
         "socket_timeout": 15,
@@ -282,10 +282,11 @@ def resolve_stream_url(song: dict) -> tuple[str, bool]:
     if cached_url and stream_url_is_fresh(song, now):
         return cached_url, False
 
-    # VLC'de m4a (AAC) doğrudan HTTPS akışları, WebM/Opus parçalı akışlarına ve HLS'e
-    # göre çok daha kararlı açılır; bulunamazsa diğer ses formatlarına düşülür.
+    # VLC 3.x'te Opus/WebM (251, 48kHz) akışı mkv demuxer ile tüm dosyayı indirmeyi
+    # beklemeden <0.5 sn'de başlar; VISIONOS m4a (140) ise parçalı DASH MP4 olduğu için
+    # VLC prefetch ile tüm dosyayı önbelleğe çekmeye çalışıp süreyi 00:00'da bekletebilir.
     ydl_opts = yt_dlp_base_opts(
-        format="bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio/best",
+        format="bestaudio[ext=webm][protocol^=http]/bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio/best",
         quiet=True,
         noplaylist=True,
     )

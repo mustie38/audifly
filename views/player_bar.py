@@ -746,6 +746,12 @@ class PlayerBar(QWidget):
     def _on_song_loading(self, playlist_name, index, song):
         title = song.get("title", "")
         self._set_now_text(f"Yükleniyor: {title}", self._now_sub_raw)
+        dur_ms = max(0, int((song.get("duration") or 0) * 1000))
+        self._total_ms = dur_ms
+        if not self._seeking:
+            self.time_slider.setValue(0)
+            self.current_time_label.setText("00:00")
+            self.total_time_label.setText(format_time(dur_ms))
         self.play_btn.setEnabled(False)
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
@@ -757,6 +763,12 @@ class PlayerBar(QWidget):
         else:
             source = "YouTube Stream"
         self._set_now_text(self._now_title_raw, f"{source} • {playlist_name}")
+        dur_ms = max(0, int((song.get("duration") or 0) * 1000))
+        self._total_ms = dur_ms
+        if not self._seeking:
+            self.time_slider.setValue(0)
+            self.current_time_label.setText("00:00")
+            self.total_time_label.setText(format_time(dur_ms))
         self.play_btn.set_kind("pause")
         self.play_btn.setEnabled(True)
         self.waveform_strip.set_playing(True)

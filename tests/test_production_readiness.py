@@ -429,5 +429,20 @@ def test_tv_samsung_excluded_and_premature_ended_triggers_stream_refresh(library
         engine.player.get_time.return_value = 0
         engine._update_ui_loop()
         assert "stream_url" not in song and engine.is_loading
+
+        # VLC çalarken get_length()=0 ve get_time()=0 döndürse bile song['duration']
+        # ve _listen['seconds'] üzerinden positionChanged yayınlanmalı (00:00/00:00 kalmamalı):
+        song["duration"] = 244
+        engine.is_loading = False
+        engine._listen = {"song": song, "seconds": 15.4, "last": pb_mod.time.monotonic()}
+        engine.player.is_playing.return_value = True
+        engine.player.get_state.return_value = pb_mod.vlc.State.Playing
+        engine.player.get_length.return_value = 0
+        engine.player.get_time.return_value = 0
+        engine.player.get_position.return_value = 0.0
+        positions = []
+        engine.positionChanged.connect(lambda cur, tot: positions.append((cur, tot)))
+        engine._update_ui_loop()
+        assert positions and positions[-1][1] == 244_000 and positions[-1][0] >= 15_000
     finally:
         engine.shutdown()
