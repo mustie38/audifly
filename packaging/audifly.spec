@@ -19,7 +19,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 block_cipher = None
 PACKAGE_ROOT = Path(SPECPATH).parent
@@ -31,6 +31,8 @@ VERSION = tomllib.loads((PACKAGE_ROOT / "pyproject.toml").read_text(encoding="ut
 # birlikte gelir ve kullanıcı ayrıca kurmak zorunda kalmaz (lisansları dağıtımda ayrıca kontrol et:
 # FFmpeg LGPL/GPL, Node.js MIT). helpers/dependencies.py bu klasörü PATH'e ekler.
 BIN_DIR = PACKAGE_ROOT / "packaging" / "bin"
+# Gömülü libVLC (python packaging/fetch_vlc.py ile indirilir; LGPL-2.1+): kullanıcı ayrıca VLC kurmaz.
+VLC_DIR = PACKAGE_ROOT / "packaging" / "vlc"
 
 # İsteğe bağlı bağımlılıklar: yalnızca derleme ortamında kuruluysa pakete girer;
 # yoksa ilgili özellik (Discord, Keşfet, medya tuşları/SMTC) çalışma anında sessizce kapanır.
@@ -64,16 +66,19 @@ VERSION_FILE.write_text(f"""VSVersionInfo(
 # yt-dlp-ejs: YouTube JS korumasini cozen betikler (core.min.js / lib.min.js) PAKETE girmezse
 # Node.js olsa bile sarkilar cozulemez; bu yuzden veri dosyalari ve alt modulleri acikca eklenir.
 _HAS_EJS = importlib.util.find_spec("yt_dlp_ejs") is not None
-EJS_DATAS = collect_data_files("yt_dlp_ejs") if _HAS_EJS else []
+EJS_DATAS = (collect_data_files("yt_dlp_ejs") + copy_metadata("yt_dlp_ejs")) if _HAS_EJS else []
 EJS_IMPORTS = collect_submodules("yt_dlp_ejs") if _HAS_EJS else []
+YTDLP_META = copy_metadata("yt_dlp")
 
 a = Analysis(
     [str(PACKAGE_ROOT / "main.py")],
     pathex=[str(PROJECT_PARENT)],
     binaries=[],
     datas=(collect_data_files("ytmusicapi") if importlib.util.find_spec("ytmusicapi") else [])
+          + YTDLP_META
           + EJS_DATAS
-          + ([(str(BIN_DIR), "bin")] if BIN_DIR.is_dir() else []),
+          + ([(str(BIN_DIR), "bin")] if BIN_DIR.is_dir() else [])
+          + ([(str(VLC_DIR), "vlc")] if VLC_DIR.is_dir() else []),
     hiddenimports=[
         "yt_dlp",
         *EJS_IMPORTS,

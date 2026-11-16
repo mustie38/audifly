@@ -216,6 +216,7 @@ _SETTING_RULES = {
     "sleep_fade_enabled": (bool,),
     "dependency_notice_dismissed": (bool,),
     "auto_update_check": (bool,),
+    "auto_ytdlp_update": (bool,),
 }
 
 
@@ -242,6 +243,9 @@ def validate_settings(settings: dict) -> dict:
     settings["smart_rules"] = sanitize_rules(settings.get("smart_rules"))
     if settings.get("theme") not in THEMES:
         settings["theme"] = DEFAULT_THEME_KEY
+    from mustiefly_qt.helpers.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
+    if settings.get("language") not in SUPPORTED_LANGUAGES:
+        settings["language"] = DEFAULT_LANGUAGE
     return settings
 
 

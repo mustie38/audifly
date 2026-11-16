@@ -133,6 +133,13 @@ def _terminate_process(code: int):
     os._exit(code)
 
 
+@pytest.fixture(scope="session")
+def qapp():
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    return QApplication.instance() or QApplication([])
+
+
 @pytest.fixture()
 def library_store(tmp_path):
     pytest.importorskip("PySide6")

@@ -18,13 +18,22 @@ import threading
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+# --- Önyükleme: yt_dlp / vlc HİÇ import edilmeden önce yapılmalı -------------
+# 1) Paketle gelen libVLC'yi kullan (kullanıcı ayrıca VLC kurmak zorunda kalmaz).
+# 2) Uygulama içinden indirilmiş daha yeni bir yt-dlp varsa onu devreye al.
+from mustiefly_qt.helpers import dependencies, ytdlp_runtime  # noqa: E402  (yalnız stdlib)
+dependencies.configure_bundled_vlc()
+try:
+    ytdlp_runtime.activate()
+except Exception:   # güncelleme katmanı asla açılışı engellememeli
+    pass
+
 from PySide6.QtGui import QIcon
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QCheckBox, QMessageBox
 
 from mustiefly_qt.helpers.brand_icon import build_icon
-from mustiefly_qt.helpers import dependencies
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
 from mustiefly_qt.app_window import MainWindow
 from mustiefly_qt.auth import service
@@ -49,6 +58,13 @@ def _check_vlc_available() -> tuple[bool, str]:
     try:
         import vlc  # python-vlc
     except Exception as e:
+        if dependencies.bundled_vlc_dir():
+            return False, (
+                f"{APP_DISPLAY_NAME} ile gelen ses motoru (libVLC) başlatılamadı.\n\n"
+                f"Ayrıntı: {e}\n\n"
+                f"Çözüm: {APP_DISPLAY_NAME}'ı yeniden kur. Sorun sürerse "
+                "Yardım → Sorun Bildir ile raporu gönder."
+            )
         return False, (
             "'python-vlc' paketi kurulu değil veya yüklenemedi.\n\n"
             f"Ayrıntı: {e}\n\n"
@@ -62,6 +78,13 @@ def _check_vlc_available() -> tuple[bool, str]:
         player.release()
         instance.release()
     except Exception as e:
+        if dependencies.bundled_vlc_dir():
+            return False, (
+                f"{APP_DISPLAY_NAME} ile gelen ses motoru (libVLC) başlatılamadı.\n\n"
+                f"Ayrıntı: {e}\n\n"
+                f"Çözüm: {APP_DISPLAY_NAME}'ı yeniden kur. Sorun sürerse "
+                "Yardım → Sorun Bildir ile raporu gönder."
+            )
         return False, (
             "VLC Media Player sistemde bulunamadı ya da başlatılamadı.\n\n"
             f"Ayrıntı: {e}\n\n"
@@ -192,14 +215,25 @@ def _raise_existing_window(window: MainWindow, server: QLocalServer):
 
 def _startup_update_check(window):
     """Uygulama açılışında arka planda yt-dlp güncellemesi kontrol eder;
-    varsa durum çubuğunda bildirir (asla UI'ı bloklamaz)."""
+    varsa (ayara göre) otomatik indirir ve durum çubuğunda bildirir (asla UI'ı bloklamaz)."""
     try:
-        from mustiefly_qt.helpers.updates import update_available
+        from mustiefly_qt.helpers.updates import installed_version, run_update, update_available
         has_new, inst, latest = update_available()
         if has_new:
-            window.updateNotice.emit(
-                f"⬆ yt-dlp güncellemesi var: {inst} → {latest} — "
-                "Ayarlar'dan güncelleyebilirsin (şarkı çözümleme sorunlarını önler).")
+            if window.settings.get("auto_ytdlp_update", True):
+                ok, _ = run_update()
+                if ok:
+                    window.updateNotice.emit(
+                        f"⬆ yt-dlp otomatik güncellendi ({inst} → {installed_version() or latest}). "
+                        "Sonraki açılışta devreye girer.")
+                else:
+                    window.updateNotice.emit(
+                        f"⬆ yt-dlp güncellemesi var: {inst} → {latest} — "
+                        "Ayarlar'dan güncelleyebilirsin.")
+            else:
+                window.updateNotice.emit(
+                    f"⬆ yt-dlp güncellemesi var: {inst} → {latest} — "
+                    "Ayarlar'dan güncelleyebilirsin (şarkı çözümleme sorunlarını önler).")
     except Exception:
         pass  # güncelleme kontrolü kritik değil
     try:

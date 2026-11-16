@@ -1,5 +1,13 @@
 # Değişiklikler
 
+## 0.4.6
+- **Uygulama içinden `yt-dlp` güncelleme (yeni kurulum yayınlamadan):** Paketlenmiş `.exe` sürümünde bile `yt-dlp` ve `yt-dlp-ejs` wheel paketleri PyPI üzerinden SHA-256 doğrulamasıyla `%LOCALAPPDATA%\Audifly\components\yt-dlp\` altına indirilir ve açılışta `sys.meta_path` üzerinden devreye girer (`helpers/ytdlp_runtime.py`). Çıkarım hatasında veya açılışta otomatik güncellenir; Ayarlar'dan "Paketteki sürüme sıfırla" ile geri alınabilir.
+- **Sorun Bildir / Tanılama Raporu arayüzü (`views/diagnostics_dialog.py`):** Yardım menüsü, sol alt araç çubuğu (`🩺`), Ayarlar → Güncellemeler ve hata bildirim çubuğundaki (`🩺 Sorun Bildir`) düğmelerden açılır; kullanıcı notu, son hatalar ve log kuyruğu tek tıkla kopyalanabilir veya dosyaya kaydedilebilir.
+- **Çoklu şarkı ön yükleme (3 şarkı) + otomatik yeniden deneme:** Ön yükleme artık manuel kuyruk ve liste sırasına göre 3 şarkıyı önceden çözer (`PRELOAD_AHEAD = 3`), geçici ağ/YouTube hatalarında kademeli beklemeyle yeniden dener ve YouTube stream linklerindeki `expire=` süresini denetler.
+- **Gömülü libVLC (`packaging/fetch_vlc.py`):** Kurulum paketi artık libVLC çalışma zamanını ve ses/ekolayzer/normalleştirme eklentilerini kendi içinde taşır (LGPL-2.1+); kullanıcının ayrıca VLC Media Player kurması gerekmez.
+- **Authenticode kod imzalama altyapısı (`packaging/sign_binaries.py`):** `WINDOWS_PFX_BASE64` ve `WINDOWS_PFX_PASSWORD` tanımlandığında `Audifly.exe` ve `AudiflySetup.exe` SHA-256 + RFC3161 zaman damgasıyla otomatik imzalanır.
+- **Çoklu dil desteği (`helpers/i18n.py`):** Ayarlar → Görünüm altında `🇹🇷 Türkçe` / `🇬🇧 English` dil seçeneği eklendi; yeniden başlatmadan tüm arayüze anında uygulanır.
+
 ## 0.4.5
 - **Kurulum dosyası (Inno Setup) derleme hataları düzeltildi:** satır başında `#13#10` ("Unknown preprocessor directive"), `[Setup]` satırında geçersiz satır sonu yorumu ve eksik UTF-8 BOM (Türkçe metin bozuk çıkardı). `packaging/set_iss_version.py` etiket sürümünü .iss'e yazar; `tests/test_installer_script.py` bu hata sınıfını artık her push'ta yakalar.
 - **Kurulum dosyası artık Node.js içerir** ve YouTube JS çözücüsü `yt-dlp-ejs` pakete dahildir: ayrıca Node.js kurmadan şarkılar çalar. (Önceden `yt-dlp-ejs` bağımlılıklarda yoktu; Node kurulu olsa bile paketli sürümde YouTube çözümü başarısız olabiliyordu.) `packaging/fetch_node.py` node.exe'yi SHA-256 doğrulamasıyla indirir; CI paketin içinde node.exe ve `core.min.js` olduğunu denetler.

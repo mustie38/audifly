@@ -1,0 +1,268 @@
+"""Üretim hazırlığı testleri:
+1. Uygulama içi yt-dlp güncelleme (wheel indirme, SHA-256, _OverrideFinder, geri dönüş)
+2. Tanılama / Sorun Bildir penceresi ve hata snackbar'ı
+3. Çoklu şarkı ön yükleme (3 şarkı), yeniden deneme ve stream expire kontrolü
+4. Paket içi libVLC indirme/doğrulama ve çalışma anı yapılandırması
+5. Authenticode kod imzalama betiği (sign_binaries.py)
+6. Çoklu dil desteği (TR ↔ EN canlı geçiş)
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import subprocess
+import time
+import zipfile
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
+from mustiefly_qt.helpers import dependencies, i18n, ytdlp_runtime
+from mustiefly_qt.helpers.constants import (
+    STREAM_URL_SAFETY_MARGIN, needs_stream_resolve, stream_url_expiry, stream_url_is_fresh,
+)
+from mustiefly_qt.packaging import fetch_vlc, sign_binaries
+
+
+# ============================================================================
+# 1. Uygulama içi yt-dlp güncelleme (helpers/ytdlp_runtime.py)
+# ============================================================================
+def _make_wheel(files: dict[str, str]) -> tuple[bytes, str]:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, content in files.items():
+            zf.writestr(name, content)
+    raw = buf.getvalue()
+    return raw, hashlib.sha256(raw).hexdigest()
+
+
+def test_ytdlp_runtime_install_and_reset(tmp_path):
+    env = {"AUDIFLY_COMPONENTS_DIR": str(tmp_path)}
+    yt_whl, yt_sha = _make_wheel({
+        "yt_dlp/__init__.py": "from .version import __version__\n",
+        "yt_dlp/version.py": "__version__ = '2099.01.05'\n",
+    })
+    ejs_whl, ejs_sha = _make_wheel({
+        "yt_dlp_ejs/__init__.py": "VERSION = '0.9.0'\n",
+    })
+    routes = {
+        "https://pypi.org/pypi/yt-dlp/json": json.dumps({
+            "info": {"name": "yt-dlp", "version": "2099.01.05",
+                     "requires_python": ">=3.10",
+                     "requires_dist": ["yt-dlp-ejs==0.9.0; extra == 'default'"]},
+            "urls": [{"packagetype": "bdist_wheel", "filename": "yt_dlp-2099.1.5-py3-none-any.whl",
+                      "url": "https://files.pythonhosted.org/yt.whl", "digests": {"sha256": yt_sha}}],
+        }).encode(),
+        "https://pypi.org/pypi/yt-dlp-ejs/0.9.0/json": json.dumps({
+            "info": {"name": "yt-dlp-ejs", "version": "0.9.0"},
+            "urls": [{"packagetype": "bdist_wheel", "filename": "yt_dlp_ejs-0.9.0-py3-none-any.whl",
+                      "url": "https://files.pythonhosted.org/ejs.whl", "digests": {"sha256": ejs_sha}}],
+        }).encode(),
+        "https://files.pythonhosted.org/yt.whl": yt_whl,
+        "https://files.pythonhosted.org/ejs.whl": ejs_whl,
+    }
+    ok, msg, ver = ytdlp_runtime.install_latest(environ=env, get=routes.__getitem__)
+    assert ok and ver == "2099.01.05"
+    assert ytdlp_runtime.pending_version(environ=env) == "2099.01.05"
+
+    # SHA-256 uyuşmazlığında hiçbir şey kurulmamalı
+    bad_routes = dict(routes, **{"https://files.pythonhosted.org/yt.whl": b"bozuk"})
+    env2 = {"AUDIFLY_COMPONENTS_DIR": str(tmp_path / "bad")}
+    ok2, msg2, _ = ytdlp_runtime.install_latest(environ=env2, get=bad_routes.__getitem__)
+    assert not ok2 and "SHA-256" in msg2
+
+    # Sıfırlama paketteki sürüme döndürür
+    assert ytdlp_runtime.reset_to_bundled(environ=env)
+    assert ytdlp_runtime.pending_version(environ=env) is None
+
+
+# ============================================================================
+# 2. Tanılama / Sorun Bildir penceresi & hata snackbar'ı
+# ============================================================================
+def test_diagnostics_dialog_copies_and_saves_report(qapp, tmp_path):
+    from PySide6.QtGui import QGuiApplication
+    from mustiefly_qt.views.diagnostics_dialog import DiagnosticsDialog
+
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "audifly.log").write_text("2026-11-16 ERROR ornek hata\n", encoding="utf-8")
+
+    dlg = DiagnosticsDialog(
+        str(log_dir),
+        error_text="HTTP Error 403: Forbidden",
+        recent_errors=["Şarkı 1 çalınamadı"],
+    )
+    dlg.note_edit.setPlainText("Şarkıya çift tıkladım çalmadı")
+    text = dlg.copy_report()
+    assert "Şarkıya çift tıkladım çalmadı" in text
+    assert "HTTP Error 403" in text
+    assert "Şarkı 1 çalınamadı" in text
+    assert QGuiApplication.clipboard().text() == text
+
+    out = tmp_path / "rapor.txt"
+    assert dlg.save_report(str(out))
+    assert out.read_text(encoding="utf-8") == text
+    dlg.close()
+
+
+def test_snackbar_report_mode_emits_report_clicked(qapp):
+    from mustiefly_qt.widgets.snackbar import UndoSnackbar
+    bar = UndoSnackbar()
+    reported = []
+    undone = []
+    bar.reportClicked.connect(lambda: reported.append(True))
+    bar.undoClicked.connect(lambda: undone.append(True))
+
+    bar.show_message("⚠️ Şarkı çalınamadı", undoable=False, reportable=True)
+    assert not bar.undo_btn.isHidden()
+    assert "Sorun Bildir" in bar.undo_btn.text()
+    bar.undo_btn.click()
+    assert reported == [True] and undone == []
+    bar.close()
+
+
+# ============================================================================
+# 3. Çoklu şarkı ön yükleme (3 şarkı), yeniden deneme ve expire kontrolü
+# ============================================================================
+def test_stream_url_expiry_detection():
+    now = time.time()
+    soon_url = f"https://rr1---sn.googlevideo.com/videoplayback?expire={int(now + 60)}&id=1"
+    fresh_url = f"https://rr1---sn.googlevideo.com/videoplayback?expire={int(now + 7200)}&id=1"
+    assert stream_url_expiry(soon_url) == int(now + 60)
+    assert not stream_url_is_fresh({"stream_url": soon_url, "resolved_at": now}, now=now)
+    assert stream_url_is_fresh({"stream_url": fresh_url, "resolved_at": now}, now=now)
+    assert needs_stream_resolve({"webpage_url": "https://youtu.be/1", "stream_url": soon_url, "resolved_at": now}, now=now)
+    assert not needs_stream_resolve({"webpage_url": "https://youtu.be/1", "stream_url": fresh_url, "resolved_at": now}, now=now)
+    assert STREAM_URL_SAFETY_MARGIN >= 600
+
+
+def test_preload_resolves_multiple_upcoming_songs_and_retries(library_store, monkeypatch):
+    from mustiefly_qt.services import playback as pb_mod
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(pb_mod, "PRELOAD_RETRY_DELAYS", (0.01, 0.01))
+
+    songs = [
+        {"title": f"S{i}", "webpage_url": f"https://youtube.com/watch?v={i}"}
+        for i in range(6)
+    ]
+    library_store.playlists["Varsayılan"] = songs
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+    try:
+        engine.playing_playlist = "Varsayılan"
+        engine.current_index = 0
+        upcoming = engine._upcoming_songs(pb_mod.PRELOAD_AHEAD)
+        assert [s["title"] for s in upcoming] == ["S1", "S2", "S3"]
+
+        # Geçici hata veren şarkı 2. denemede çözülmeli; kalıcı hata veren ("Private video") 1 kez denenmeli
+        calls: dict[str, int] = {}
+
+        def fake_resolve(song):
+            title = song["title"]
+            calls[title] = calls.get(title, 0) + 1
+            if title == "S1" and calls[title] == 1:
+                raise RuntimeError("timed out")
+            if title == "S2":
+                raise RuntimeError("Video unavailable: Private video")
+            song["stream_url"] = f"https://audio.example/{title}"
+            song["resolved_at"] = time.time()
+            return song["stream_url"], False
+
+        monkeypatch.setattr(pb_mod, "resolve_stream_url", fake_resolve)
+        engine._preload_worker(upcoming)
+        assert calls["S1"] == 2 and songs[1].get("stream_url")
+        assert calls["S2"] == 1        # kalıcı hata: boşuna tekrar denemez
+        assert calls["S3"] == 1 and songs[3].get("stream_url")
+    finally:
+        engine.shutdown()
+
+
+# ============================================================================
+# 4. Paket içi libVLC (packaging/fetch_vlc.py & helpers/dependencies.py)
+# ============================================================================
+def test_fetch_vlc_filters_video_plugins_and_verifies_sha(tmp_path):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("vlc-3.0.24/libvlc.dll", b"libvlc")
+        zf.writestr("vlc-3.0.24/libvlccore.dll", b"libvlccore")
+        zf.writestr("vlc-3.0.24/COPYING.txt", b"LGPL")
+        zf.writestr("vlc-3.0.24/plugins/audio_output/libwasapi_plugin.dll", b"audio")
+        zf.writestr("vlc-3.0.24/plugins/audio_filter/libequalizer_plugin.dll", b"eq")
+        zf.writestr("vlc-3.0.24/plugins/gui/libqt_plugin.dll", b"gui-excluded")
+        zf.writestr("vlc-3.0.24/plugins/codec/libx265_plugin.dll", b"x265-excluded")
+    data = buf.getvalue()
+    sha = hashlib.sha256(data).hexdigest()
+
+    dest = tmp_path / "vlc"
+    ver, count = fetch_vlc.install_vlc(
+        dest, "3.0.24",
+        get=lambda url: f"{sha} *vlc.zip".encode() if url.endswith(".sha256") else data,
+    )
+    assert ver == "3.0.24" and count == 5
+    assert (dest / "libvlc.dll").is_file()
+    assert (dest / "plugins" / "audio_filter" / "libequalizer_plugin.dll").is_file()
+    assert not (dest / "plugins" / "gui").exists()
+    assert not (dest / "plugins" / "codec" / "libx265_plugin.dll").exists()
+
+    env: dict[str, str] = {}
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(dependencies, "bundled_vlc_dir", lambda: str(dest))
+    assert dependencies.configure_bundled_vlc(env)
+    assert env["PYTHON_VLC_LIB_PATH"] == str(dest / "libvlc.dll")
+    assert env["PYTHON_VLC_MODULE_PATH"] == str(dest / "plugins")
+    monkeypatch.undo()
+
+
+# ============================================================================
+# 5. Authenticode kod imzalama (packaging/sign_binaries.py)
+# ============================================================================
+def test_sign_binaries_skips_cleanly_without_cert_and_signs_with_cert(tmp_path):
+    exe = tmp_path / "Audifly.exe"
+    exe.write_bytes(b"MZ")
+    assert sign_binaries.sign_files([exe], environ={}) == 0
+    assert sign_binaries.sign_files([exe], environ={}, require=True) == 1
+
+    recorded = []
+
+    def fake_run(cmd, **kwargs):
+        recorded.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="Done", stderr="")
+
+    rc = sign_binaries.sign_files(
+        [exe],
+        environ={"WINDOWS_PFX_BASE64": "ZHVtbXk=", "WINDOWS_PFX_PASSWORD": "gizli"},
+        run=fake_run,
+        which=lambda _: "signtool.exe",
+    )
+    assert rc == 0 and len(recorded) == 1
+    assert "/fd" in recorded[0] and "sha256" in recorded[0] and str(exe) in recorded[0]
+
+
+# ============================================================================
+# 6. Çoklu dil desteği (helpers/i18n.py)
+# ============================================================================
+def test_i18n_bidirectional_live_translation(qapp):
+    from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+
+    box = QWidget()
+    lay = QVBoxLayout(box)
+    lbl = QLabel("⚙  Ayarlar")
+    btn = QPushButton("📋 Raporu Kopyala")
+    lay.addWidget(lbl)
+    lay.addWidget(btn)
+
+    try:
+        i18n.set_language("en")
+        i18n.translate_widget(box)
+        assert lbl.text() == "⚙  Settings"
+        assert btn.text() == "📋 Copy Report"
+
+        # Tekrar Türkçe'ye dönüldüğünde orijinal metinler geri gelmeli
+        i18n.set_language("tr")
+        i18n.translate_widget(box)
+        assert lbl.text() == "⚙  Ayarlar"
+        assert btn.text() == "📋 Raporu Kopyala"
+    finally:
+        i18n.set_language("tr")
+        box.close()

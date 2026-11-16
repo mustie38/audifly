@@ -2,10 +2,14 @@
 
 YouTube sık sık çıkarım değiştirir; eski yt-dlp şarkı çalamaz hale gelir.
 PyPI'daki son sürümle karşılaştırıp kullanıcıyı haberdar eder.
+
+Paketlenmiş (.exe) uygulamada `sys.executable -m pip` çalıştırılamaz (uygulamanın
+kendisini tekrar açar); bu durumda saf Python wheel'leri doğrudan PyPI'den
+kullanıcı veri klasörüne indirilir (:mod:`mustiefly_qt.helpers.ytdlp_runtime`) ve
+bir sonraki açılışta devreye girer — yeni kurulum yayınlamaya gerek kalmaz.
 """
 from __future__ import annotations
 
-from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
 import importlib.metadata
 import subprocess
 import sys
@@ -13,11 +17,24 @@ import sys
 import requests
 from packaging.version import InvalidVersion, Version
 
+from mustiefly_qt.helpers import ytdlp_runtime
+
 PYPI_TIMEOUT = 6
 UPDATE_PACKAGES = ("yt-dlp", "yt-dlp-ejs")
 
 
 def installed_version(package: str = "yt-dlp") -> str | None:
+    if package == "yt-dlp":
+        pending = ytdlp_runtime.pending_version()
+        if pending:
+            return pending
+        if ytdlp_runtime.ACTIVE_VERSION:
+            return ytdlp_runtime.ACTIVE_VERSION
+        try:
+            from yt_dlp.version import __version__
+            return __version__
+        except Exception:
+            pass
     try:
         return importlib.metadata.version(package)
     except importlib.metadata.PackageNotFoundError:
@@ -46,9 +63,15 @@ def update_available(package: str = "yt-dlp") -> tuple[bool, str | None, str | N
 
 
 def run_update() -> tuple[bool, str]:
-    """pip ile yt-dlp + yt-dlp-ejs paketlerini günceller. Dönüş: (başarılı, özet)."""
+    """yt-dlp + yt-dlp-ejs paketlerini günceller. Dönüş: (başarılı, özet).
+
+    Paketlenmiş uygulamada (`sys.frozen`) pip yoktur; wheel doğrudan kullanıcı
+    klasörüne indirilir. Kaynaktan çalışırken önce pip denenir, başarısız olursa
+    aynı kullanıcı klasörü mekanizmasına düşülür.
+    """
     if getattr(sys, "frozen", False):
-        return False, f"Paketlenmiş uygulama pip ile güncellenemez. Yeni {APP_DISPLAY_NAME} sürümünü kur."
+        ok, msg, _ver = ytdlp_runtime.install_latest()
+        return ok, msg
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--upgrade", *UPDATE_PACKAGES],
@@ -57,6 +80,12 @@ def run_update() -> tuple[bool, str]:
         ok = proc.returncode == 0
         tail = (proc.stdout or "").strip().splitlines()[-3:]
         err = (proc.stderr or "").strip().splitlines()[-2:]
-        return ok, "\n".join(tail + err)
+        if ok:
+            return True, "\n".join(tail + err)
     except Exception as e:
-        return False, str(e)
+        err = [str(e)]
+    # Kaynak ortamda pip yoksa / yetki hatası verdiyse yine uygulama içi indirmeyi dene
+    ok, msg, _ver = ytdlp_runtime.install_latest()
+    if ok:
+        return True, msg
+    return False, "\n".join(err) or msg

@@ -19,7 +19,10 @@ def test_frozen_update_does_not_spawn_app_recursively(monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("must not invoke pip")
     monkeypatch.setattr(updates.subprocess, "run", forbidden)
-    assert not updates.run_update()[0]
+    monkeypatch.setattr(updates.ytdlp_runtime, "install_latest",
+                        lambda: (True, "yt-dlp 2026.12.1 indirildi.", "2026.12.1"))
+    ok, msg = updates.run_update()
+    assert ok and "2026.12.1" in msg
 
 
 def test_missing_cached_path_is_not_offline(tmp_path):

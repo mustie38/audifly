@@ -15,6 +15,7 @@ from PySide6.QtCore import QAbstractAnimation
 from mustiefly_qt.helpers.brand_icon import build_icon
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME, APP_VERSION
 from mustiefly_qt.helpers import app_update
+from mustiefly_qt.helpers.i18n import apply_language, translate_widget
 from mustiefly_qt.services.app_updater import AppUpdater
 from mustiefly_qt.helpers.constants import (
     AppPaths, DEFAULT_THEME_KEY, DISCORD_CLIENT_ID_DEFAULT, THEMES, shade_color,
@@ -202,6 +203,9 @@ class MainWindow(QMainWindow):
         self.snackbar.hide()
         self._undo_menu_action = None  # _build_menu içinde gerçek değere bağlanır
         self._really_quit = False  # tepsiye küçültme açıkken pencere ✕'i tepsiye indirir
+        self._recent_errors: list[str] = []
+        self._last_error_text = ""
+        self._ytdlp_auto_attempted = False
 
         self._build_menu()
         self._setup_room_indicator()
@@ -217,11 +221,14 @@ class MainWindow(QMainWindow):
         self.sidebar.equalizerRequested.connect(self._toggle_equalizer_window)
         self.sidebar.lyricsRequested.connect(self._toggle_lyrics_window)
         self.sidebar.miniPlayerRequested.connect(self._toggle_mini_player)
+        self.sidebar.reportRequested.connect(self.open_diagnostics_dialog)
+        self.settings_view.diagnosticsRequested.connect(self.open_diagnostics_dialog)
         self.mini_player.closed.connect(self._on_mini_closed)
         self.library_view.addSongRequested.connect(self._open_search_dialog)
         self.store.statusMessage.connect(self._on_status_message)
         self.playback.statusMessage.connect(self._on_status_message)
         self.playback.playError.connect(self.playback.on_play_error)
+        self.playback.extractionFailed.connect(self._on_extraction_failed)
         self.playback.songStarted.connect(lambda *_: self.library_view.refresh_current_row_highlight())
         # Şarkı silinince/taşınınca çalan şarkının index'i yeniden çözümlensin
         self.store.playlistsChanged.connect(self.playback.resync_current_index)
@@ -281,9 +288,14 @@ class MainWindow(QMainWindow):
         self.updateNotice.connect(self._on_status_message)
         self.updateNotice.connect(self.top_bar.set_notification)
 
-        # Snackbar geri alma
+        # Snackbar geri alma ve hata raporlama
         self.snackbar.undoClicked.connect(self._perform_undo)
+        self.snackbar.reportClicked.connect(self.open_diagnostics_dialog)
         self.store.undoAvailable.connect(self._on_undo_available)
+
+        if self.settings.get("language", "tr") != "tr":
+            apply_language(self.settings["language"])
+            translate_widget(self)
 
         self.show_home_view()
         self._select_nav_silent("home")
@@ -575,6 +587,15 @@ class MainWindow(QMainWindow):
         lyrics_action = eq_menu_item.addAction("🎤 Sözler Paneli…")
         lyrics_action.triggered.connect(self._toggle_lyrics_window)
 
+        help_menu = menu_bar.addMenu("Yardım")
+        report_action = help_menu.addAction("🩺 Sorun Bildir / Tanılama Raporu…")
+        report_action.triggered.connect(self.open_diagnostics_dialog)
+        logs_action = help_menu.addAction("📁 Kayıt Klasörünü Aç")
+        logs_action.triggered.connect(self._open_logs_dir)
+        help_menu.addSeparator()
+        help_update_action = help_menu.addAction("🔄 Güncellemeleri Denetle…")
+        help_update_action.triggered.connect(lambda: self.check_for_app_update(manual=True))
+
     # --- Navigasyon / görünüm yönetimi ---
     def _select_nav_silent(self, key: str):
         """Sidebar buton görselini kod tarafından senkronlar (sinyal tetiklemeden)."""
@@ -751,6 +772,46 @@ class MainWindow(QMainWindow):
     def _open_data_dir(self):
         """Hesap, ayar ve kütüphane dosyalarının bulunduğu klasörü gösterir."""
         QDesktopServices.openUrl(QUrl.fromLocalFile(self.paths.dir))
+
+    def _open_logs_dir(self):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(self.paths.logs_dir))
+
+    def open_diagnostics_dialog(self):
+        """Sorun Bildir / Tanılama Raporu penceresini açar."""
+        from mustiefly_qt.views.diagnostics_dialog import DiagnosticsDialog
+        dlg = DiagnosticsDialog(
+            self.paths.logs_dir,
+            error_text=self._last_error_text,
+            recent_errors=self._recent_errors,
+            parent=self,
+        )
+        dlg.exec()
+        dlg.deleteLater()
+
+    def _on_extraction_failed(self, error_text: str):
+        """YouTube çıkarımı hata verdiğinde (yt-dlp eski olabilir) bir kez arka planda
+        güncelleme dener; böylece yeni kurulum beklemeden sorun kendi kendine çözülür."""
+        self._last_error_text = error_text
+        if self._ytdlp_auto_attempted or not self.settings.get("auto_ytdlp_update", True):
+            return
+        self._ytdlp_auto_attempted = True
+        import threading
+
+        def worker():
+            try:
+                from mustiefly_qt.helpers.updates import installed_version, run_update, update_available
+                has_new, inst, latest = update_available()
+                if not has_new:
+                    return
+                ok, _ = run_update()
+                if ok:
+                    self.updateNotice.emit(
+                        f"⬆ yt-dlp otomatik güncellendi ({inst} → {installed_version() or latest}). "
+                        "Etkinleşmesi için uygulamayı yeniden başlat.")
+            except Exception as e:
+                log.warning("Otomatik yt-dlp güncellemesi başarısız: %s", e)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _setup_room_indicator(self):
         """Durum çubuğunda tıklanabilir oda göstergesi (yalnız odadayken görünür)."""
@@ -1031,8 +1092,16 @@ class MainWindow(QMainWindow):
 
     # --- Durum mesajları ---
     def _on_status_message(self, message: str, level: str = "info"):
-        self.statusBar().showMessage(message, 6000)
-        if level == "success" and message:
+        first_line = (message or "").splitlines()[0] if message else ""
+        self.statusBar().showMessage(first_line, 6000)
+        if level == "error" and message:
+            self._last_error_text = message
+            self._recent_errors.append(message)
+            del self._recent_errors[:-20]
+            if not self.store.can_undo():
+                self.snackbar.show_message(
+                    f"⚠️ {first_line}", undoable=False, reportable=True, duration_ms=9000)
+        elif level == "success" and message:
             # Geri alınabilir bir işlem snackbar'da bekliyorsa üzerine yazma;
             # değilse başarı mesajını 3 sn'lik tost olarak göster
             if not self.store.can_undo():

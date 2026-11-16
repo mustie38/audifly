@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 from mustiefly_qt.helpers.constants import AppPaths, DEFAULT_THEME_KEY, THEMES
+from mustiefly_qt.helpers.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, apply_language, translate_widget
 from mustiefly_qt.helpers.updates import installed_version, run_update, update_available
+from mustiefly_qt.helpers import ytdlp_runtime
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
@@ -84,6 +86,7 @@ class SettingsView(QWidget):
     # Kaydet / geri dön — MainWindow bu sinyallere göre view_stack'i değiştirir
     saved = Signal()
     backRequested = Signal()
+    diagnosticsRequested = Signal()
 
     # (anahtar, ikon, başlık)
     CATEGORIES = (
@@ -323,6 +326,17 @@ class SettingsView(QWidget):
             "Dinamik vurgu rengi", self.dynamic_check,
             "Çalan şarkının kapak resminden otomatik vurgu rengi çıkarır."))
 
+        self.language_combo = QComboBox()
+        for code, label in SUPPORTED_LANGUAGES.items():
+            self.language_combo.addItem(label, code)
+        lang_idx = self.language_combo.findData(self.settings.get("language", DEFAULT_LANGUAGE))
+        if lang_idx >= 0:
+            self.language_combo.setCurrentIndex(lang_idx)
+        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
+        theme_card.layout().addWidget(self._row(
+            "Arayüz dili", self.language_combo,
+            "Seçim anında tüm arayüze uygulanır."))
+
         general_card = self._card("Genel Davranış")
         self.page_size_spin = QSpinBox()
         self.page_size_spin.setRange(20, 500)
@@ -486,15 +500,45 @@ class SettingsView(QWidget):
         ytdlp_card = self._card("yt-dlp (YouTube çıkarımı)")
         self.ytdlp_label = QLabel(f"Kurulu sürüm: {installed_version() or 'bulunamadı'}")
         self.ytdlp_label.setObjectName("Muted")
+        self.ytdlp_label.setWordWrap(True)
         self.ytdlp_btn = QPushButton("🔄  Güncellemeleri Kontrol Et ve Güncelle")
         self.ytdlp_btn.setObjectName("Secondary")
         self.ytdlp_btn.setCursor(Qt.PointingHandCursor)
         self.ytdlp_btn.clicked.connect(self._check_ytdlp_update)
+
+        self.ytdlp_reset_btn = QPushButton("↩  Paketteki sürüme sıfırla")
+        self.ytdlp_reset_btn.setObjectName("Secondary")
+        self.ytdlp_reset_btn.setCursor(Qt.PointingHandCursor)
+        self.ytdlp_reset_btn.clicked.connect(self._reset_ytdlp)
+        self.ytdlp_reset_btn.setVisible(bool(
+            ytdlp_runtime.ACTIVE_VERSION or ytdlp_runtime.pending_version()))
+
+        self.auto_ytdlp_check = QCheckBox()
+        self.auto_ytdlp_check.setChecked(self.settings.get("auto_ytdlp_update", True))
+
         ytdlp_card.layout().addWidget(self.ytdlp_label)
         ytdlp_card.layout().addSpacing(6)
-        ytdlp_card.layout().addWidget(self.ytdlp_btn)
+        ytdlp_card.layout().addWidget(self._hbox(self.ytdlp_btn, self.ytdlp_reset_btn))
+        ytdlp_card.layout().addSpacing(6)
+        ytdlp_card.layout().addWidget(self._row(
+            "yt-dlp'yi otomatik güncelle", self.auto_ytdlp_check,
+            "YouTube çıkarımı değiştiğinde ya da açılışta yeni yt-dlp sürümünü otomatik indirir (kurulum gerektirmez)."))
 
-        return self._scroll_page(ytdlp_card)
+        diag_card = self._card("Sorun Bildirme ve Tanılama")
+        diag_desc = QLabel(
+            "Bir şarkı çalmıyorsa ya da beklenmeyen bir hata görüyorsan tanılama "
+            "raporunu tek tıkla kopyalayıp paylaşabilirsin (kişisel veri içermez).")
+        diag_desc.setObjectName("Muted")
+        diag_desc.setWordWrap(True)
+        self.diagnostics_btn = QPushButton("🩺  Sorun Bildir / Tanılama Raporunu Aç")
+        self.diagnostics_btn.setObjectName("Secondary")
+        self.diagnostics_btn.setCursor(Qt.PointingHandCursor)
+        self.diagnostics_btn.clicked.connect(self._open_diagnostics)
+        diag_card.layout().addWidget(diag_desc)
+        diag_card.layout().addSpacing(6)
+        diag_card.layout().addWidget(self.diagnostics_btn)
+
+        return self._scroll_page(ytdlp_card, diag_card)
 
     # ------------------------------------------------------------------
     # Sayfa yeniden açıldığında (aynı örnek tekrar kullanıldığı için)
@@ -522,8 +566,16 @@ class SettingsView(QWidget):
         self.spotify_disconnect_btn.setEnabled(connected)
 
         self.ytdlp_label.setText(f"Kurulu sürüm: {installed_version() or 'bulunamadı'}")
+        self.ytdlp_reset_btn.setVisible(bool(
+            ytdlp_runtime.ACTIVE_VERSION or ytdlp_runtime.pending_version()))
+        lang_idx = self.language_combo.findData(self.settings.get("language", DEFAULT_LANGUAGE))
+        if lang_idx >= 0 and lang_idx != self.language_combo.currentIndex():
+            self.language_combo.blockSignals(True)
+            self.language_combo.setCurrentIndex(lang_idx)
+            self.language_combo.blockSignals(False)
+        translate_widget(self)
 
-    # --- Tema anında önizleme -----------------------------------------
+    # --- Tema & dil anında önizleme -----------------------------------
     def _on_theme_changed(self, _index: int):
         key = self.theme_combo.currentData()
         if not key:
@@ -533,6 +585,30 @@ class SettingsView(QWidget):
         parent = self.window()
         if parent is not None and hasattr(parent, "_reset_accent"):
             parent._reset_accent()
+
+    def _on_language_changed(self, _index: int):
+        lang = self.language_combo.currentData()
+        if not lang:
+            return
+        self.settings["language"] = lang
+        apply_language(lang)
+        translate_widget(self)
+
+    def _reset_ytdlp(self):
+        if ytdlp_runtime.reset_to_bundled():
+            self.ytdlp_reset_btn.setVisible(False)
+            self.ytdlp_label.setText(
+                f"↩ Paketteki sürüme ({ytdlp_runtime.bundled_version() or '?'}) dönülecek — "
+                "uygulamayı yeniden başlat.")
+
+    def _open_diagnostics(self):
+        self.diagnosticsRequested.emit()
+        parent = self.window()
+        if parent is None or not hasattr(parent, "open_diagnostics_dialog"):
+            from mustiefly_qt.views.diagnostics_dialog import DiagnosticsDialog
+            dlg = DiagnosticsDialog(getattr(self.paths, "logs_dir", None), parent=self)
+            dlg.exec()
+            dlg.deleteLater()
 
     # --- yt-dlp güncelleme ---
     def _check_ytdlp_update(self):
@@ -577,6 +653,8 @@ class SettingsView(QWidget):
     def _on_update_done(self, ok: bool, message: str):
         self.ytdlp_label.setText(message)
         self.ytdlp_btn.setEnabled(True)
+        self.ytdlp_reset_btn.setVisible(bool(
+            ytdlp_runtime.ACTIVE_VERSION or ytdlp_runtime.pending_version()))
         if not ok:
             QMessageBox.warning(self, "yt-dlp", message)
 
@@ -703,6 +781,7 @@ class SettingsView(QWidget):
         from mustiefly_qt.services.media_keys import KEYBOARD_AVAILABLE
 
         self.settings["theme"] = self.theme_combo.currentData()
+        self.settings["language"] = self.language_combo.currentData() or DEFAULT_LANGUAGE
         self.settings["page_size"] = self.page_size_spin.value()
         self.settings["audio_normalization"] = self.normalize_check.isChecked()
         self.settings["global_media_keys"] = self.media_keys_check.isChecked()
@@ -711,6 +790,7 @@ class SettingsView(QWidget):
         self.settings["dynamic_theme"] = self.dynamic_check.isChecked()
         self.settings["restore_session"] = self.restore_check.isChecked()
         self.settings["auto_update_check"] = self.auto_update_check.isChecked()
+        self.settings["auto_ytdlp_update"] = self.auto_ytdlp_check.isChecked()
         self.settings["crossfade_enabled"] = self.crossfade_check.isChecked()
         self.settings["crossfade_seconds"] = self.crossfade_spin.value()
         self.settings["smtc_enabled"] = self.smtc_check.isChecked()

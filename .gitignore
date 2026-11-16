@@ -18,3 +18,4 @@ packaging/bin/
 packaging/audifly.ico
 *.corrupt-*
 listening_history.jsonl
+packaging/vlc/

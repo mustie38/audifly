@@ -16,7 +16,9 @@ import vlc
 import yt_dlp
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from mustiefly_qt.helpers.constants import AppPaths, resolve_stream_url, yt_dlp_base_opts
+from mustiefly_qt.helpers.constants import (
+    AppPaths, needs_stream_resolve, resolve_stream_url, yt_dlp_base_opts,
+)
 from mustiefly_qt.services.history_store import HistoryStore
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.helpers.logging_setup import get_logger
@@ -24,6 +26,36 @@ from mustiefly_qt.helpers.logging_setup import get_logger
 
 log = get_logger(__name__)
 UI_TICK_MS = 500
+PRELOAD_AHEAD = 3                 # kaç şarkı önceden çözülür
+PRELOAD_ATTEMPTS = 3              # ön yüklemede şarkı başına deneme
+PRELOAD_RETRY_DELAYS = (3.0, 8.0)  # denemeler arası bekleme (sn)
+PLAY_ATTEMPTS = 3                 # çalarken çözümleme denemesi
+PLAY_RETRY_DELAYS = (1.0, 2.5)
+
+# Tekrar denemekle düzelmeyecek hatalar (video kaldırılmış/özel/yaş sınırı...)
+_PERMANENT_ERROR_MARKERS = (
+    "video unavailable", "private video", "has been removed", "copyright",
+    "confirm your age", "members-only", "not available in your country",
+    "account associated with this video has been terminated",
+)
+
+
+def _is_permanent_error(e: Exception) -> bool:
+    if isinstance(e, (FileNotFoundError, KeyError)):
+        return True
+    lower = str(e).lower()
+    return any(marker in lower for marker in _PERMANENT_ERROR_MARKERS)
+
+
+def _is_extraction_error(e: Exception) -> bool:
+    """YouTube çıkarımı bozuldu mu (yt-dlp güncellemesi gerektirebilir)?"""
+    if _is_permanent_error(e):
+        return False
+    lower = str(e).lower()
+    return any(t in lower for t in (
+        "unable to extract", "failed to extract", "no video formats", "requested format",
+        "http error 403", "signature", "nsig", "player response", "sign in to confirm you",
+    ))
 
 
 def _friendly_ytdlp_message(e: Exception) -> str:
@@ -65,6 +97,8 @@ class PlaybackEngine(QObject):
     shuffleChanged = Signal(bool)                      # karışık çal modu deşti
     radioStarted = Signal(dict)                        # radyo istasyonu çalmaya başladı
     radioStopped = Signal()
+    # YouTube çıkarımı bozuk görünüyor (yt-dlp güncellemesi gerekebilir) — hata metni
+    extractionFailed = Signal(str)
     # Crossfade iç sinyalleri: worker thread'den GUI'ye güvenli geçiş
     _xfadeResolved = Signal(int, object, str, int, str, bool)       # playlist, index, url, is_offline
     _xfadeFailed = Signal(int)
@@ -143,6 +177,12 @@ class PlaybackEngine(QObject):
         self._setup_equalizer()
 
         self.next_song_preloaded = None
+        self._preloading: set[int] = set()   # şu an ön yüklemesi süren şarkılar (id)
+        self._preload_timer = QTimer(self)
+        self._preload_timer.setSingleShot(True)
+        self._preload_timer.setInterval(800)
+        self._preload_timer.timeout.connect(self.preload_next_song)
+        self.store.queueChanged.connect(self._schedule_preload)
         # Dinleme geçmişi: gerçekten dinlenen süre tick döngüsünde biriktirilir
         self.history = HistoryStore(paths.dir)
         self._listen: dict | None = None
@@ -259,31 +299,91 @@ class PlaybackEngine(QObject):
         self.statusMessage.emit("İndirme yöneticisi hazır değil; indirme başlatılamadı.", "error")
 
     # --- Ön yükleme ---
-    def preload_next_song(self):
-        if self._closed or self.playing_playlist is None:
-            return
-        next_idx = self.get_next_index()
-        if next_idx == -1:
-            return
-        songs = self.store.playlists.get(self.playing_playlist, [])
-        if next_idx >= len(songs):
-            return
-        next_song = songs[next_idx]
-        with self.preload_lock:
-            if self.next_song_preloaded == next_song.get("webpage_url"):
-                return
-            self.next_song_preloaded = next_song.get("webpage_url")
-        threading.Thread(target=self._preload_worker, args=(next_song,), daemon=True).start()
+    def _upcoming_songs(self, count: int) -> list[dict]:
+        """Çalma sırasına göre sıradaki en fazla `count` şarkı: önce manuel kuyruk,
+        sonra liste sırası (karışık modda yalnız planlanmış sıradaki bilinir)."""
+        out: list[dict] = []
+        seen = {id(self._current_song_ref)} if self._current_song_ref is not None else set()
 
-    def _preload_worker(self, song: dict):
+        def add(song):
+            if isinstance(song, dict) and id(song) not in seen:
+                seen.add(id(song))
+                out.append(song)
+
+        for _pl, _idx, song in list(self.store.manual_queue):
+            if len(out) >= count:
+                return out
+            add(song)
+        if self.playing_playlist is None or self.repeat_mode == "one":
+            return out
+        songs = self.store.playlists.get(self.playing_playlist, [])
+        n = len(songs)
+        if n == 0:
+            return out
+        if self.shuffle_mode:
+            nxt = self.get_next_index()
+            if 0 <= nxt < n:
+                add(songs[nxt])
+            return out[:count]
+        idx = self.current_index
+        for _ in range(n):
+            if len(out) >= count:
+                break
+            idx += 1
+            if idx >= n:
+                if self.repeat_mode != "all":
+                    break
+                idx = 0
+            if idx == self.current_index:
+                break
+            add(songs[idx])
+        return out
+
+    def _schedule_preload(self):
+        """(GUI thread) Kuyruk vb. değişince ön yüklemeyi kısa gecikmeyle yeniden planla."""
+        if not self._closed:
+            self._preload_timer.start()
+
+    def preload_next_song(self):
+        """Sıradaki PRELOAD_AHEAD şarkının stream linkini arka planda önceden çözer.
+
+        Eskiden yalnız 1 şarkı hazırlanıyordu ve başarısız olursa bir daha denenmiyordu;
+        birkaç şarkı ileri atlayınca ya da YouTube anlık hata verince şarkı "çalınamadı"
+        deyip atlanıyordu. Şimdi 3 şarkı sırayla (YouTube'u aynı anda yormadan) çözülür,
+        geçici hatalarda artan beklemeyle yeniden denenir.
+        """
+        if self._closed or self.playing_playlist is None or self.radio_playing is not None:
+            return
+        pending = [s for s in self._upcoming_songs(PRELOAD_AHEAD) if needs_stream_resolve(s)]
+        with self.preload_lock:
+            pending = [s for s in pending if id(s) not in self._preloading]
+            self._preloading.update(id(s) for s in pending)
+        if pending:
+            self.next_song_preloaded = pending[0].get("webpage_url")
+            threading.Thread(target=self._preload_worker, args=(pending,), daemon=True).start()
+
+    def _preload_worker(self, songs: list[dict]):
         try:
-            resolve_stream_url(song)
-        except Exception as e:
-            log.error("%s %s", "Ön yükleme hatası:", e)
-            # Başarısız ön yükleme bir daha denenebilsin (eskiden işaret kalıcıydı)
+            for song in songs:
+                for attempt in range(PRELOAD_ATTEMPTS):
+                    if self._closed:
+                        return
+                    if not needs_stream_resolve(song):
+                        break   # bu arada çalınıp çözülmüş olabilir
+                    try:
+                        resolve_stream_url(song)
+                        break
+                    except Exception as e:
+                        permanent = _is_permanent_error(e)
+                        log.warning("Ön yükleme hatası (%s, deneme %d/%d): %s",
+                                    song.get("title", "?"), attempt + 1, PRELOAD_ATTEMPTS, e)
+                        if permanent or attempt + 1 >= PRELOAD_ATTEMPTS:
+                            break
+                        time.sleep(PRELOAD_RETRY_DELAYS[min(attempt, len(PRELOAD_RETRY_DELAYS) - 1)])
+        finally:
             with self.preload_lock:
-                if self.next_song_preloaded == song.get("webpage_url"):
-                    self.next_song_preloaded = None
+                for song in songs:
+                    self._preloading.discard(id(song))
 
     # --- Oynatma ---
     def play_song_at_index(self, playlist_name: str, index: int, auto: bool = False):
@@ -316,20 +416,22 @@ class PlaybackEngine(QObject):
 
     def _resolve_and_play(self, generation, playlist_name, index, song):
         url = is_offline = None
-        for attempt in range(2):
+        for attempt in range(PLAY_ATTEMPTS):
             try:
                 url, is_offline = resolve_stream_url(song)
                 break
             except Exception as e:
-                log.error("%s %s", "Stream çözümleme hatası:", e)
-                transient = not isinstance(e, FileNotFoundError)
-                if (attempt == 0 and transient and not self._closed
-                        and generation == self._play_generation):
-                    time.sleep(1.0)       # geçici ağ/YouTube hatası: bir kez daha dene
+                log.error("Stream çözümleme hatası (deneme %d/%d): %s", attempt + 1, PLAY_ATTEMPTS, e)
+                if (attempt + 1 < PLAY_ATTEMPTS and not _is_permanent_error(e)
+                        and not self._closed and generation == self._play_generation):
+                    # geçici ağ/YouTube hatası: artan beklemeyle tekrar dene
+                    time.sleep(PLAY_RETRY_DELAYS[min(attempt, len(PLAY_RETRY_DELAYS) - 1)])
                     if generation != self._play_generation:
                         return
                     continue
                 if not self._closed:
+                    if _is_extraction_error(e):
+                        self.extractionFailed.emit(str(e))
                     self._playbackFailed.emit(generation, song, playlist_name, index,
                                               _friendly_ytdlp_message(e))
                 return
@@ -1176,6 +1278,7 @@ class PlaybackEngine(QObject):
         self._closed = True
         self._play_generation += 1
         self._tick_timer.stop()
+        self._preload_timer.stop()
         self._abort_crossfade()
         for player in (self.player, self.player_b):
             try:

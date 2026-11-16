@@ -22,7 +22,7 @@
 
 #define MyAppName "Audifly"
 ; Sürüm pyproject.toml ile aynı olmalı; release.yml bunu packaging/set_iss_version.py ile günceller.
-#define MyAppVersion "0.4.5"
+#define MyAppVersion "0.4.6"
 #define MyAppPublisher "Audifly"
 #define MyAppExeName "Audifly.exe"
 #define MyAppURL "https://github.com/mustie38/audifly"
@@ -87,24 +87,10 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Type: filesandordirs; Name: "{app}\logs"
 
 [Code]
-{ VLC kurulu mu diye basit bir kayıt defteri kontrolü yapıp, yoksa kuruluma
-  devam etmeden önce kullanıcıyı bilgilendiriyoruz. Bu bir engel değil,
-  sadece uyarı - VLC olmadan program açılır ama oynatma çalışmaz. }
+{ Kurulum paketi artık libVLC çalışma zamanını (_internal\vlc\libvlc.dll) kendi
+  içinde taşır (packaging/fetch_vlc.py). Bu yüzden kullanıcının ayrıca VLC Media
+  Player kurması gerekmez; uyarı penceresi kaldırılmıştır. }
 function IsVLCInstalled(): Boolean;
 begin
-  Result := RegKeyExists(HKLM, 'SOFTWARE\VideoLAN\VLC') or
-            RegKeyExists(HKLM, 'SOFTWARE\WOW6432Node\VideoLAN\VLC');
-end;
-
-procedure InitializeWizard();
-begin
-  if not IsVLCInstalled() then
-  begin
-    MsgBox('VLC Media Player sisteminizde bulunamadı.' + #13#10 + #13#10 +
-      'Audifly''nin müzik çalabilmesi için VLC Media Player''ın ayrıca ' +
-      'kurulu olması gerekir (64-bit Python/uygulama için 64-bit VLC).' + #13#10 + #13#10 +
-      'Kuruluma devam edebilirsiniz, ancak VLC''yi https://www.videolan.org/vlc/ ' +
-      'adresinden ayrıca indirip kurmayı unutmayın.',
-      mbInformation, MB_OK);
-  end;
+  Result := True;
 end;

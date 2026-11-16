@@ -114,6 +114,7 @@ class SidebarWidget(QWidget):
     equalizerRequested = Signal()
     lyricsRequested = Signal()
     miniPlayerRequested = Signal()
+    reportRequested = Signal()
 
     COVER_SIZE = 36  # listedeki mini kapak boyutu
 
@@ -243,6 +244,7 @@ class SidebarWidget(QWidget):
             ("▤", "Ekolayzer", self.equalizerRequested),
             ("♫", "Sözler Paneli", self.lyricsRequested),
             ("▭", "Mini Oynatıcı", self.miniPlayerRequested),
+            ("🩺", "Sorun Bildir / Tanılama", self.reportRequested),
         )
         for icon, tooltip, sig in tools:
             btn = QPushButton(icon)

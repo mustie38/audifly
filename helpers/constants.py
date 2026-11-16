@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import sys
 import time
@@ -51,7 +52,7 @@ if not _NODE_AVAILABLE:
     )
 
 
-APP_VERSION = "0.4.5"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
+APP_VERSION = "0.4.6"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
 APP_DISPLAY_NAME = "Audifly"   # kullanıcıya görünen ad (tek nokta)
 LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (göç uyumluluğu)
 
@@ -166,7 +167,9 @@ DEFAULT_SETTINGS = {
     "smart_rules": [],
     "dependency_notice_dismissed": False,
     "auto_update_check": True,          # açılışta GitHub'da yeni sürüm var mı diye bak
+    "auto_ytdlp_update": True,          # açılışta/çıkartım hatasında yt-dlp'yi otomatik güncelle
     "skipped_update_version": "",       # "Bu sürümü atla" denen sürüm (elle denetim yine gösterir)
+    "language": "tr",                   # arayüz dili ("tr" | "en")
 }
 
 
@@ -206,6 +209,40 @@ def offline_path_for(song: dict) -> str | None:
     return None
 
 
+# YouTube ses linkleri ~6 saat geçerlidir ve son kullanma anı linkin içinde yazar
+# (`expire=<unix zamanı>`). Önceden çözülmüş bir link, şarkı çalınmaya başlamadan önce
+# en az bu kadar daha geçerli olmalı; yoksa VLC yarıda "403" alıp şarkıyı atlıyordu.
+STREAM_URL_SAFETY_MARGIN = 20 * 60
+_EXPIRE_RE = re.compile(r"[?&/]expire[=/](\d{9,11})")
+
+
+def stream_url_expiry(url: str | None) -> float | None:
+    match = _EXPIRE_RE.search(url or "")
+    return float(match.group(1)) if match else None
+
+
+def stream_url_is_fresh(song: dict, now: float | None = None) -> bool:
+    """Önbellekteki stream linki hâlâ güvenle kullanılabilir mi?"""
+    url = song.get("stream_url")
+    if not url:
+        return False
+    now = time.time() if now is None else now
+    if (now - (song.get("resolved_at") or 0)) >= STREAM_URL_TTL:
+        return False
+    expiry = stream_url_expiry(url)
+    return expiry is None or (expiry - now) >= STREAM_URL_SAFETY_MARGIN
+
+
+def needs_stream_resolve(song: dict, now: float | None = None) -> bool:
+    """Çalmadan önce ağdan (yt-dlp) çözümleme gerekecek mi? Ön yükleme bunu kullanır."""
+    if song.get("local_path"):
+        return False
+    cached_path = song.get("cached_path")
+    if cached_path and os.path.exists(cached_path):
+        return False
+    return bool(song.get("webpage_url")) and not stream_url_is_fresh(song, now)
+
+
 def resolve_stream_url(song: dict) -> tuple[str, bool]:
     """Bir şarkının çalınabilir ses linkini çözer (önbellek + TTL kontrolü ile).
     Döner: (url_veya_dosya_yolu, is_offline)."""
@@ -223,8 +260,7 @@ def resolve_stream_url(song: dict) -> tuple[str, bool]:
         return cached_path, True
 
     cached_url = song.get("stream_url")
-    resolved_at = song.get("resolved_at", 0)
-    if cached_url and (now - resolved_at) < STREAM_URL_TTL:
+    if cached_url and stream_url_is_fresh(song, now):
         return cached_url, False
 
     ydl_opts = yt_dlp_base_opts(format="bestaudio/best", quiet=True, noplaylist=True)

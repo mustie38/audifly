@@ -4,20 +4,37 @@
 ```
 pip install -e ".[dev]" pyinstaller pypresence ytmusicapi winsdk   # winsdk yerine Python 3.13+ için winrt-* paketleri
 python mustiefly_qt/packaging/make_icon.py                         # audifly.ico (marka ikonundan)
+python mustiefly_qt/packaging/fetch_node.py                        # packaging/bin/node.exe (SHA-256 doğrulamalı)
+python mustiefly_qt/packaging/fetch_vlc.py                         # packaging/vlc/ (libVLC + ses eklentileri, LGPL-2.1+)
 pyinstaller mustiefly_qt/packaging/audifly.spec                    # → dist/Audifly/Audifly.exe
+python mustiefly_qt/packaging/sign_binaries.py dist/Audifly/Audifly.exe
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" mustiefly_qt\packaging\audifly.iss   # → Output/AudiflySetup.exe
+python mustiefly_qt/packaging/sign_binaries.py mustiefly_qt/packaging/Output/AudiflySetup.exe
 ```
-CI (`.github/workflows/ci.yml → package-windows`) aynı adımları Windows'ta çalıştırır ve çıktıyı artifact olarak yükler.
+CI (`.github/workflows/release.yml`) aynı adımları Windows'ta çalıştırır ve çıktıyı GitHub Release'e yükler.
 
 ## 2. Bileşenler
 | Bileşen | Durum | Not |
 |---|---|---|
-| VLC | **Zorunlu**, pakete dahil değil | Kurulumda ve açılışta denetlenir; yoksa açıklayıcı hata ve çıkış. 64-bit uygulama için 64-bit VLC. |
+| VLC (libVLC) | **Pakete dahil** (LGPL-2.1+) | `packaging/fetch_vlc.py` resmi win64 arşivini SHA-256 doğrulamalı indirip `libvlc.dll`, `libvlccore.dll`, ses eklentileri ve `COPYING.txt`'yi `packaging/vlc/` altına koyar; kullanıcının ayrıca VLC kurması gerekmez. |
 | FFmpeg + ffprobe | İsteğe bağlı (indirme için) | `packaging/bin/` altına koyarsan kurulumla gelir; yoksa açılışta bir kez uyarılır. |
-| Node.js | **Pakete dahil** (YouTube çözümleme için gerekli) | CI, `packaging/fetch_node.py` ile güncel LTS `node.exe`'yi (SHA-256 doğrulamalı) indirip `packaging/bin/`'e koyar; LICENSE-node.txt ile birlikte pakete girer. Elle derlerken önce `python packaging/fetch_node.py` çalıştır. |
-| yt-dlp + yt-dlp-ejs | Pakete gömülü | YouTube JS koruması için `yt-dlp-ejs` betikleri de pakete alınır (spec bunu doğrular). **Donmuş EXE'de pip ile güncellenemez** → bkz. 4. |
+| Node.js | **Pakete dahil** (YouTube çözümleme için gerekli) | CI, `packaging/fetch_node.py` ile güncel LTS `node.exe`'yi (SHA-256 doğrulamalı) indirip `packaging/bin/`'e koyar; LICENSE-node.txt ile birlikte pakete girer. |
+| yt-dlp + yt-dlp-ejs | Pakete gömülü + **Uygulama içi güncellenebilir** | Donmuş `.exe` içinde bile PyPI'den SHA-256 doğrulamalı wheel olarak `%LOCALAPPDATA%\Audifly\components\yt-dlp\` altına indirilir ve açılışta `sys.meta_path` üzerinden devreye girer (`helpers/ytdlp_runtime.py`). Yeni kurulum yayınlamaya gerek kalmaz. |
 
-FFmpeg (LGPL/GPL) dağıtırken; Node.js (MIT) için `LICENSE-node.txt` pakete otomatik eklenir. FFmpeg dağıtırken lisans metinlerini kurulum paketine eklemelisin.
+## 3. Kod İmzalama (SmartScreen Uyarısını Kaldırma)
+Windows SmartScreen, imzasız `.exe` dosyalarında "Tanınmayan yayıncı" uyarısı gösterir.
+`packaging/sign_binaries.py` ve `.github/workflows/release.yml` Authenticode imzalamaya hazırdır:
+
+1. Bir kod imzalama sertifikası (`.pfx` / `.p12`) edin:
+   - **Açık kaynak için ücretsiz/uygun seçenekler**: [SignPath Foundation](https://signpath.io/) (açık kaynak projelere ücretsiz), **Azure Artifact/Trusted Signing** (~$10/ay, anında SmartScreen itibarı), ya da **Certum Open Source Code Signing**.
+2. Sertifikayı base64'e çevir:
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("sertifika.pfx")) | Set-Clipboard
+   ```
+3. GitHub repo ayarlarında (**Settings → Secrets and variables → Actions**) şu iki secret'ı tanımla:
+   - `WINDOWS_PFX_BASE64`: kopyaladığın base64 metni
+   - `WINDOWS_PFX_PASSWORD`: PFX parolası
+4. Bir sonraki etiket (`v*`) push'unda hem `Audifly.exe` hem `AudiflySetup.exe` SHA-256 + DigiCert RFC3161 zaman damgasıyla otomatik imzalanır.
 
 ## 3. Temiz Windows testi (otomatikleştirilemeyenler — elle yap)
 Temiz bir Windows 10/11 sanal makinesinde:
