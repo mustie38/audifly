@@ -114,8 +114,20 @@ class StatsView(QWidget):
         self.content_layout.addStretch(1)
 
         self.store.playlistsChanged.connect(self._on_store_changed)
+        if self.thumbnails is not None:
+            self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
         self.refresh()
         self.period_combo.currentIndexChanged.connect(self.refresh)
+
+    def _on_thumbnail_ready(self, key: str):
+        if self.thumbnails is None:
+            return
+        for i in range(self.top_list.count()):
+            row = self.top_list.itemWidget(self.top_list.item(i))
+            if isinstance(row, SongRow) and row.song.get("webpage_url") == key:
+                pm = self.thumbnails.pixmap_for(row.song, 36)
+                if pm is not None:
+                    row.set_thumbnail(pm)
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)

@@ -36,10 +36,19 @@ class WaveformStrip(QWidget):
 
     def set_playing(self, playing: bool):
         self._playing = bool(playing)
-        if self._playing:
+        if self._playing and self.isVisible():
             if not self._timer.isActive():
                 self._timer.start(TICK_MS)
         # Durunca hemen durdurmuyoruz: barlar önce düz çizgiye iner (_tick yönetir).
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if self._playing and not self._timer.isActive():
+            self._timer.start(TICK_MS)
+
+    def hideEvent(self, event):  # noqa: N802
+        self._timer.stop()
+        super().hideEvent(event)
 
     def _tick(self):
         at_rest = not self._playing and all(abs(h - 1.0) < 0.05 for h in self._heights)

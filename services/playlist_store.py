@@ -304,6 +304,8 @@ class PlaylistStore(QObject):
 
         self._push_undo(("delete_playlist", name, songs, cover_path))
         self._schedule_cover_deletion(cover_path)
+        for s in songs:
+            self._schedule_file_deletion(s.get("cached_path"))
         return True, ""
 
     def switch_playlist(self, name: str):
@@ -314,6 +316,10 @@ class PlaylistStore(QObject):
 
     def add_song(self, playlist_name: str, song: dict) -> bool:
         """False dönerse şarkı zaten o listede vardır (eklenmedi)."""
+        url = song.get("webpage_url") if isinstance(song, dict) else None
+        local = song.get("local_path") if isinstance(song, dict) else None
+        if not (isinstance(url, str) and url.strip()) and not (isinstance(local, str) and local.strip()):
+            return False
         songs = self.playlists.setdefault(playlist_name, [])
         existing = {s.get("webpage_url") for s in songs}
         if song.get("webpage_url") in existing:

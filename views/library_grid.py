@@ -4,7 +4,7 @@ Karta tıklayınca o liste açılır (mockup'taki 'Tüm Çalma Listeleri' ekran�
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
@@ -107,8 +107,24 @@ class LibraryGridView(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll, stretch=1)
 
-        self.store.playlistsChanged.connect(self.refresh)
+        self._dirty = False
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(60)
+        self._refresh_timer.timeout.connect(self.refresh)
+        self.store.playlistsChanged.connect(self._on_store_changed)
         self.refresh()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if self._dirty:
+            self.refresh()
+
+    def _on_store_changed(self):
+        if self.isVisible():
+            self._refresh_timer.start()
+        else:
+            self._dirty = True
 
     def _new_playlist(self):
         from PySide6.QtWidgets import QInputDialog, QMessageBox
@@ -122,6 +138,8 @@ class LibraryGridView(QWidget):
             self.openPlaylistRequested.emit(name.strip())
 
     def refresh(self):
+        self._dirty = False
+        self._refresh_timer.stop()
         # Grid'i temizle
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)

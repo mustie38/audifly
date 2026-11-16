@@ -140,6 +140,7 @@ class DownloadManager(QObject):
     def shutdown(self, timeout=2.0):
         """Cancel work on close. Bounded wait; network hooks observe cancellation."""
         self._stopping.set()
+        self._changed_timer.stop()
         with self._lock:
             for item in self.items.values():
                 item["cancel"].set()

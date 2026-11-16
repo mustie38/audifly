@@ -27,10 +27,16 @@ def probe_duration_ms(path: str) -> int:
         import vlc
         media = vlc.Media(path)
         try:
-            media.parse()  # senkron ayrıştırma (local dosyalarda hızlı)
-        except Exception:
-            pass
-        return max(media.get_duration() or 0, 0)
+            try:
+                media.parse()  # senkron ayrıştırma (local dosyalarda hızlı)
+            except Exception:
+                pass
+            return max(media.get_duration() or 0, 0)
+        finally:
+            try:
+                media.release()
+            except Exception:
+                pass
     except Exception:
         return 0
 

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from mustiefly_qt.services.bulk_search import BulkSearchWorker
-from mustiefly_qt.services.playlist_store import PlaylistStore
+from mustiefly_qt.services.playlist_store import PlaylistStore, _clean_song
 
 
 class BulkAddDialog(QDialog):
@@ -99,7 +99,7 @@ class BulkAddDialog(QDialog):
 
     def _append_item(self, playlist_name: str, item: dict):
         """GUI thread'inde listeye ekler (thread güvenliği)."""
-        self.store.playlists.setdefault(playlist_name, []).append(item)
+        self.store.playlists.setdefault(playlist_name, []).append(_clean_song(item))
 
     def _on_finished(self, target_playlist: str, added: int, failed: list, cancelled: bool):
         self._running = False

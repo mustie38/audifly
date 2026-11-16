@@ -496,8 +496,31 @@ class ExploreView(QWidget):
         self.sectionUpdated.connect(self._on_section_updated)
         self.heroUpdated.connect(self.hero.set_track)
         self.refreshFinished.connect(self._on_refresh_finished)
+        if self.thumbnails is not None:
+            self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
         self._load_cache_then_refresh()
+
+    def _on_thumbnail_ready(self, key: str):
+        if self.thumbnails is None:
+            return
+        if self.hero.track and self.hero.track.get("webpage_url") == key:
+            pm = self.thumbnails.pixmap_for(self.hero.track, 180, radius=16)
+            if pm is not None and not pm.isNull():
+                self.hero.art.setPixmap(pm)
+                self.hero.art.setText("")
+        for card in self.findChildren(TrackCard):
+            if card.track.get("webpage_url") == key:
+                pm = self.thumbnails.pixmap_for(card.track, TrackCard.THUMB_H, radius=14)
+                if pm is not None:
+                    card.set_pixmap(pm)
+        for acard in self.findChildren(ArtistCard):
+            if acard.artist.get("thumbnail") == key:
+                fake = {"webpage_url": key, "thumbnail": key}
+                pm = self.thumbnails.pixmap_for(fake, ArtistCard.SIZE, radius=ArtistCard.SIZE // 2)
+                if pm is not None and not pm.isNull():
+                    acard.photo.setPixmap(pm)
+                    acard.photo.setText("")
 
     # --- Yaşam döngüsü ---
     def _load_cache_then_refresh(self):

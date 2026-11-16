@@ -266,3 +266,127 @@ def test_i18n_bidirectional_live_translation(qapp):
     finally:
         i18n.set_language("tr")
         box.close()
+
+
+# ============================================================================
+# 7. Toplu bug fix regresyon testleri
+# ============================================================================
+def test_downloads_view_remove_button_and_live_progress(library_store):
+    from mustiefly_qt.services.download_manager import CANCELLED, DOWNLOADING, DownloadManager, FAILED
+    from mustiefly_qt.views.downloads_view import DownloadsView
+
+    song = {"title": "Parça", "webpage_url": "https://youtu.be/dl1", "duration": 120}
+    library_store.playlists["Varsayılan"] = [song]
+    mgr = DownloadManager(library_store, library_store.paths)
+    url = song["webpage_url"]
+    mgr.items[url] = {
+        "key": url, "playlist": "Varsayılan", "index": 0, "song": song,
+        "state": FAILED, "progress": 0.0, "error": "ağ hatası", "path": None,
+        "cancel": MagicMock(),
+    }
+    mgr._order.append(url)
+
+    view = DownloadsView(mgr, library_store)
+    row = view._rows[url]["row"]
+    # Canlı ilerleme güncellemesi (sığ kopya bayat kalmamalı)
+    mgr.items[url]["state"] = DOWNLOADING
+    mgr.items[url]["progress"] = 0.65
+    view._on_item_changed(url)
+    assert row.progress.value() == 65
+
+    # Başarısız/tamamlanmış öğede 🗑 butonu gerçekten listeden kaldırmalı
+    mgr.items[url]["state"] = CANCELLED
+    view._on_item_changed(url)
+    row.cancel_btn.click()
+    assert url not in mgr.items
+    view.close()
+    mgr.shutdown()
+
+
+def test_library_search_dialog_double_click_plays_song(library_store, monkeypatch):
+    from mustiefly_qt.services import playback as pb_mod
+    from mustiefly_qt.views.library_search_dialog import LibrarySearchDialog
+
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
+    library_store.playlists["Varsayılan"] = [
+        {"title": "Dönence", "uploader": "Barış Manço", "webpage_url": "https://youtu.be/bm1", "duration": 200},
+    ]
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+    played = []
+    monkeypatch.setattr(engine, "play_song_at_index", lambda pl, idx: played.append((pl, idx)))
+    dlg = LibrarySearchDialog(library_store, engine)
+    try:
+        dlg.query_edit.setText("dönence")
+        dlg._run_search()
+        assert dlg.results_list.count() == 1
+        dlg._open_song(dlg.results_list.item(0))
+        assert played == [("Varsayılan", 0)]
+    finally:
+        dlg.close()
+        engine.shutdown()
+
+
+def test_delete_playlist_schedules_cached_file_deletion_and_undo_cancels(library_store):
+    cached = Path(library_store.paths.cache_dir) / "cached_song.mp3"
+    cached.write_bytes(b"mp3")
+    library_store.create_playlist("Silinecek")
+    library_store.playlists["Silinecek"] = [{
+        "title": "Şarkı", "webpage_url": "https://youtu.be/del1", "cached_path": str(cached),
+    }]
+    ok, _ = library_store.delete_playlist("Silinecek")
+    assert ok
+    assert str(cached) in library_store._pending_file_deletions
+    library_store.perform_undo()
+    assert str(cached) not in library_store._pending_file_deletions
+    assert cached.is_file()
+
+
+def test_seek_clamps_to_length_and_completes_crossfade(library_store, monkeypatch):
+    from mustiefly_qt.services import playback as pb_mod
+
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+    try:
+        engine.player.get_length.return_value = 180_000
+        seeked = []
+        engine.seeked.connect(seeked.append)
+        engine.seek(250_000)
+        engine.player.set_time.assert_called_with(180_000)
+        engine.seek(-5_000)
+        engine.player.set_time.assert_called_with(0)
+        assert seeked == [180_000, 0]
+    finally:
+        engine.shutdown()
+
+
+def test_player_bar_and_now_playing_sync_like_and_recover_from_play_error(library_store, monkeypatch):
+    from mustiefly_qt.services import playback as pb_mod
+    from mustiefly_qt.views.now_playing_panel import NowPlayingPanel
+    from mustiefly_qt.views.player_bar import PlayerBar
+
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
+    song = {"title": "Test Şarkı", "uploader": "Sanatçı", "webpage_url": "https://youtu.be/t1",
+            "duration": 100, "liked": False}
+    library_store.playlists["Varsayılan"] = [song]
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+    bar = PlayerBar(engine)
+    panel = NowPlayingPanel(library_store, engine)
+    try:
+        engine.playing_playlist = "Varsayılan"
+        engine.current_index = 0
+        engine.songLoading.emit("Varsayılan", 0, song)
+        assert not bar.play_btn.isEnabled()
+        engine.playError.emit("Varsayılan", 0)
+        assert bar.play_btn.isEnabled()
+        assert panel.play_btn.isEnabled()
+        assert not bar._now_title_raw.startswith("Yükleniyor:")
+
+        engine.songStarted.emit("Varsayılan", 0, song, False)
+        assert not bar.like_btn._active
+        library_store.toggle_like("Varsayılan", 0)
+        assert bar.like_btn._active
+        assert "Beğenildi" in panel.like_btn.text()
+    finally:
+        bar.close()
+        panel.close()
+        engine.shutdown()

@@ -46,6 +46,7 @@ class BulkSearchWorker(QObject):
             quiet=True,
             default_search='ytsearch1:',
             noplaylist=True,
+            extract_flat='in_playlist',
             socket_timeout=15,
         )
 
@@ -55,7 +56,12 @@ class BulkSearchWorker(QObject):
             if isinstance(info, dict) and info.get('entries'):
                 entries = [e for e in info['entries'] if e]
                 info = entries[0] if entries else None
-            webpage_url = (info or {}).get('webpage_url', '')
+            info = info or {}
+            webpage_url = info.get('webpage_url') or info.get('url') or ''
+            if webpage_url and not webpage_url.startswith('http') and info.get('id'):
+                webpage_url = f"https://www.youtube.com/watch?v={info['id']}"
+            elif not webpage_url and info.get('id'):
+                webpage_url = f"https://www.youtube.com/watch?v={info['id']}"
             if not webpage_url:
                 raise Exception("Sonuç bulunamadı")
             return info, webpage_url
@@ -85,12 +91,15 @@ class BulkSearchWorker(QObject):
                         continue  # zaten listede var, sessizce atla
                     self.existing_urls.add(webpage_url)
 
+                    thumb = info.get('thumbnail')
+                    if not thumb and info.get('thumbnails'):
+                        thumb = (info['thumbnails'][-1] or {}).get('url')
                     item = {
                         'title': info.get('title') or 'Bilinmeyen Şarkı',
                         'webpage_url': webpage_url,
-                        'duration': info.get('duration') or 0,
+                        'duration': int(info.get('duration') or 0),
                         'uploader': info.get('uploader') or info.get('channel') or 'Bilinmeyen Sanatçı',
-                        'thumbnail': info.get('thumbnail'),
+                        'thumbnail': thumb,
                         'liked': False,
                         'added_date': datetime.now().isoformat(),
                     }

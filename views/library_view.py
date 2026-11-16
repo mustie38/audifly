@@ -155,7 +155,11 @@ class LibraryView(QWidget):
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Bu listede ara…")
         self.filter_edit.setFixedWidth(220)
-        self.filter_edit.textChanged.connect(lambda _: self._render())
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(120)
+        self._filter_timer.timeout.connect(self._render)
+        self.filter_edit.textChanged.connect(lambda _: self._filter_timer.start())
         header.addWidget(self.filter_edit)
 
         self.sort_combo = QComboBox()
@@ -613,6 +617,7 @@ class LibraryView(QWidget):
 
     def _render(self):
         self._render_timer.stop()
+        self._filter_timer.stop()
         self._keep_scroll_on_render = False
         self.list_widget.setUpdatesEnabled(False)
         try:

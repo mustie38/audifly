@@ -17,7 +17,7 @@ import yt_dlp
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from mustiefly_qt.helpers.constants import (
-    AppPaths, needs_stream_resolve, resolve_stream_url, yt_dlp_base_opts,
+    AppPaths, needs_stream_resolve, offline_path_for, resolve_stream_url, yt_dlp_base_opts,
 )
 from mustiefly_qt.services.history_store import HistoryStore
 from mustiefly_qt.services.playlist_store import PlaylistStore
@@ -245,9 +245,11 @@ class PlaybackEngine(QObject):
 
     # --- Arama ---
     def search(self, query: str):
-        threading.Thread(target=self._search_worker, args=(query,), daemon=True).start()
+        self._search_seq = getattr(self, "_search_seq", 0) + 1
+        seq = self._search_seq
+        threading.Thread(target=self._search_worker, args=(query, seq), daemon=True).start()
 
-    def _search_worker(self, query: str):
+    def _search_worker(self, query: str, seq: int = 0):
         # extract_flat: sonuçları TEK TEK tam çözümlemek (tüm format listesi)
         # aramayı ~5 kat yavaşlatıyordu; liste metaverisi arama için yeterli.
         ydl_opts = yt_dlp_base_opts(quiet=True, default_search="ytsearch5:",
@@ -282,10 +284,12 @@ class PlaybackEngine(QObject):
                 })
             if not results:
                 raise Exception("Sonuç bulunamadı")
-            self.searchResults.emit(results)
+            if not self._closed and (not seq or seq == getattr(self, "_search_seq", 0)):
+                self.searchResults.emit(results)
         except Exception as e:
             log.error("%s %s", "Arama hatası:", e)
-            self.searchFailed.emit(_friendly_ytdlp_message(e))
+            if not self._closed and (not seq or seq == getattr(self, "_search_seq", 0)):
+                self.searchFailed.emit(_friendly_ytdlp_message(e))
 
     # --- İndirme ---
     def download_song_for_offline(self, playlist_name: str, index: int):
@@ -987,7 +991,7 @@ class PlaybackEngine(QObject):
         self._current_song_ref = song
         self._session_pending = True
         self._resume_ms = int(session.get("position_ms") or 0)
-        self.songStarted.emit(playlist, index, song, bool(song.get("cached_path")))
+        self.songStarted.emit(playlist, index, song, bool(offline_path_for(song)))
         self.playStateChanged.emit(False)
         return True
 
@@ -1266,9 +1270,13 @@ class PlaybackEngine(QObject):
         self.volumeChanged.emit(value)
 
     def seek(self, ms: int):
-        if self.player.get_length() > 0:
-            self.player.set_time(int(ms))
-            self.seeked.emit(int(ms))
+        if self._xfade_active:
+            self._complete_crossfade_instant()
+        length = self.player.get_length()
+        if length > 0:
+            clamped = max(0, min(int(ms), length))
+            self.player.set_time(clamped)
+            self.seeked.emit(clamped)
 
     def shutdown(self):
         """Idempotently stop timers and release both crossfade players."""
@@ -1294,14 +1302,19 @@ class PlaybackEngine(QObject):
     def _update_ui_loop(self):
         if self._closed:
             return
+        # Hiçbir şey çalmıyorsa / yüklenmiyorsa boşta libVLC ctypes çağrısı yapma
+        if (self.playing_playlist is None and self.radio_playing is None
+                and not self._xfade_active and self._listen is None):
+            return
         try:
             if self.player:
                 # Rampa sürerken ilerleme YENİ player'dan okunur. Çözümleme
                 # aşamasında (rampa yok) eski player okunmaya devam eder —
                 # aksi halde ağ gecikmesi boyunca ilerleme çubuğu donardı.
                 src = self.player_b if self._xfade_is_ramping() else self.player
-                self._tick_listen(bool(src.is_playing()))
-                if src.is_playing() and not self.is_seeking:
+                playing = bool(src.is_playing())
+                self._tick_listen(playing)
+                if playing and not self.is_seeking:
                     current = src.get_time()
                     total = src.get_length()
                     if total > 0:

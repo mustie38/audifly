@@ -151,6 +151,8 @@ class SpotifyImportDialog(QDialog):
 
     # --- Adım 2: her şarkı için YouTube eşleşmesi ara ---
     def _on_tracks_fetched(self, playlist_name: str, queries: list):
+        if not self._running:
+            return
         if not queries:
             self._on_fetch_error("Bu playlist'te şarkı bulunamadı ya da playlist gizli/erişilemez.")
             return
@@ -180,7 +182,7 @@ class SpotifyImportDialog(QDialog):
 
     def _append_item(self, item: dict):
         """GUI thread'inde hedef listeye ekler (thread güvenliği)."""
-        self.store.playlists.setdefault(self._target_name, []).append(item)
+        self.store.playlists.setdefault(self._target_name, []).append(_clean_song(item))
 
     def _on_fetch_error(self, message: str):
         self._running = False
@@ -206,13 +208,17 @@ class SpotifyImportDialog(QDialog):
             f"Spotify içe aktarma tamamlandı: '{playlist_name}' ({added} şarkı).", "success")
 
     def _cancel_or_close(self):
-        if self._running and self._worker is not None:
-            self._worker.cancel()
-            self.close_btn.setText("Durduruluyor…")
-            self.close_btn.setEnabled(False)
+        if self._running:
             self._running = False
-        else:
-            self.accept()
+            if self._worker is not None:
+                self._worker.cancel()
+                self.close_btn.setText("Durduruluyor…")
+                self.close_btn.setEnabled(False)
+                return
+        self.accept()
+
+    def reject(self):
+        self._cancel_or_close()
 
 
 class _M3UImportBridge(QObject):
@@ -278,9 +284,10 @@ def import_youtube_playlist(store: PlaylistStore, parent=None):
         return
     url = url.strip()
 
-    bridge = _YouTubeImportBridge(parent=parent)
+    bridge = _YouTubeImportBridge(parent=parent or store)
 
     def apply(name: str, songs: list):
+        bridge.deleteLater()
         if not songs:
             store.statusMessage.emit(
                 "Playlist'te içe aktarılabilir şarkı bulunamadı.", "warning")
@@ -304,6 +311,7 @@ def import_youtube_playlist(store: PlaylistStore, parent=None):
         store.statusMessage.emit(msg + ".", "success")
 
     def on_error(message: str):
+        bridge.deleteLater()
         QMessageBox.warning(parent, "Hata", f"YouTube playlist alınamadı:\n{message}")
 
     bridge.resolved.connect(apply)
@@ -342,9 +350,10 @@ def import_playlist_m3u(store: PlaylistStore, parent=None):
         return
 
     target_playlist = store.active_playlist
-    bridge = _M3UImportBridge(parent=parent)
+    bridge = _M3UImportBridge(parent=parent or store)
 
     def apply(items: list):
+        bridge.deleteLater()
         added = 0
         for item in items:
             added += store.add_song(target_playlist, item)

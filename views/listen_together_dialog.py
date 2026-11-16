@@ -271,5 +271,3 @@ class ListenTogetherDialog(QDialog):
         self.transfer_combo.setVisible(connected and self.service.is_host)
         self.transfer_btn.setVisible(connected and self.service.is_host)
         self.sync_btn.setVisible(connected and not self.service.is_host)
-        if connected:
-            self._render_chat()

@@ -209,7 +209,10 @@ class LyricsWindow(QWidget):
             self.synced_list.addItem(item)
         self.mode_label.setText("senkron")
         self.stack.setCurrentIndex(PAGE_SYNCED)
-        self._on_position(max(0, self.playback.player.get_time()), 0)
+        src = (self.playback.player_b
+               if getattr(self.playback, "_xfade_is_ramping", lambda: False)() is True
+               else self.playback.player)
+        self._on_position(max(0, src.get_time()), 0)
 
     # --- Senkronizasyon ---
     def _on_position(self, current_ms: int, _total: int):

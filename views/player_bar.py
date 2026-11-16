@@ -516,10 +516,11 @@ class PlayerBar(QWidget):
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.playStateChanged.connect(self._on_play_state)
         self.playback.positionChanged.connect(self._on_position)
-        self.playback.playError.connect(lambda *_: self.play_btn.set_kind("play"))
+        self.playback.playError.connect(self._on_play_error)
         self.playback.shuffleChanged.connect(self._on_shuffle_changed)
         self.playback.radioStarted.connect(self._on_radio_started)
         self.playback.radioStopped.connect(self._on_radio_stopped)
+        self.playback.store.playlistsChanged.connect(self._sync_like_state)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
@@ -689,7 +690,23 @@ class PlayerBar(QWidget):
         if not pl or not (0 <= idx < len(songs)):
             return
         self.playback.store.toggle_like(pl, idx)
-        self.like_btn.set_active(bool(songs[idx].get("liked")))
+        self._sync_like_state()
+
+    def _sync_like_state(self):
+        pl = self.playback.playing_playlist
+        songs = self.playback.store.playlists.get(pl, []) if pl else []
+        idx = self.playback.current_index
+        if pl and 0 <= idx < len(songs):
+            self.like_btn.set_active(bool(songs[idx].get("liked")))
+
+    def _on_play_error(self, playlist_name, index):
+        self.play_btn.set_kind("play")
+        self.play_btn.setEnabled(True)
+        songs = self.playback.store.playlists.get(playlist_name, [])
+        if 0 <= index < len(songs):
+            self._set_now_text(songs[index].get("title", "Henüz şarkı seçilmedi"), self._now_sub_raw)
+        elif self._now_title_raw.startswith("Yükleniyor: "):
+            self._set_now_text(self._now_title_raw[len("Yükleniyor: "):], self._now_sub_raw)
 
     def _on_thumbnail_ready(self, key: str):
         if key != self._current_key or self.thumbnails is None:

@@ -8,7 +8,7 @@ gerçek kütüphane verisinden (play_count/last_played) hesaplanır.
 from __future__ import annotations
 
 from PIL import Image
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea,
@@ -209,11 +209,41 @@ class HomeView(QWidget):
         self.recent_list = QListWidgetHost()
         self.content_layout.addWidget(self.recent_list, stretch=1)
 
-        self.store.playlistsChanged.connect(self.refresh)
+        self._dirty = False
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(60)
+        self._refresh_timer.timeout.connect(self.refresh)
+        self.store.playlistsChanged.connect(self._on_store_changed)
+        if self.thumbnails is not None:
+            self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
         self.refresh()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if self._dirty:
+            self.refresh()
+
+    def _on_store_changed(self):
+        if self.isVisible():
+            self._refresh_timer.start()
+        else:
+            self._dirty = True
+
+    def _on_thumbnail_ready(self, key: str):
+        if self.thumbnails is None:
+            return
+        for i in range(self.recent_list.count()):
+            row = self.recent_list.itemWidget(self.recent_list.item(i))
+            if isinstance(row, SongRow) and row.song.get("webpage_url") == key:
+                pm = self.thumbnails.pixmap_for(row.song, 36)
+                if pm is not None:
+                    row.set_thumbnail(pm)
 
     # --- Veri + render ---
     def refresh(self):
+        self._dirty = False
+        self._refresh_timer.stop()
         all_songs = [s for songs in self.store.playlists.values() for s in songs]
         total_seconds = sum((s.get('duration') or 0) for s in all_songs)
         total_liked = sum(1 for s in all_songs if s.get('liked'))
@@ -236,14 +266,12 @@ class HomeView(QWidget):
         liked_card.clicked.connect(self.openLikedRequested.emit)
         self.quick_grid.addWidget(liked_card)
 
+        from mustiefly_qt.helpers.covers import playlist_cover_pixmap
         for name in list(self.store.playlists.keys())[:4]:
             songs = self.store.playlists.get(name, [])
+            pm = playlist_cover_pixmap(self.store, self.thumbnails, name, songs, size=300)
             card = QuickAccessCard(name[:18] + ("…" if len(name) > 18 else ""),
-                                   f"{len(songs)} şarkı", "🎵")
-            pm = self._collage_pixmap(songs)
-            if pm is not None:
-                card = QuickAccessCard(name[:18] + ("…" if len(name) > 18 else ""),
-                                       f"{len(songs)} şarkı", "🎵", pixmap=pm)
+                                   f"{len(songs)} şarkı", "🎵", pixmap=pm)
             card.clicked.connect(lambda _=False, n=name: self.openPlaylistRequested.emit(n))
             self.quick_grid.addWidget(card)
         self.quick_grid.addStretch(1)

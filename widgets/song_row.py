@@ -28,11 +28,21 @@ class _PlayingIndicator(QWidget):
         self._timer.timeout.connect(self._tick)
 
     def set_running(self, running: bool):
-        if running:
+        self._want_running = bool(running)
+        if self._want_running and self.isVisible():
             if not self._timer.isActive():
                 self._timer.start(140)
         else:
             self._timer.stop()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if getattr(self, "_want_running", False) and not self._timer.isActive():
+            self._timer.start(140)
+
+    def hideEvent(self, event):  # noqa: N802
+        self._timer.stop()
+        super().hideEvent(event)
 
     def _tick(self):
         self._heights = [

@@ -413,18 +413,23 @@ class SidebarWidget(QWidget):
             return None
         recent = songs[-4:]
         imgs = []
+        missing = False
         for s in recent:
             img = self.thumbnails.pil_for(s)
             if img is None:
-                return None
-            imgs.append(img)
+                self.thumbnails.request(s)   # disk önbelleğinden / ağdan yüklenmesini tetikle
+                missing = True
+            else:
+                imgs.append(img)
+        if missing:
+            return None
         try:
             cell = self.COVER_SIZE * 2
             size = cell * 2
             collage = Image.new('RGB', (size, size), '#282828')
             positions = [(0, 0), (cell, 0), (0, cell), (cell, cell)]
             for i, img in enumerate(imgs[:4]):
-                resized = crop_to_square(img).resize((cell, cell), Image.Resampling.LANCZOS)
+                resized = crop_to_square(img).resize((cell, cell), Image.Resampling.BILINEAR)
                 collage.paste(resized, positions[i])
             return QPixmap.fromImage(pil_to_qimage(collage))
         except Exception as e:

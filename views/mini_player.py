@@ -66,12 +66,25 @@ class MiniPlayer(QWidget):
         # Sinyal bağlantıları
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.playStateChanged.connect(self._on_play_state)
+        self.playback.radioStarted.connect(self._on_radio_started)
+        self.playback.radioStopped.connect(self._on_radio_stopped)
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
         title = song.get("title", "Bilinmeyen Şarkı")
         self.title_label.setText(title[:35] + "…" if len(title) > 35 else title)
         self.artist_label.setText(song.get("uploader", ""))
         self.play_btn.setText("⏸")
+
+    def _on_radio_started(self, station: dict):
+        name = station.get("name", "Radyo")
+        self.title_label.setText(name[:35] + "…" if len(name) > 35 else name)
+        self.artist_label.setText("📻 Canlı Radyo")
+        self.play_btn.setText("⏸")
+
+    def _on_radio_stopped(self):
+        self.title_label.setText("Şarkı çalınmıyor")
+        self.artist_label.setText("")
+        self.play_btn.setText("▶")
 
     def _on_play_state(self, playing: bool):
         self.play_btn.setText("⏸" if playing else "▶")

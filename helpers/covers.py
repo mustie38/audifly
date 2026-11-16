@@ -5,6 +5,7 @@ gösterir).
 """
 from __future__ import annotations
 
+import collections
 import os
 
 from PIL import Image
@@ -16,37 +17,74 @@ from mustiefly_qt.services.thumbnails import ThumbnailService, crop_to_square, p
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
-
 log = get_logger(__name__)
+_COVER_CACHE_MAX = 128
+_COVER_PM_CACHE: collections.OrderedDict[tuple, QPixmap] = collections.OrderedDict()
+
+
+def _cache_get(key: tuple) -> QPixmap | None:
+    pm = _COVER_PM_CACHE.get(key)
+    if pm is not None and not pm.isNull():
+        _COVER_PM_CACHE.move_to_end(key)
+        return pm
+    return None
+
+
+def _cache_put(key: tuple, pm: QPixmap) -> QPixmap:
+    _COVER_PM_CACHE[key] = pm
+    _COVER_PM_CACHE.move_to_end(key)
+    while len(_COVER_PM_CACHE) > _COVER_CACHE_MAX:
+        _COVER_PM_CACHE.popitem(last=False)
+    return pm
+
+
 def playlist_cover_pixmap(store: PlaylistStore, thumbnails: ThumbnailService | None,
                           name: str, songs: list[dict], size: int = 300) -> QPixmap | None:
-    """Özel kapak ya da kolajdan kare QPixmap üretir; yoksa None döner."""
+    """Özel kapak ya da kolajdan kare QPixmap üretir; yoksa None döner.
+    Aynı kapak/kolaj tekrar sorulduğunda disk/LANCZOS yerine RAM LRU önbelleğinden döner."""
+    resample = Image.Resampling.LANCZOS if size > 160 else Image.Resampling.BILINEAR
     # 1) Özel kapak
     path = store.playlist_covers.get(name)
     if path and os.path.exists(path):
         try:
+            mtime = os.path.getmtime(path)
+            ck = ("custom", path, mtime, size)
+            hit = _cache_get(ck)
+            if hit is not None:
+                return hit
             pil_img = Image.open(path).convert("RGB")
-            square = crop_to_square(pil_img).resize((size, size), Image.Resampling.LANCZOS)
-            return QPixmap.fromImage(pil_to_qimage(square))
+            square = crop_to_square(pil_img).resize((size, size), resample)
+            return _cache_put(ck, QPixmap.fromImage(pil_to_qimage(square)))
         except Exception as e:
             log.error("%s %s", "Playlist kapağı yüklenemedi:", e)
 
     # 2) Son 4 şarkının kolajı
     if thumbnails is not None and songs:
+        recent = songs[-4:]
+        sig = tuple(s.get("webpage_url") for s in recent)
+        ck = ("collage", size, sig)
+        hit = _cache_get(ck)
+        if hit is not None:
+            return hit
         imgs = []
-        for s in songs[-4:]:
+        missing = False
+        for s in recent:
             img = thumbnails.pil_for(s)
             if img is None:
-                return None  # eksik varsa kolaj üretilmez (bayat kolaj olmasın)
-            imgs.append(img)
+                thumbnails.request(s)   # disk önbelleğinden / ağdan yüklenmesini tetikle
+                missing = True
+            else:
+                imgs.append(img)
+        if missing:
+            return None  # eksik varsa kolaj üretilmez (bayat kolaj olmasın)
         try:
             cell = size // 2
             collage = Image.new("RGB", (size, size), "#282828")
             positions = [(0, 0), (cell, 0), (0, cell), (cell, cell)]
             for i, img in enumerate(imgs[:4]):
-                resized = crop_to_square(img).resize((cell, cell), Image.Resampling.LANCZOS)
+                resized = crop_to_square(img).resize((cell, cell), resample)
                 collage.paste(resized, positions[i])
-            return QPixmap.fromImage(pil_to_qimage(collage))
+            return _cache_put(ck, QPixmap.fromImage(pil_to_qimage(collage)))
         except Exception as e:
             log.error("%s %s", "Kolaj oluşturulamadı:", e)
 

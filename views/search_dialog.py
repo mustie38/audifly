@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
@@ -32,9 +33,10 @@ class _ResultRow(QWidget):
             layout.addWidget(self.thumb_label)
             self._apply_thumb(thumbnails)
 
-        title = result["title"]
+        title = escape(str(result.get("title") or "?"))
+        uploader = escape(str(result.get("uploader") or ""))
         info = QLabel(f"<b>{title[:60]}</b><br><span style='color:#9a92b0;'>"
-                      f"{result['uploader']} • {format_time((result['duration'] or 0) * 1000)}</span>")
+                      f"{uploader} • {format_time((result.get('duration') or 0) * 1000)}</span>")
         layout.addWidget(info, stretch=1)
 
         add_btn = QPushButton("Ekle")
@@ -87,6 +89,20 @@ class SearchDialog(QDialog):
         if initial_query:
             self.query_edit.setText(initial_query)
             self._start_search()
+
+    def done(self, result: int):
+        for sig, slot in ((self.playback.searchResults, self._on_results),
+                          (self.playback.searchFailed, self._on_failed)):
+            try:
+                sig.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+        if self.thumbnails is not None:
+            try:
+                self.thumbnails.thumbnailReady.disconnect(self._on_thumbnail_ready)
+            except (RuntimeError, TypeError):
+                pass
+        super().done(result)
 
     def _start_search(self):
         query = self.query_edit.text().strip()

@@ -124,10 +124,11 @@ class NowPlayingPanel(QWidget):
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.songLoading.connect(self._on_song_loading)
         self.playback.playStateChanged.connect(self._on_play_state)
-        self.playback.playError.connect(lambda *_: self.play_btn.setIcon(vicon("play", 22, "#ffffff")))
+        self.playback.playError.connect(self._on_play_error)
         self.playback.positionChanged.connect(self._on_position)
         self.playback.radioStarted.connect(self._on_radio_started)
         self.playback.radioStopped.connect(self._on_radio_stopped)
+        self.store.playlistsChanged.connect(self._sync_like_button)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
@@ -150,6 +151,10 @@ class NowPlayingPanel(QWidget):
 
     def _on_song_loading(self, playlist_name, index, song):
         self.play_btn.setEnabled(False)
+
+    def _on_play_error(self, *_):
+        self.play_btn.setIcon(vicon("play", 22, "#ffffff"))
+        self.play_btn.setEnabled(True)
 
     def _on_play_state(self, playing: bool):
         self.play_btn.setIcon(vicon("pause" if playing else "play", 22, "#ffffff"))
@@ -211,14 +216,22 @@ class NowPlayingPanel(QWidget):
         self.vinyl.set_playing(playing)
 
     def _toggle_like(self):
-        if getattr(self, "_playlist_name", None) is None:
+        pl = self.playback.playing_playlist or getattr(self, "_playlist_name", None)
+        if pl is None:
             return
-        songs = self.store.playlists.get(self._playlist_name, [])
-        if not (0 <= self._index < len(songs)):
+        songs = self.store.playlists.get(pl, [])
+        idx = self.playback.current_index if self.playback.playing_playlist else getattr(self, "_index", -1)
+        if not (0 <= idx < len(songs)):
             return  # şarkı silinmiş olabilir
-        self.store.toggle_like(self._playlist_name, self._index)
-        liked = songs[self._index].get("liked")
-        self.like_btn.setText("♥ Beğenildi" if liked else "♡ Beğen")
+        self.store.toggle_like(pl, idx)
+        self._sync_like_button()
+
+    def _sync_like_button(self):
+        pl = self.playback.playing_playlist
+        songs = self.store.playlists.get(pl, []) if pl else []
+        idx = self.playback.current_index
+        if pl and 0 <= idx < len(songs):
+            self.like_btn.setText("♥ Beğenildi" if songs[idx].get("liked") else "♡ Beğen")
 
     def _on_thumbnail_ready(self, key: str):
         """Kapak indiğinde yalnızca o an çalan şarkıysa plak kapağını güncelle."""

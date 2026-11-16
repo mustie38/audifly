@@ -98,6 +98,9 @@ class DownloadsView(QWidget):
         entry = self._rows.get(key)
         if entry is None:
             return
+        live = self.manager.items.get(key)
+        if live is not None:
+            entry["item"] = dict(live)
         entry["row"].update_from(entry["item"])
         # Durum değişince sayaçlar da değişmiş olabilir
         items = self.manager.ordered_items()
@@ -176,15 +179,16 @@ class _DownloadRow(QWidget):
         self.update_from(item)
 
     def _on_main_button(self):
-        if self.cancel_btn.toolTip().startswith("Kaldır"):
-            self.removeRequested.emit(self.key)
-        else:
+        if getattr(self, "_is_active", False):
             self.cancelRequested.emit(self.key)
+        else:
+            self.removeRequested.emit(self.key)
 
     def update_from(self, item: dict):
         state = item["state"]
         self.status_label.setText(STATE_LABELS.get(state, state))
         is_active = state in (QUEUED, DOWNLOADING)
+        self._is_active = is_active
         self.progress.setVisible(is_active)
         self.progress.setValue(int(round((item.get("progress") or 0) * 100)))
         self.retry_btn.setVisible(state in (FAILED, CANCELLED))

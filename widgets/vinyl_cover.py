@@ -40,11 +40,22 @@ class VinylCoverWidget(QWidget):
         self._timer.timeout.connect(self._tick)
 
     def set_playing(self, playing: bool):
-        if playing and self._base_pixmap is not None:
+        self._want_playing = bool(playing)
+        if self._want_playing and self._base_pixmap is not None and self.isVisible():
             if not self._timer.isActive():
                 self._timer.start(TICK_MS)
         else:
             self._timer.stop()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if getattr(self, "_want_playing", False) and self._base_pixmap is not None:
+            if not self._timer.isActive():
+                self._timer.start(TICK_MS)
+
+    def hideEvent(self, event):  # noqa: N802
+        self._timer.stop()
+        super().hideEvent(event)
 
     def set_pixmap(self, pm: QPixmap | None):
         """Kapağı ayarlar (kare verilirse dairesel kırpılır). None ise fallback'e döner."""

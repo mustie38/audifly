@@ -7,8 +7,8 @@ from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QGraphicsOpacityEffect, QHBoxLayout, QLineEdit,
-    QMainWindow, QMenuBar, QMessageBox, QPlainTextEdit, QPushButton, QStackedWidget,
-    QTextEdit, QVBoxLayout, QWidget, QSystemTrayIcon, QMenu,
+    QMainWindow, QMenuBar, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
+    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QSystemTrayIcon, QMenu,
 )
 from PySide6.QtCore import QAbstractAnimation
 
@@ -259,6 +259,7 @@ class MainWindow(QMainWindow):
 
         # "Şu An Çalıyor" panelini kapat/aç (ayarda kalıcı)
         self.now_playing_panel.collapseRequested.connect(self._hide_now_playing_panel)
+        self.now_playing_panel.lyrics_btn.clicked.connect(self._toggle_lyrics_window)
         self.top_bar.panelToggleClicked.connect(self._show_now_playing_panel)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
@@ -491,7 +492,7 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         fw = self.focusWidget()
-        if isinstance(fw, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox)):
+        if isinstance(fw, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox)):
             super().keyPressEvent(event)
             return
         key = event.key()
@@ -518,7 +519,7 @@ class MainWindow(QMainWindow):
 
         app_menu = menu_bar.addMenu(APP_DISPLAY_NAME)
         mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
-        mini_player_action.triggered.connect(self.mini_player.show)
+        mini_player_action.triggered.connect(self._toggle_mini_player)
         library_search_action = app_menu.addAction("🔎 Kütüphanede Ara…")
         library_search_action.setShortcut("Ctrl+K")
         library_search_action.triggered.connect(self._open_library_search_dialog)
@@ -678,6 +679,7 @@ class MainWindow(QMainWindow):
         dlg = SmartRulesDialog(self.settings, self.save_settings, self)
         dlg.openRequested.connect(lambda name: self.show_smart_list("rule:" + name))
         dlg.exec()
+        dlg.deleteLater()
 
     def show_smart_list(self, mode: str):
         self.library_view.show_smart(mode)
@@ -899,14 +901,29 @@ class MainWindow(QMainWindow):
         Geri dönüşte hangi sayfada olunacağını hatırlamak için mevcut
         sayfayı kaydeder, ardından ayarları güncel verilerle tazeleyip
         view_stack'i ayarlar sayfasına çevirir."""
-        self._pre_settings_index = self.view_stack.currentIndex()
-        self._settings_was_media_keys = bool(self.settings.get("global_media_keys"))
-        self._settings_was_smtc = self.smtc is not None
+        if self.view_stack.currentWidget() is not self.settings_view:
+            self._pre_settings_index = self.view_stack.currentIndex()
+            self._settings_was_media_keys = bool(self.settings.get("global_media_keys"))
+            self._settings_was_smtc = self.smtc is not None
+            self._settings_was_theme = self.settings.get("theme", DEFAULT_THEME_KEY)
+            self._settings_was_lang = self.settings.get("language", "tr")
         self.settings_view.refresh_dynamic()
         self.view_stack.setCurrentWidget(self.settings_view)
 
-    def _close_settings_view(self):
-        """'Geri' ya da 'İptal' — hiçbir yan etki uygulamadan önceki sayfaya döner."""
+    def _close_settings_view(self, revert: bool = True):
+        """'Geri' ya da 'İptal' — kaydedilmemiş canlı tema/dil önizlemesini geri alır
+        ve önceki sayfaya döner."""
+        if revert:
+            old_theme = getattr(self, "_settings_was_theme", None)
+            if old_theme and self.settings.get("theme") != old_theme:
+                self.settings["theme"] = old_theme
+                self._reset_accent()
+                if self.settings.get("dynamic_theme", True):
+                    self._apply_dynamic_accent()
+            old_lang = getattr(self, "_settings_was_lang", None)
+            if old_lang and self.settings.get("language") != old_lang:
+                self.settings["language"] = old_lang
+                apply_language(old_lang)
         self.view_stack.setCurrentIndex(self._pre_settings_index)
 
     def _on_settings_saved(self):
@@ -939,7 +956,7 @@ class MainWindow(QMainWindow):
         self._reset_accent()
         if self.settings.get("dynamic_theme", True):
             self._apply_dynamic_accent()
-        self._close_settings_view()
+        self._close_settings_view(revert=False)
 
     def _open_bulk_add(self):
         dialog = BulkAddDialog(self.store, self)
@@ -953,19 +970,25 @@ class MainWindow(QMainWindow):
 
     # --- Ekolayzer & Sözler pencereleri ---
     def _toggle_equalizer_window(self):
-        if self._eq_window is not None and self._eq_window.isVisible():
+        if self._eq_window is not None:
+            was_visible = self._eq_window.isVisible()
             self._eq_window.close()
+            self._eq_window.deleteLater()
             self._eq_window = None
-            return
+            if was_visible:
+                return
         self._eq_window = EqualizerWindow(
             self.playback, self.settings, self.save_settings, self)
         self._eq_window.show()
 
     def _toggle_lyrics_window(self):
-        if self._lyrics_window is not None and self._lyrics_window.isVisible():
+        if self._lyrics_window is not None:
+            was_visible = self._lyrics_window.isVisible()
             self._lyrics_window.close()
+            self._lyrics_window.deleteLater()
             self._lyrics_window = None
-            return
+            if was_visible:
+                return
         self._lyrics_window = LyricsWindow(self.playback, self)
         self._lyrics_window.show()
         self._lyrics_window.refresh()

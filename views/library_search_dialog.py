@@ -56,8 +56,18 @@ class LibrarySearchDialog(QDialog):
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(DEBOUNCE_MS)
         self._debounce.timeout.connect(self._run_search)
+        if self.thumbnails is not None:
+            self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
         self.query_edit.setFocus()
+
+    def done(self, result: int):
+        if self.thumbnails is not None:
+            try:
+                self.thumbnails.thumbnailReady.disconnect(self._on_thumbnail_ready)
+            except (RuntimeError, TypeError):
+                pass
+        super().done(result)
 
     # --- Arama ---
     def _schedule_search(self):
@@ -82,12 +92,20 @@ class LibrarySearchDialog(QDialog):
             item = QListWidgetItem()
             row = _SearchRow(self.store, self.playback, self.thumbnails,
                              pl_name, idx, song)
+            row.playRequested.connect(
+                lambda i=idx, pl=pl_name: self.playback.play_song_at_index(pl, i))
             row.openListRequested.connect(
-                lambda pl=pl_name, i=idx: self.openPlaylistRequested.emit(pl, i))
+                lambda pl=pl_name, i=idx: (self.openPlaylistRequested.emit(pl, i), self.accept()))
             item.setSizeHint(row.sizeHint())
             self.results_list.addItem(item)
             self.results_list.setItemWidget(item, row)
             self._request_thumbnail(row, song)
+
+    def _on_thumbnail_ready(self, key: str):
+        for i in range(self.results_list.count()):
+            row = self.results_list.itemWidget(self.results_list.item(i))
+            if isinstance(row, _SearchRow) and row.song.get("webpage_url") == key:
+                self._request_thumbnail(row, row.song)
 
     def _request_thumbnail(self, row, song):
         if self.thumbnails is None:
@@ -113,6 +131,7 @@ class _SearchRow(QWidget):
         super().__init__(parent)
         self.index = index
         self.playlist_name = playlist_name
+        self.song = song
         self.setObjectName("SongRow")
         self.setCursor(Qt.PointingHandCursor)
 

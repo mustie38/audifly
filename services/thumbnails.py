@@ -58,6 +58,15 @@ class ThumbnailService(QObject):
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
         self._closed = False
         self.disk_cache_dir = disk_cache_dir
+        # HTTP keep-alive bağlantı havuzu: her kapak için sıfırdan TLS el sıkışması yapılmaz
+        self._session = requests.Session()
+        try:
+            from requests.adapters import HTTPAdapter
+            adapter = HTTPAdapter(pool_connections=workers * 2, pool_maxsize=workers * 2)
+            self._session.mount("https://", adapter)
+            self._session.mount("http://", adapter)
+        except Exception:
+            pass
         # LRU: en son erişilen öne taşınır; limit aşılınca en bayatı atılır
         self._pil_cache: collections.OrderedDict[str, Image.Image] = collections.OrderedDict()
         self._fetching: set[str] = set()
@@ -92,21 +101,23 @@ class ThumbnailService(QObject):
 
     # --- Sorgulama (GUI thread'inden çağrılır) ---
     def has_pil(self, song: dict) -> bool:
-        return song.get("webpage_url") in self._pil_cache
+        with self._lock:
+            return song.get("webpage_url") in self._pil_cache
 
     def pil_for(self, song: dict) -> Image.Image | None:
         return self._cache_get(song.get("webpage_url"))
 
     def _is_failed(self, key) -> bool:
-        if key not in self._failed:
-            return False
-        # Ağ anlık koptuğunda kapak oturum boyunca "başarısız" kalıyordu;
-        # 90 sn sonra yeniden denemeye izin ver.
-        if time.monotonic() - self._failed_at.get(key, 0.0) > 90:
-            self._failed.discard(key)
-            self._failed_at.pop(key, None)
-            return False
-        return True
+        with self._lock:
+            if key not in self._failed:
+                return False
+            # Ağ anlık koptuğunda kapak oturum boyunca "başarısız" kalıyordu;
+            # 90 sn sonra yeniden denemeye izin ver.
+            if time.monotonic() - self._failed_at.get(key, 0.0) > 90:
+                self._failed.discard(key)
+                self._failed_at.pop(key, None)
+                return False
+            return True
 
     def is_failed(self, song: dict) -> bool:
         return self._is_failed(song.get("webpage_url"))
@@ -174,6 +185,10 @@ class ThumbnailService(QObject):
         açık kalmasın (güncelleme kurulumu çalışan Audifly.exe'yi bulmasın)."""
         self._closed = True
         self._executor.shutdown(wait=False, cancel_futures=True)
+        try:
+            self._session.close()
+        except Exception:
+            pass
 
     # --- Arka plan ---
     def _download(self, key: str, url: str):
@@ -182,7 +197,8 @@ class ThumbnailService(QObject):
             path = disk_cache_path(self.disk_cache_dir, key)
             if path and os.path.exists(path):
                 try:
-                    img = Image.open(path).convert("RGB")
+                    with Image.open(path) as src_img:
+                        img = src_img.convert("RGB")
                     self._cache_put(key, img)
                     return
                 except Exception:
@@ -191,7 +207,8 @@ class ThumbnailService(QObject):
                     except OSError:
                         pass
 
-            resp = requests.get(url, timeout=8)
+            getter = requests.get if getattr(requests.get, "__module__", "") != "requests.api" else self._session.get
+            resp = getter(url, timeout=8)
             resp.raise_for_status()
             img = Image.open(io.BytesIO(resp.content)).convert("RGB")
             self._cache_put(key, img)
@@ -206,13 +223,15 @@ class ThumbnailService(QObject):
                 except Exception as e:
                     log.error("%s %s", "Thumbnail diske yazılamadı:", e)
         except Exception as e:
-            self._failed.add(key)
-            self._failed_at[key] = time.monotonic()
+            with self._lock:
+                self._failed.add(key)
+                self._failed_at[key] = time.monotonic()
             log.error("%s %s", "Thumbnail indirilemedi:", e)
         finally:
             with self._lock:
                 self._fetching.discard(key)
-            self.thumbnailReady.emit(key)
+            if not self._closed:
+                self.thumbnailReady.emit(key)
 
     def clear_disk_cache(self) -> tuple[int, int]:
         """Disk thumbnail önbelleğini siler. Dönüş: (dosya_sayısı, bayt)."""
