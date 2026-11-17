@@ -189,6 +189,10 @@ DEFAULT_SETTINGS = {
     "auto_update_check": True,          # açılışta GitHub'da yeni sürüm var mı diye bak
     "auto_ytdlp_update": True,          # açılışta/çıkartım hatasında yt-dlp'yi otomatik güncelle
     "skipped_update_version": "",       # "Bu sürümü atla" denen sürüm (elle denetim yine gösterir)
+    "hud_overlay_enabled": True,
+    "hud_overlay_duration": 4,
+    "hud_overlay_position": "top-right",
+    "hud_overlay_only_background": True,
     "language": "tr",                   # arayüz dili ("tr" | "en")
 }
 

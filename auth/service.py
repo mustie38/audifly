@@ -217,6 +217,9 @@ _SETTING_RULES = {
     "dependency_notice_dismissed": (bool,),
     "auto_update_check": (bool,),
     "auto_ytdlp_update": (bool,),
+    "hud_overlay_enabled": (bool,),
+    "hud_overlay_duration": (int, 2, 10),
+    "hud_overlay_only_background": (bool,),
 }
 
 

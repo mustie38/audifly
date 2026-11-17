@@ -61,6 +61,7 @@ from mustiefly_qt.views.stats_view import StatsView
 from mustiefly_qt.views.wrapped_view import WrappedView
 from mustiefly_qt.widgets.snackbar import UndoSnackbar
 from mustiefly_qt.widgets.song_row import SongRow
+from mustiefly_qt.widgets.hud_overlay import HudOverlay
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
@@ -126,6 +127,9 @@ class MainWindow(QMainWindow):
         self.smtc: SMTCService | None = None
         if settings.get("smtc_enabled", True) and SMTC_AVAILABLE:
             self._setup_smtc()
+
+        # Ekran Üstü Mini Bildirim / HUD (Gaming Overlay)
+        self.hud_overlay = HudOverlay(self.playback, self.thumbnails, self.settings, parent=self)
 
         # --- Merkezi düzen ---
         central = QWidget()
@@ -1196,6 +1200,8 @@ class MainWindow(QMainWindow):
             self._lyrics_window.close()
         if self._karaoke_view is not None:
             self._karaoke_view.close()
+        if hasattr(self, "hud_overlay") and self.hud_overlay is not None:
+            self.hud_overlay.close()
         self._media_keys.stop()
         # Son dinleme durumu: açılışta kaldığın yerden devam etmek için
         try:

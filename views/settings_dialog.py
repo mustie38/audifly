@@ -414,7 +414,41 @@ class SettingsView(QWidget):
             "Windows medya denetimleri (SMTC)", self.smtc_check,
             "Ses açılır penceresinden oynatmayı kontrol etmeni sağlar."))
 
-        return self._scroll_page(audio_card, controls_card)
+        hud_card = self._card("Ekran Üstü Bildirim (HUD / Gaming Overlay)")
+        self.hud_check = QCheckBox()
+        self.hud_check.setChecked(self.settings.get("hud_overlay_enabled", True))
+        hud_card.layout().addWidget(self._row(
+            "Ekran Üstü HUD'ı Etkinleştir", self.hud_check,
+            "Şarkı değiştiğinde oyunlardan ve pencerelerden odak çalmayan zarif bir mini bildirim gösterir."))
+
+        self.hud_bg_only_check = QCheckBox()
+        self.hud_bg_only_check.setChecked(self.settings.get("hud_overlay_only_background", True))
+        hud_card.layout().addWidget(self._row(
+            "Yalnızca Arka Plandayken Göster", self.hud_bg_only_check,
+            "Uygulama aktif ve ön plandayken HUD bildirimini gizler (sadece oyundayken/arka plandayken gösterir)."))
+
+        self.hud_pos_combo = QComboBox()
+        self.hud_pos_combo.addItem("Sağ Üst", "top-right")
+        self.hud_pos_combo.addItem("Sağ Alt", "bottom-right")
+        self.hud_pos_combo.addItem("Üst Orta", "top-center")
+        self.hud_pos_combo.addItem("Sol Üst", "top-left")
+        cur_pos = self.settings.get("hud_overlay_position", "top-right")
+        idx = self.hud_pos_combo.findData(cur_pos)
+        if idx >= 0:
+            self.hud_pos_combo.setCurrentIndex(idx)
+        hud_card.layout().addWidget(self._row(
+            "HUD Konumu", self.hud_pos_combo,
+            "Ekran üstü bildirimin görüntüleneceği ekran köşesi."))
+
+        self.hud_dur_spin = QSpinBox()
+        self.hud_dur_spin.setRange(2, 10)
+        self.hud_dur_spin.setSuffix(" sn")
+        self.hud_dur_spin.setValue(int(self.settings.get("hud_overlay_duration", 4)))
+        hud_card.layout().addWidget(self._row(
+            "Görünme Süresi", self.hud_dur_spin,
+            "Bildirimin ekranda kalma süresi."))
+
+        return self._scroll_page(audio_card, controls_card, hud_card)
 
     def _build_storage_page(self) -> QWidget:
         cache_card = self._card("Önbellek Yönetimi")
@@ -800,6 +834,10 @@ class SettingsView(QWidget):
         self.settings["crossfade_enabled"] = self.crossfade_check.isChecked()
         self.settings["crossfade_seconds"] = self.crossfade_spin.value()
         self.settings["autoplay_enabled"] = self.autoplay_check.isChecked()
+        self.settings["hud_overlay_enabled"] = self.hud_check.isChecked()
+        self.settings["hud_overlay_only_background"] = self.hud_bg_only_check.isChecked()
+        self.settings["hud_overlay_position"] = self.hud_pos_combo.currentData() or "top-right"
+        self.settings["hud_overlay_duration"] = self.hud_dur_spin.value()
         self.settings["smtc_enabled"] = self.smtc_check.isChecked()
         self.settings["spotify_client_id"] = self.spotify_id_edit.text().strip()
         self.settings["spotify_client_secret"] = self.spotify_secret_edit.text().strip()
