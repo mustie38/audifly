@@ -388,6 +388,8 @@ class KaraokeView(QWidget):
         self.playback.playStateChanged.connect(self._on_play_state)
         self.playback.positionChanged.connect(self._on_position)
         self.lyricsReady.connect(self._apply_lyrics_result)
+        if self.thumbnails is not None:
+            self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
     def mouseMoveEvent(self, event):  # noqa: N802
         super().mouseMoveEvent(event)
@@ -483,12 +485,15 @@ class KaraokeView(QWidget):
 
         # Arka plan ambient renklerini belirle
         accent = cover_color_for(clean_t)
-        if self.thumbnails:
-            cached_pil = self.thumbnails._cache_get(song) if hasattr(self.thumbnails, "_cache_get") else None
-            if cached_pil is not None:
-                extracted = dominant_accent_color(cached_pil)
-                if extracted:
-                    accent = extracted
+        if self.thumbnails is not None:
+            try:
+                img = self.thumbnails.pil_for(song)
+                if img is not None:
+                    extracted = dominant_accent_color(img)
+                    if extracted:
+                        accent = extracted
+            except Exception:
+                pass
         self.ambient.set_colors(accent)
 
         # Şarkı sözlerini çek
@@ -496,6 +501,23 @@ class KaraokeView(QWidget):
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
         self._sync_all(song)
+
+    def _on_thumbnail_ready(self, key: str):
+        song = self.playback.current_song
+        if song and song.get("webpage_url") == key and self.isVisible():
+            if self.thumbnails is not None:
+                pm = self.thumbnails.pixmap_for(song, 360, rounded=False)
+                if pm is not None and not pm.isNull():
+                    scaled = pm.scaled(360, 360, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                    x = max(0, (scaled.width() - 360) // 2)
+                    y = max(0, (scaled.height() - 360) // 2)
+                    self.cover_label.setPixmap(scaled.copy(x, y, 360, 360))
+                    self.cover_label.setStyleSheet("border-radius: 20px; background: transparent;")
+                img = self.thumbnails.pil_for(song)
+                if img is not None:
+                    extracted = dominant_accent_color(img)
+                    if extracted:
+                        self.ambient.set_colors(extracted)
 
     def _on_play_state(self, playing: bool):
         self.play_btn.setText("⏸" if playing else "▶")
