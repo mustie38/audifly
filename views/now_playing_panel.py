@@ -16,6 +16,7 @@ class NowPlayingPanel(QWidget):
     collapseRequested = Signal()  # paneli gizleme isteği (MainWindow yönetir)
     startRadioRequested = Signal(dict)
     karaokeRequested = Signal()
+    artistClicked = Signal(str)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
@@ -60,6 +61,9 @@ class NowPlayingPanel(QWidget):
         self.artist_label = QLabel("")
         self.artist_label.setObjectName("Muted")
         self.artist_label.setAlignment(Qt.AlignCenter)
+        self.artist_label.setCursor(Qt.PointingHandCursor)
+        self.artist_label.setToolTip("Sanatçı profiline git")
+        self.artist_label.mousePressEvent = self._on_artist_label_clicked
         layout.addWidget(self.artist_label)
 
         btn_row = QHBoxLayout()
@@ -183,6 +187,7 @@ class NowPlayingPanel(QWidget):
             song,
         )
         self.title_label.setText(clean_title)
+        self._current_artist = clean_artist
         if song.get("local_path"):
             source = "💽 Yerel Dosya"
         elif is_offline:
@@ -228,6 +233,13 @@ class NowPlayingPanel(QWidget):
         self.current_time_label.setText("00:00")
         self.total_time_label.setText("00:00")
         self.play_btn.setIcon(vicon("play", 22, "#ffffff"))
+
+    def _on_artist_label_clicked(self, event):
+        if event.button() == Qt.LeftButton:
+            artist = getattr(self, "_current_artist", "")
+            if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
+                self.artistClicked.emit(artist)
+        super(QLabel, self.artist_label).mousePressEvent(event)
 
     def set_playing_state(self, playing: bool):
         """Plak dönüşünü çalma durumuna bağlar (MainWindow/player_bar'dan beslenir)."""

@@ -131,6 +131,7 @@ class LibraryView(QWidget):
     addSongRequested = Signal()          # arama diyaloğunu açması için MainWindow'a haber verir
     roomQueueRequested = Signal(dict)    # Birlikte Dinle ortak sırasına ekle
     startRadioRequested = Signal(dict)   # Şarkı Radyosu isteği
+    artistRequested = Signal(str)        # Sanatçı detay sayfasına git isteği
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, paths=None, parent=None):
@@ -694,6 +695,7 @@ class LibraryView(QWidget):
             lambda i, pl=playlist_name: self._move_song_dialog(pl, i))
         row.addToRoomQueueRequested.connect(
             lambda _i, s=song: self.roomQueueRequested.emit(s))
+        row.artistRequested.connect(self.artistRequested.emit)
         return row
 
     def _populate_visible(self):

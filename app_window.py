@@ -33,6 +33,7 @@ from mustiefly_qt.services.song_radio import SongRadioService
 from mustiefly_qt.services.smtc import SMTC_AVAILABLE, SMTCService
 from mustiefly_qt.services.thumbnails import ThumbnailService
 from mustiefly_qt.theme import build_qss
+from mustiefly_qt.views.artist_view import ArtistDetailView
 from mustiefly_qt.views.bulk_add_dialog import BulkAddDialog
 from mustiefly_qt.views.downloads_view import DownloadsView
 from mustiefly_qt.views.duplicate_finder_dialog import DuplicateFinderDialog
@@ -181,6 +182,9 @@ class MainWindow(QMainWindow):
         self.settings_view.saved.connect(self._on_settings_saved)
         self._pre_settings_index = 0
 
+        self.artist_view = ArtistDetailView(self.store, self.playback, self.thumbnails, parent=self)
+        self._pre_artist_index = 0
+
         self.view_stack = QStackedWidget()
         self.view_stack.addWidget(self.home_view)      # index 0
         self.view_stack.addWidget(self.library_view)   # index 1
@@ -192,6 +196,7 @@ class MainWindow(QMainWindow):
         self.view_stack.addWidget(self.settings_view)   # index 7
         self.view_stack.addWidget(self.mixes_view)      # index 8
         self.view_stack.addWidget(self.wrapped_view)    # index 9
+        self.view_stack.addWidget(self.artist_view)     # index 10
         content.addWidget(self.view_stack, stretch=1)
 
         self.now_playing_panel = NowPlayingPanel(self.store, self.playback, self.thumbnails)
@@ -280,6 +285,15 @@ class MainWindow(QMainWindow):
         self.now_playing_panel.lyrics_btn.clicked.connect(self._toggle_lyrics_window)
         self.now_playing_panel.karaokeRequested.connect(self._toggle_karaoke_view)
         self.top_bar.panelToggleClicked.connect(self._show_now_playing_panel)
+
+        # Sanatçı ve Albüm Detay Görünümü
+        self.artist_view.backRequested.connect(self._close_artist_view)
+        self.artist_view.playSongRequested.connect(self._play_single_track)
+        self.artist_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.player_bar.artistClicked.connect(self.open_artist_page)
+        self.now_playing_panel.artistClicked.connect(self.open_artist_page)
+        self.library_view.artistRequested.connect(self.open_artist_page)
+        self.explore_view.artistRequested.connect(self.open_artist_page)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
             self.top_bar.set_panel_toggle_visible(True)
@@ -708,6 +722,45 @@ class MainWindow(QMainWindow):
     def show_smart_list(self, mode: str):
         self.library_view.show_smart(mode)
         self._switch_view(1)
+
+    def open_artist_page(self, artist_name: str, browse_id: str = ""):
+        clean = artist_name.strip() if artist_name else ""
+        if not clean:
+            return
+        if self.view_stack.currentWidget() is not self.artist_view:
+            self._pre_artist_index = self.view_stack.currentIndex()
+        self.artist_view.show_artist(clean, browse_id)
+        self._switch_view(10)
+
+    def open_album_page(self, browse_id: str, title: str = "", artist: str = ""):
+        if not browse_id:
+            return
+        if self.view_stack.currentWidget() is not self.artist_view:
+            self._pre_artist_index = self.view_stack.currentIndex()
+        self.artist_view.show_album(browse_id, title, artist)
+        self._switch_view(10)
+
+    def _close_artist_view(self):
+        prev = getattr(self, "_pre_artist_index", 0)
+        self._switch_view(prev)
+
+    def _play_single_track(self, song: dict):
+        if not song:
+            return
+        url = song.get("webpage_url")
+        target = self.store.active_playlist or (list(self.store.playlists.keys())[0] if self.store.playlists else "Varsayılan")
+        if target not in self.store.playlists:
+            self.store.playlists[target] = []
+        existing_idx = next(
+            (i for i, s in enumerate(self.store.playlists.get(target, [])) if s.get("webpage_url") == url),
+            -1,
+        )
+        if existing_idx >= 0:
+            self.playback.play_song_at_index(target, existing_idx)
+        else:
+            self.store.add_song(target, song)
+            new_idx = len(self.store.playlists[target]) - 1
+            self.playback.play_song_at_index(target, new_idx)
 
     def _refresh_home_recent(self):
         try:

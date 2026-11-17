@@ -19,3 +19,4 @@ packaging/audifly.ico
 *.corrupt-*
 listening_history.jsonl
 packaging/vlc/
+repomix-output.xml

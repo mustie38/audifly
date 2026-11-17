@@ -174,6 +174,7 @@ class PlayerBar(QWidget):
     karaokeRequested = Signal()
     jumpToPlayingRequested = Signal()
     startRadioRequested = Signal(dict)
+    artistClicked = Signal(str)
 
     SLEEP_OPTIONS = [("15 dakika", 15), ("30 dakika", 30),
                      ("45 dakika", 45), ("60 dakika", 60), ("90 dakika", 90)]
@@ -286,7 +287,11 @@ class PlayerBar(QWidget):
         now_col.addWidget(self.now_label)
 
         self.now_sub_label = QLabel("YouTube Stream")
+        self.now_sub_label.setObjectName("PlayerBarNowSub")
+        self.now_sub_label.setCursor(Qt.PointingHandCursor)
+        self.now_sub_label.setToolTip("Sanatçı profiline git")
         self.now_sub_label.setStyleSheet(f"color: {TEXT_MUTED}; background: transparent; font-size: 11px;")
+        self.now_sub_label.mousePressEvent = self._on_sub_label_clicked
         now_col.addWidget(self.now_sub_label)
 
         layout.addWidget(self.now_box)
@@ -699,6 +704,13 @@ class PlayerBar(QWidget):
         self.sleep_timer.cancel()
         super().closeEvent(event)
 
+    def _on_sub_label_clicked(self, event):
+        if event.button() == Qt.LeftButton:
+            artist = getattr(self, "_current_artist_raw", "") or self._now_sub_raw
+            if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
+                self.artistClicked.emit(artist)
+        super(QLabel, self.now_sub_label).mousePressEvent(event)
+
     def _set_now_text(self, title: str, subtitle: str):
         self._now_title_raw = title
         self._now_sub_raw = subtitle
@@ -718,6 +730,7 @@ class PlayerBar(QWidget):
             song,
         )
         self._set_now_text(clean_title, clean_artist)
+        self._current_artist_raw = clean_artist
         self.like_btn.set_active(bool(song.get("liked")))
         pm = self.thumbnails.pixmap_for(song, COVER_SIZE) if self.thumbnails else None
         if pm is not None and not pm.isNull():

@@ -427,6 +427,7 @@ class ExploreView(QWidget):
     sectionUpdated = Signal(dict)
     heroUpdated = Signal(dict)
     refreshFinished = Signal(bool, str)
+    artistRequested = Signal(str)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, paths=None,
@@ -604,6 +605,10 @@ class ExploreView(QWidget):
         self.playback.play_song_at_index(target, index)
 
     def _on_artist_clicked(self, artist: dict):
-        url = artist.get("channel_url")
-        if url:
-            webbrowser.open(url)
+        name = artist.get("name")
+        if name:
+            self.artistRequested.emit(name)
+        else:
+            url = artist.get("channel_url")
+            if url:
+                webbrowser.open(url)

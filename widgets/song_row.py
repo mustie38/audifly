@@ -78,6 +78,7 @@ class SongRow(QWidget):
     startRadioRequested = Signal(dict)
     moveRequested = Signal(int)
     addToRoomQueueRequested = Signal(int)
+    artistRequested = Signal(str)
     room_queue_enabled = False   # Birlikte Dinle odasındayken menüde gösterilir (app_window ayarlar)
 
     def __init__(self, index: int, song: dict, row_number: int | None = None,
@@ -164,6 +165,12 @@ class SongRow(QWidget):
             uploader_label = QLabel(parsed_artist)
             uploader_label.setObjectName("Muted")
             uploader_label.setFixedWidth(180)
+            if parsed_artist and parsed_artist not in ("Bilinmeyen Sanatçı", "?"):
+                uploader_label.setCursor(Qt.PointingHandCursor)
+                uploader_label.setToolTip(f"👤 {parsed_artist} profiline git")
+                uploader_label.mousePressEvent = lambda e, a=parsed_artist: (
+                    self.artistRequested.emit(a) if e.button() == Qt.LeftButton else None
+                )
             layout.addWidget(uploader_label)
 
         self.like_btn = QPushButton("♥" if song.get("liked") else "♡")
@@ -265,6 +272,16 @@ class SongRow(QWidget):
         menu = QMenu(self)
         play_action = menu.addAction("▶ Çal")
         radio_action = menu.addAction("📻 Şarkı Radyosu")
+
+        parsed_title, parsed_artist = parse_track_and_artist(
+            self.song.get("title", ""),
+            self.song.get("uploader", ""),
+            self.song,
+        )
+        artist_action = None
+        if parsed_artist and parsed_artist not in ("Bilinmeyen Sanatçı", "?"):
+            artist_action = menu.addAction(f"👤 {parsed_artist} Sayfası")
+
         play_next_action = menu.addAction("⏭ Sırada Çal")
         queue_action = menu.addAction("➕ Kuyruğa Ekle")
         room_action = None
@@ -283,6 +300,8 @@ class SongRow(QWidget):
         chosen = menu.exec(self.mapToGlobal(self.rect().bottomRight()))
         if chosen == play_action:
             self.playRequested.emit(self.index)
+        elif artist_action is not None and chosen == artist_action:
+            self.artistRequested.emit(parsed_artist)
         elif chosen == radio_action:
             self.startRadioRequested.emit(self.song)
         elif chosen == play_next_action:
