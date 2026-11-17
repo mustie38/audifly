@@ -564,7 +564,10 @@ class KaraokeView(QWidget):
         threading.Thread(target=worker, daemon=True, name="KaraokeLyricsWorker").start()
 
     def _apply_lyrics_result(self, song: dict, token: int, result: ly.LyricsResult):
-        if token != self._token or song is not self.playback.current_song:
+        if token != self._token:
+            return
+        cur = self.playback.current_song
+        if cur and song.get("title") != cur.get("title") and song.get("webpage_url") != cur.get("webpage_url"):
             return
 
         if result.status == ly.ERROR:

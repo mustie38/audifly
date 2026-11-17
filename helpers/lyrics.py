@@ -92,12 +92,13 @@ _FEAT = re.compile(r"\b(feat\.?|ft\.?|featuring)\b.*$", re.IGNORECASE)
 
 _JUNK_SUFFIX_RE = re.compile(
     r"\s*(?:"
-    r"[\(\[]\s*(?:official\s+(?:music\s+)?video|official\s+audio|official\s+visualizer|"
-    r"official\s+lyric\s+video|official\s+mv|music\s+video|video\s+klip|klip|"
-    r"lyric\s+video|lyrics\s+video|lyrics|lyric|sözleri|sözleriyle|audio|visualizer|"
-    r"4k|hd|uhd|hq|clip|video)\s*[\)\]]|"
-    r"\|\s*(?:video\s*klip|official\s*video|official\s*audio|netd\s*m[uü]zik|avrupa\s*m[uü]zik|klip).*$|"
-    r"//\s*(?:video\s*klip|official\s*video|official\s*audio|netd\s*m[uü]zik|avrupa\s*m[uü]zik|klip).*$"
+    r"[\(\[\{].*?(?:official|video|audio|lyrics?|lyric\s+video|hd|4k|uhd|hq|clip|remaster(?:ed)?|"
+    r"music\s+video|klip|resmi|sözleri|sözleriyle|visualizer|slowed|reverb|remix|version|arrangement|"
+    r"edit|bass\s*boosted|live|akustik|acoustic|cover|10\s*hours?).*?[\)\]\}]|"
+    r"\|\s*.*$|"
+    r"\/{2}\s*.*$|"
+    r"\s+I\s+.*$|"
+    r"[©®].*$"
     r")",
     re.IGNORECASE,
 )
@@ -127,6 +128,9 @@ def clean_track_title(title: str) -> str:
     if not title:
         return ""
     cleaned = _JUNK_SUFFIX_RE.sub("", title).strip()
+    cleaned = re.sub(r"\s+(?:BEST\s+VERSION|10\s*HOURS?|HQ|HD).*$", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s+Remix$", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s+Music$", "", cleaned, flags=re.IGNORECASE).strip()
     return cleaned or title
 
 
@@ -227,9 +231,12 @@ def score_candidate(c: dict, track: str, artist: str, duration: float) -> float 
         diff = abs(c_dur - duration)
 
     if artist and artist_r < 0.35:
+        # Enstrümantal tema/soundtrack ise (kanal adı sanatçı değilse) başlık yeterlidir
+        if c.get("instrumental") and title_r >= 0.85:
+            pass
         # YouTube'da uploader bazen sanatçı yerine kanal adıdır (örn. netd, Avrupa Müzik).
         # Sanatçı uyuşmuyorsa, yalnızca tam başlık ve kesin süre (<= 2 sn) eşleşmesi kabul edilir.
-        if not (title_r >= 0.95 and diff is not None and diff <= 2):
+        elif not (title_r >= 0.95 and diff is not None and diff <= 2):
             return None
 
     # Başlık ve sanatçı birlikte uyuşuyorsa, video intro/outro süre farklarına (≤75 sn) izin ver
@@ -446,6 +453,17 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                 except Exception:
                     pass
                 best = pick_best(all_candidates, track, artist, duration)
+
+        # Aşama 5: Şarkı adı tek başına arama (uploader etiket/kanal adı olduğunda kurtarır)
+        if best is None and not is_mock and len(track) >= 3:
+            try:
+                resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
+                                params={"q": track.strip()})
+                if resp.status_code == 200:
+                    add_candidates(resp.json())
+            except Exception:
+                pass
+            best = pick_best(all_candidates, track, artist, duration)
 
     except (requests.RequestException, ValueError) as e:
         log.warning("Şarkı sözü alınamadı: %s", e)
