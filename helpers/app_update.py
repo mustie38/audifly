@@ -4,9 +4,18 @@ Akış: son sürümü sor → sürümü karşılaştır → kurulum dosyasını 
 doğrula → kurulumu başlat. Qt'ye bağımlılığı yoktur (arayüz services/app_updater.py ve
 app_window.py'dedir).
 
-Güvenlik kuralları:
-- Yalnız bu deponun `releases/download/` adresindeki https bağlantıları indirilir.
+Güvenlik kuralları ve Tehdit Modeli:
+- Yalnız bu deponun `releases/download/` adresindeki HTTPS bağlantıları indirilir.
+- İndirme sırasında ve yönlendirmelerde (HTTP 301/302) yalnızca güvenilir GitHub domainleri
+  (`github.com`, `api.github.com`, `objects.githubusercontent.com` veya `*.githubusercontent.com`)
+  kabul edilir; harici veya şifrelenmemiş (HTTP) adreslere yönlendirmeler anında reddedilir.
 - SHA-256 özeti olmayan ya da uyuşmayan dosya ASLA çalıştırılmaz.
+- Tehdit Modeli: SHA-256 hash doğrulaması, veri aktarımı sırasındaki bozulmaları (network corruption)
+  ve ağdaki ortadaki adam (MITM) kurcalamalarını tespit eder. Ancak GitHub altyapısının veya hesap
+  erişim anahtarlarının doğrudan ele geçirilmesi (sunucu taraflı uzlaşma / supply chain attack)
+  durumunda hash değeri de saldırgan tarafından değiştirilebileceğinden tek başına tam koruma sağlamaz;
+  gelecekte ikili dosyaların GPG veya Windows Authenticode kod imzalama (code signing) sertifikalarıyla
+  doğrulanması önerilir.
 - Taslak (draft) ve ön sürüm (prerelease) yayınları önerilmez.
 
 Yayın düzeni (CI release.yml bunu üretir): `AudiflySetup.exe` + `AudiflySetup.exe.sha256`
@@ -21,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import requests
 from packaging.version import InvalidVersion, Version
@@ -73,7 +83,47 @@ def is_newer(latest: str, current: str = APP_VERSION) -> bool:
 
 
 def _trusted_download(url) -> bool:
-    return isinstance(url, str) and url.startswith(DOWNLOAD_PREFIX)
+    if not isinstance(url, str):
+        return False
+    try:
+        parts = urlsplit(url.strip())
+    except Exception:
+        return False
+    if parts.scheme != "https":
+        return False
+    if parts.username or parts.password:
+        return False
+    if parts.port not in (None, 443):
+        return False
+    host = (parts.hostname or "").lower()
+    if host != "github.com":
+        return False
+    expected_prefix = f"/{REPO}/releases/download/"
+    return parts.path.startswith(expected_prefix)
+
+
+def is_trusted_download_target(url: str) -> bool:
+    """Yönlendirme veya indirme hedefinin güvenilir HTTPS GitHub adresi olduğunu doğrular."""
+    if not isinstance(url, str) or not url.strip():
+        return False
+    try:
+        parts = urlsplit(url.strip())
+    except Exception:
+        return False
+    if parts.scheme != "https":
+        return False
+    if parts.username or parts.password:
+        return False
+    if parts.port not in (None, 443):
+        return False
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    if host in {"github.com", "api.github.com", "objects.githubusercontent.com", "raw.githubusercontent.com"}:
+        return True
+    if host.endswith(".githubusercontent.com") and len(host) > len(".githubusercontent.com"):
+        return True
+    return False
 
 
 def _digest_of(asset: dict) -> str | None:
@@ -171,6 +221,15 @@ def download_installer(info: ReleaseInfo, dest_dir: str | None = None, progress=
     try:
         with get(info.installer_url, stream=True, timeout=TIMEOUT,
                  headers={"User-Agent": "Audifly"}) as resp:
+            # Yönlendirme hedeflerinin güvenilir GitHub domainlerinde kaldığını doğrula
+            for history_resp in getattr(resp, "history", []) or []:
+                hist_url = getattr(history_resp, "url", None)
+                if isinstance(hist_url, str) and hist_url and not is_trusted_download_target(hist_url):
+                    raise UpdateError(f"Güvenilmeyen yönlendirme adresi reddedildi: {hist_url}")
+            resp_url = getattr(resp, "url", None)
+            if isinstance(resp_url, str) and resp_url and not is_trusted_download_target(resp_url):
+                raise UpdateError(f"Güvenilmeyen indirme hedefi reddedildi: {resp_url}")
+
             resp.raise_for_status()
             total = int(resp.headers.get("Content-Length") or info.size or 0)
             if total > MAX_INSTALLER_BYTES:

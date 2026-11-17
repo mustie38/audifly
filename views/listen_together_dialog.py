@@ -167,18 +167,18 @@ class ListenTogetherDialog(QDialog):
     def _create(self):
         code = generate_room_code()
         self.code_edit.setText(code)
-        self._connect(code)
+        self._connect(code, create=True)
 
     def _join(self):
-        self._connect(self.code_edit.text())
+        self._connect(self.code_edit.text(), create=False)
 
-    def _connect(self, code: str):
+    def _connect(self, code: str, *, create: bool = False):
         self._progress = ""
         if str(code or "").count("@") > 1:
             self.service.notice.emit("Davet formatı geçersiz.", "warning")
             return
         if self.service.join(self.server_edit.text(), code, self.name_edit.text(),
-                             self.pw_edit.text()):
+                             self.pw_edit.text(), create=create):
             self._remember()
 
     def showEvent(self, event):  # noqa: N802

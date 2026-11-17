@@ -19,13 +19,15 @@ def release(**over):
     return data
 
 
-def response(json_data=None, status=200, text="", chunks=None, headers=None):
+def response(json_data=None, status=200, text="", chunks=None, headers=None, url=None, history=None):
     r = MagicMock()
     r.status_code = status
     r.json.return_value = json_data
     r.text = text
     r.headers = headers or {}
     r.iter_content.return_value = chunks or []
+    r.url = url or (BASE + au.INSTALLER_NAME)
+    r.history = history or []
     r.__enter__ = lambda self: r
     r.__exit__ = lambda *a: False
     return r
@@ -120,3 +122,28 @@ def test_updater_service_emits_results(library_store):
     loop.exec()
     QApplication.processEvents()
     assert got == [("available", info, "")] and failed == ["İndirme başarısız: x"]
+
+
+def test_trusted_download_target_and_redirect_checks():
+    assert au.is_trusted_download_target("https://github.com/mustie38/audifly/releases/download/v1.0.0/AudiflySetup.exe")
+    assert au.is_trusted_download_target("https://objects.githubusercontent.com/github-production-release-asset-2e65be/12345")
+    assert au.is_trusted_download_target("https://raw.githubusercontent.com/mustie38/audifly/main/release.sha256")
+    assert au.is_trusted_download_target("https://release-assets.objects.githubusercontent.com/file")
+    
+    # Reject HTTP, non-GitHub domains, evil subdomains, credentials
+    assert not au.is_trusted_download_target("http://github.com/file")
+    assert not au.is_trusted_download_target("https://evil.com/file")
+    assert not au.is_trusted_download_target("https://githubusercontent.com.evil.com/file")
+    assert not au.is_trusted_download_target("https://user:pass@objects.githubusercontent.com/file")
+    assert not au.is_trusted_download_target("https://objects.githubusercontent.com:8443/file")
+    assert not au.is_trusted_download_target("not-a-url")
+
+
+def test_download_installer_rejects_untrusted_redirect(tmp_path):
+    evil_redirect = MagicMock()
+    evil_redirect.url = "https://evil-mirror.com/AudiflySetup.exe"
+    get = lambda *a, **k: response(chunks=[b"payload"], url="https://evil-mirror.com/AudiflySetup.exe", history=[evil_redirect])
+    
+    with pytest.raises(au.UpdateError, match="Güvenilmeyen"):
+        au.download_installer(_info(), str(tmp_path), get=get)
+    assert os.listdir(tmp_path) == []

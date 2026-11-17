@@ -1,5 +1,14 @@
 # Değişiklikler
 
+## 0.5.1
+- **Birlikte Dinle (Listen Together) Güvenlik ve Kararlılık Sertleştirmesi (Protokol v2):**
+  - **Sequence poisoning açığı giderildi:** İstemcinin yerel sayacı ile uzak katılımcı sayaçları ayrıldı; sunucuda her katılımcı bazında kesin monoton artış denetimi eklendi.
+  - **Pending timeout koruması:** Uzak şarkı yükleme işlemlerine 20 saniyelik zaman aşımı ve jenerasyon kontrolü eklendi; şarkı çalma hatası veya başlamasında kilitlerin güvenle temizlenmesi sağlandı.
+  - **Oda oluşturma (`create`) ve katılma (`join`) ayrımı:** Var olmayan odaya katılmaya çalışıldığında yanlışlıkla yeni oda açılması engellendi (`room_not_found`), duplicate oda açılması engellendi (`room_exists`).
+  - **Sıkı URL ve WebSocket güvenliği:** Yalnızca YouTube HTTPS bağlantılarına izin verildi, SSRF ve yerel dosya (`file://`, `local://`) ifşası engellendi; uzak sunucular için `wss://` zorunlu kılındı.
+  - **Sunucu hız sınırlaması ve güvenilir proxy kontrolü:** IP bazlı bağlantı ve istek sınırlaması eklendi, sahte `X-Forwarded-For` başlıkları engellendi.
+  - **Otomatik güncelleyici (`app_update.py`):** GitHub Releases indirmeleri ve yönlendirmeleri (HTTP 301/302) için sıkı domain kontrolü, `.part` dosya temizliği ve tehdit modeli dokümantasyonu eklendi.
+
 ## 0.5.0
 - **PyInstaller `vlc/libvlc.dll` paketleme filtresi düzeltmesi (`packaging/audifly.spec`):** PyInstaller 6'nın `datas` içindeki `.dll` dosyalarını `a.binaries` listesine `vlc\libvlc.dll` olarak taşıması nedeniyle kök dizin filtresinin `vlc/` altındaki DLL'leri de dışarıda bırakması düzeltildi (yalnız `_internal/` kökündeki mükerrer `libvlccore.dll` çıkarılır, `vlc/libvlc.dll` ve `vlc/libvlccore.dll` korunur).
 - **Alt çalma çubuğu (`PlayerBar`) süre gösterimi ve akış ilerleme düzeltmesi (`views/player_bar.py`, `services/playback.py`, `helpers/constants.py`):** Şarkı başladığında `PlayerBar` toplam süresinin `00:00` kalması düzeltildi (`song["duration"]` üzerinden anında `04:04` vb. gösterilir). VLC demuxer'ının toplam süreyi (`get_length() <= 0`) veya anlık saniyeyi (`get_time() <= 0`) döndürmediği akışlarda şarkı süresi, `get_position()` oranı ve gerçek dinleme sayacı (`_listen["seconds"]`) üzerinden kesintisiz süre ilerlemesi ve sarma (`seek`) sağlandı.

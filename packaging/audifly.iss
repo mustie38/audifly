@@ -22,7 +22,7 @@
 
 #define MyAppName "Audifly"
 ; Sürüm pyproject.toml ile aynı olmalı; release.yml bunu packaging/set_iss_version.py ile günceller.
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.5.1"
 #define MyAppPublisher "Audifly"
 #define MyAppExeName "Audifly.exe"
 #define MyAppURL "https://github.com/mustie38/audifly"

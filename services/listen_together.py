@@ -16,9 +16,11 @@ Kurallar:
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import secrets
 import time
+from urllib.parse import parse_qs, urlsplit
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal
 
@@ -26,11 +28,29 @@ from mustiefly_qt.helpers.logging_setup import get_logger
 
 log = get_logger(__name__)
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+MAX_SEQ = 2**31 - 1
+PENDING_TIMEOUT_MS = 20_000
 SHARED_PLAYLIST = "🎧 Birlikte Dinle"
 # Sunucu adresini bir kez buraya yaz (örn. "wss://adin.onrender.com"); arkadaşların
 # uygulamayı alınca sunucu adresi girmeden yalnızca oda kodu yazar.
 DEFAULT_SERVER_URL = ""
+
+# Uzaktan paylaşılmasına izin verilen güvenli müzik alan adları (yalnızca HTTPS)
+ALLOWED_SHARE_HOSTS = frozenset({
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "youtu.be",
+})
+ALLOWED_THUMBNAIL_HOSTS = frozenset({
+    "i.ytimg.com",
+    "i9.ytimg.com",
+    "img.youtube.com",
+    "lh3.googleusercontent.com",
+    "yt3.ggpht.com",
+})
 
 HEARTBEAT_MS = 8000
 PING_MS = 5000
@@ -60,17 +80,88 @@ def normalize_room_code(raw: str) -> str:
     return code if 4 <= len(code) <= 12 else ""
 
 
+def is_valid_seq(value) -> bool:
+    """Sequence değeri 1..MAX_SEQ aralığında gerçek bir int olmalı (bool/float/negatif reddedilir)."""
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_SEQ
+
+
+def _is_loopback_host(host: str) -> bool:
+    host = (host or "").strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_valid_hostname(host: str) -> bool:
+    if not host or len(host) > 253 or any(ord(c) <= 32 for c in host):
+        return False
+    if _is_loopback_host(host):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return not (ip.is_unspecified or ip.is_multicast)
+    except ValueError:
+        pass
+    if "." not in host or host.startswith(".") or host.endswith(".") or ".." in host:
+        return False
+    labels = host.split(".")
+    return all(
+        1 <= len(lbl) <= 63
+        and all(ch.isalnum() or ch == "-" for ch in lbl)
+        and not lbl.startswith("-")
+        and not lbl.endswith("-")
+        for lbl in labels
+    )
+
+
 def normalize_server_url(raw: str) -> str:
-    url = str(raw or "").strip().rstrip("/")
-    if not url:
+    """Sunucu adresini doğrular ve güvenli WebSocket URL'sine ('wss://' veya yerel 'ws://') çevirir.
+
+    Güvenlik kuralları:
+    - Uzak sunucularda yalnızca 'wss://' (veya 'https://') kabul edilir.
+    - 'ws://' ve 'http://' yalnızca localhost / 127.0.0.1 / ::1 için kabul edilir.
+    - Kimlik bilgisi (user:pass@), sorgu/fragment veya geçersiz port içeren adresler reddedilir.
+    """
+    url = str(raw or "").strip()
+    if not url or any(ord(c) <= 32 for c in url):
         return ""
-    if url.startswith("https://"):
-        url = "wss://" + url[len("https://"):]
-    elif url.startswith("http://"):
-        url = "ws://" + url[len("http://"):]
-    elif not url.startswith(("ws://", "wss://")):
+    if "://" not in url:
+        if url.startswith("/") or "@" in url:
+            return ""
         url = "wss://" + url
-    return url
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return ""
+    scheme = (parts.scheme or "").lower()
+    if scheme not in ("wss", "https", "ws", "http"):
+        return ""
+    if parts.username is not None or parts.password is not None or "@" in (parts.netloc or ""):
+        return ""
+    if parts.query or parts.fragment:
+        return ""
+    if port is not None and not (1 <= port <= 65535):
+        return ""
+    host = (parts.hostname or "").lower()
+    if not _is_valid_hostname(host):
+        return ""
+    if scheme in ("ws", "http"):
+        if not _is_loopback_host(host):
+            return ""
+        out_scheme = "ws"
+    else:
+        out_scheme = "wss"
+    netloc = f"[{host}]" if ":" in host else host
+    if port is not None:
+        netloc = f"{netloc}:{port}"
+    path = (parts.path or "").rstrip("/")
+    if ".." in path:
+        return ""
+    return f"{out_scheme}://{netloc}{path}"
 
 
 def _safe_ms(value) -> int:
@@ -100,18 +191,91 @@ def parse_invite(text: str) -> tuple[str, str]:
         return "", ""
     if "@" in text:
         code, server = text.rsplit("@", 1)
-        return normalize_room_code(code), normalize_server_url(server) if server else ""
+        norm_code = normalize_room_code(code)
+        norm_srv = normalize_server_url(server) if server else ""
+        if server and not norm_srv:
+            return "", ""
+        return norm_code, norm_srv
     return normalize_room_code(text), ""
 
 
+def is_valid_share_url(url) -> bool:
+    """Birlikte Dinle üzerinden paylaşılabilecek müzik bağlantısını doğrular.
+
+    Yalnızca HTTPS şemalı, kimlik bilgisi/beklenmeyen port içermeyen, izin verilen
+    YouTube / YouTube Music alan adlarına ait geçerli parça adresleri kabul edilir.
+    """
+    if not isinstance(url, str):
+        return False
+    url = url.strip()
+    if not (1 <= len(url) <= 300) or any(ord(c) <= 32 for c in url):
+        return False
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    if (parts.scheme or "").lower() != "https":
+        return False
+    if parts.username is not None or parts.password is not None or "@" in (parts.netloc or ""):
+        return False
+    if port not in (None, 443):
+        return False
+    host = (parts.hostname or "").lower().rstrip(".")
+    if host not in ALLOWED_SHARE_HOSTS:
+        return False
+    path = parts.path or ""
+    if not path or path == "/" or ".." in path or "\\" in path:
+        return False
+    if host == "youtu.be":
+        vid = path.lstrip("/").split("/", 1)[0]
+        return bool(vid) and all(ch.isalnum() or ch in "-_" for ch in vid)
+    if path == "/watch":
+        qs = parse_qs(parts.query)
+        v = (qs.get("v") or [""])[0]
+        return bool(v) and all(ch.isalnum() or ch in "-_" for ch in v)
+    if path.startswith(("/shorts/", "/live/", "/embed/")):
+        seg = path.split("/", 2)[2].split("/", 1)[0] if path.count("/") >= 2 else ""
+        return bool(seg) and all(ch.isalnum() or ch in "-_" for ch in seg)
+    if path == "/playlist":
+        qs = parse_qs(parts.query)
+        plist = (qs.get("list") or [""])[0]
+        return bool(plist) and all(ch.isalnum() or ch in "-_" for ch in plist)
+    return False
+
+
+def is_valid_thumbnail_url(url) -> bool:
+    if not isinstance(url, str) or not (1 <= len(url) <= 400) or any(ord(c) <= 32 for c in url):
+        return False
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    if (parts.scheme or "").lower() != "https":
+        return False
+    if parts.username is not None or parts.password is not None or "@" in (parts.netloc or ""):
+        return False
+    if port not in (None, 443):
+        return False
+    host = (parts.hostname or "").lower().rstrip(".")
+    return host in ALLOWED_THUMBNAIL_HOSTS and ".." not in (parts.path or "")
+
+
 def is_shareable(song) -> bool:
-    return (isinstance(song, dict) and not song.get("local_path")
-            and str(song.get("webpage_url", "")).startswith(("http://", "https://")))
+    return (
+        isinstance(song, dict)
+        and not song.get("local_path")
+        and is_valid_share_url(song.get("webpage_url", ""))
+    )
 
 
 def song_payload(song: dict) -> dict:
-    out = {k: song.get(k) for k in ("title", "uploader", "webpage_url", "thumbnail")
+    out = {k: song.get(k) for k in ("title", "uploader", "webpage_url")
            if isinstance(song.get(k), str)}
+    thumb = song.get("thumbnail")
+    if isinstance(thumb, str) and is_valid_thumbnail_url(thumb):
+        out["thumbnail"] = thumb
     duration = song.get("duration")
     if isinstance(duration, (int, float)) and not isinstance(duration, bool):
         out["duration"] = int(duration)
@@ -148,6 +312,7 @@ class ListenTogether(QObject):
         self.state = "disconnected"
 
         self._wanted = False
+        self._create_mode = False
         self._retry = 0
         self._seq = 0
         self._last_by_sender: dict[str, int] = {}
@@ -179,10 +344,15 @@ class ListenTogether(QObject):
         self._slow = QTimer(self)                 # "sunucu uyanıyor" bilgisi için
         self._slow.setSingleShot(True)
         self._slow.timeout.connect(lambda: self.connectProgress.emit(self._retry + 1, True))
+        self._pending_timer = QTimer(self)        # uzak şarkı yükleme zaman aşımı (20 sn)
+        self._pending_timer.setSingleShot(True)
+        self._pending_timer.timeout.connect(self._on_pending_timeout)
 
         playback.songStarted.connect(self._on_song_started)
         playback.playStateChanged.connect(self._on_play_state)
         playback.seeked.connect(self._on_seeked)
+        if hasattr(playback, "playError"):
+            playback.playError.connect(self._on_play_error)
         playback.next_provider = self._next_from_room_queue
         playback.crossfade_guard = self._blocks_crossfade
 
@@ -195,9 +365,37 @@ class ListenTogether(QObject):
     def is_host(self) -> bool:
         return bool(self.my_id) and self.my_id == self.host_id
 
-    def join(self, server_url: str, room: str, name: str, password: str = "") -> bool:
-        invite_code, invite_url = parse_invite(room)
-        url = invite_url or normalize_server_url(server_url) or normalize_server_url(DEFAULT_SERVER_URL)
+    def create_room(self, server_url: str, room: str = "", name: str = "", password: str = "") -> bool:
+        """Yeni bir oda oluşturur (oda kodu verilmezse otomatik üretir)."""
+        code = room.strip() if room and room.strip() else generate_room_code()
+        return self.join(server_url, code, name, password, create=True)
+
+    def join(self, server_url: str, room: str, name: str, password: str = "",
+             *, create: bool = False) -> bool:
+        raw_room = str(room or "").strip()
+        raw_srv = str(server_url or "").strip()
+        if raw_room.count("@") > 1:
+            self.notice.emit("Oda kodu 4-12 harf/rakam olmalı.", "warning")
+            return False
+        invite_code, invite_url = parse_invite(raw_room)
+        if "@" in raw_room and not invite_url:
+            self.notice.emit(
+                "Güvensiz veya geçersiz sunucu adresi. Uzak sunucularda yalnızca https:// veya wss:// kullanılabilir.",
+                "error",
+            )
+            return False
+        norm_srv = normalize_server_url(raw_srv)
+        if raw_srv and not norm_srv and not invite_url:
+            if raw_srv.lower().startswith(("http://", "ws://")):
+                self.notice.emit(
+                    "Güvensiz sunucu bağlantısı (http/ws) yalnızca yerel geliştirmede (localhost) kullanılabilir; "
+                    "uzak sunucu için https:// veya wss:// kullan.",
+                    "error",
+                )
+            else:
+                self.notice.emit("Sunucu adresi geçersiz.", "error")
+            return False
+        url = invite_url or norm_srv or normalize_server_url(DEFAULT_SERVER_URL)
         code = invite_code
         if not url:
             self.notice.emit("Sunucu adresi girilmedi.", "warning")
@@ -209,6 +407,7 @@ class ListenTogether(QObject):
         self._url, self.room = url, code
         self.password = (password or "").strip()
         self.name = (name or "").strip()[:24] or "Misafir"
+        self._create_mode = bool(create)
         self._wanted, self._retry = True, 0
         self._last_by_sender.clear()
         self._seq = 0
@@ -219,8 +418,10 @@ class ListenTogether(QObject):
     def leave(self, silent: bool = False):
         was_active = self._wanted or self.state != "disconnected"
         self._wanted = False
-        for t in (self._hb, self._reconnect, self._ping, self._watchdog, self._slow):
+        self._create_mode = False
+        for t in (self._hb, self._reconnect, self._ping, self._watchdog, self._slow, self._pending_timer):
             t.stop()
+        self._pending_gen += 1
         self._pending = None
         self._ping_sent.clear()
         self.latency_ms = 0
@@ -384,7 +585,8 @@ class ListenTogether(QObject):
         ws.open(QUrl(self._url))
 
     def _on_ws_connected(self):
-        self._send({"t": "join", "v": PROTOCOL_VERSION, "room": self.room, "name": self.name,
+        action = "create" if self._create_mode else "join"
+        self._send({"t": action, "v": PROTOCOL_VERSION, "room": self.room, "name": self.name,
                     "pw": hash_password(self.room, self.password)})
 
     def _connect_timeout(self):
@@ -410,8 +612,10 @@ class ListenTogether(QObject):
     def _connection_lost(self, *_args):
         if not self._wanted or self._reconnect.isActive():
             return
-        for t in (self._hb, self._ping, self._watchdog):
+        for t in (self._hb, self._ping, self._watchdog, self._pending_timer):
             t.stop()
+        self._pending_gen += 1
+        self._pending = None
         self.playback.suppress_auto_advance = False
         self._set_state("connecting")
         if self._retry >= len(RECONNECT_DELAYS_S):
@@ -459,25 +663,37 @@ class ListenTogether(QObject):
         elif kind == "queue" and self.joined:
             self._set_queue(msg.get("items"))
         elif kind == "error":
+            err_code = str(msg.get("code", "")).strip().lower()
             error_message = str(msg.get("msg", "hata"))
             normalized_error = error_message.casefold()
-            if "oda şifresi yanlış" in normalized_error:
+            if err_code == "wrong_password" or "oda şifresi yanlış" in normalized_error:
                 self.leave(silent=True)
                 self.notice.emit(
                     "Oda şifresi yanlış. Şifreyi kontrol edip tekrar dene "
                     "(sunucu yeniden başlamışsa oda başka bir şifreyle kurulmuş olabilir).",
                     "error")
-            elif "oda bulunamadı" in normalized_error:
-                self.leave()
+            elif err_code == "room_not_found" or "oda bulunamadı" in normalized_error:
+                self.leave(silent=True)
                 self.notice.emit(
                     "Sunucu yeniden başlamış olabilir; oda artık mevcut değil. "
                     "Yeni oda oluştur ya da kodu tekrar kontrol et.",
+                    "error")
+            elif err_code == "room_exists" or "zaten kullanımda" in normalized_error:
+                self.leave(silent=True)
+                self.notice.emit(
+                    "Bu oda kodu zaten kullanımda. Yeni bir oda aç ya da mevcut odaya katıl.",
+                    "error")
+            elif err_code == "version_mismatch" or "uyumsuz" in normalized_error:
+                self.leave(silent=True)
+                self.notice.emit(
+                    "Uygulama sürümü sunucuyla uyumsuz. Lütfen Audifly'ı son sürüme güncelle.",
                     "error")
             else:
                 self.notice.emit(f"Birlikte Dinle: {error_message}", "error")
                 self.leave(silent=True)
 
     def _on_joined(self, msg: dict):
+        self._create_mode = False
         self._last_by_sender.clear()
         self._seq = 0
         self.my_id = str(msg.get("id", ""))
@@ -545,12 +761,24 @@ class ListenTogether(QObject):
             if url == pending["url"]:
                 self._finish_pending(pending)
                 return
-            if time.monotonic() - pending["at"] < 20:
+            started_at = pending.get("started_at", pending.get("at", 0.0))
+            if time.monotonic() - started_at < PENDING_TIMEOUT_MS / 1000.0:
                 return       # uzak şarkı çözülürken araya giren başlangıçları yayınlama
-            self._pending = None
+            self._clear_pending(pending.get("gen"))
         if self._quiet():
             return
         self._broadcast(True, 0, kind="start")
+
+    def _on_play_error(self, playlist_name: str, index: int):
+        """Uzak şarkı çözümlenemezse pending durumunun takılı kalmasını önle."""
+        pending = self._pending
+        if pending is None:
+            return
+        songs = self.store.playlists.get(playlist_name, [])
+        if 0 <= index < len(songs) and songs[index].get("webpage_url") == pending.get("url"):
+            self._on_pending_timeout(pending.get("gen"))
+        elif playlist_name == SHARED_PLAYLIST:
+            self._on_pending_timeout(pending.get("gen"))
 
     def _on_play_state(self, playing: bool):
         if self._quiet():
@@ -579,8 +807,11 @@ class ListenTogether(QObject):
         last_kind, last_url, last_at = self._last_sent
         if kind == "play" and last_kind == "start" and last_url == url and now - last_at < 1.5:
             return    # yeni şarkının hemen ardından gelen "çalıyor" sinyali zaten yayınlandı
-        self._seq = max(self._last_by_sender.values(), default=0) + 1
-        self._last_by_sender[self.my_id] = self._seq
+        if self._seq >= MAX_SEQ:
+            self._seq = 0
+        self._seq += 1
+        if self.my_id:
+            self._last_by_sender[self.my_id] = self._seq
         if not hb:
             self._last_sent = (kind, url, now)
         self._send({"t": "state", "seq": self._seq, "song": song_payload(song),
@@ -592,21 +823,32 @@ class ListenTogether(QObject):
         song = msg.get("song")
         if not is_shareable(song):
             return
-        try:
-            seq = int(msg.get("seq", 0))
-            pos = int(msg.get("pos_ms", 0))
-            age = int(msg.get("age_ms", 0))
-        except (TypeError, ValueError):
+        raw_seq = msg.get("seq")
+        if not is_valid_seq(raw_seq):
             return
-        frm, hb, playing = str(msg.get("from", "")), bool(msg.get("hb")), bool(msg.get("playing"))
+        seq = raw_seq
+        raw_pos = msg.get("pos_ms", 0)
+        raw_age = msg.get("age_ms", 0)
+        if (isinstance(raw_pos, bool) or not isinstance(raw_pos, (int, float))
+                or isinstance(raw_age, bool) or not isinstance(raw_age, (int, float))):
+            return
+        pos = max(0, min(int(raw_pos), 86_400_000))
+        age = max(0, min(int(raw_age), 86_400_000))
+        raw_from = msg.get("from")
+        if not isinstance(raw_from, str) or not raw_from.strip():
+            return
+        frm = raw_from.strip()
+        if not force and self.my_id and frm == self.my_id:
+            return
+        hb, playing = bool(msg.get("hb")), bool(msg.get("playing"))
         prev = self._last_by_sender.get(frm, 0)
         if not force and seq <= prev:
             return
+        # Yalnız gönderenin kendi son sayacını güncelle; yerel _seq sayacına ASLA dokunma!
         self._last_by_sender[frm] = seq
-        self._seq = max(self._seq, seq)
         if playing:
             # geçen süre: sunucuda bekleme + göndericinin ve bizim tek yön gecikmemiz
-            pos += max(0, age) + _safe_ms(msg.get("lat")) + self.latency_ms
+            pos += age + _safe_ms(msg.get("lat")) + self.latency_ms
         if not hb:
             self._announce_song(song, frm)
         self._apply(song, playing, pos, hb, tight=bool(msg.get("sync")))
@@ -623,10 +865,14 @@ class ListenTogether(QObject):
         url = song["webpage_url"]
         pending = self._pending
         if pending is not None and pending["url"] == url:
+            # Son senkron konumunu ve zamanını (at) güncelle; yükleme başlangıç zamanını
+            # (started_at) ve zaman aşımı sayacını (_pending_timer) SIFIRLAMA.
             pending.update(playing=playing, pos=pos, at=time.monotonic())
             return
         current = self._current_song()
         if isinstance(current, dict) and current.get("webpage_url") == url:
+            if self._pending is not None:
+                self._clear_pending()
             self._sync_same_song(playing, pos, hb, tight)
         else:
             self._play_remote(song, playing, pos)
@@ -644,13 +890,45 @@ class ListenTogether(QObject):
         if loc is None:
             return
         self._pending_gen += 1
-        self._pending = {"url": url, "playing": playing, "pos": pos,
-                         "at": time.monotonic(), "gen": self._pending_gen}
+        gen = self._pending_gen
+        now = time.monotonic()
+        self._pending = {
+            "url": url,
+            "playing": playing,
+            "pos": pos,
+            "at": now,
+            "started_at": now,
+            "gen": gen,
+        }
+        self._pending_timer.start(PENDING_TIMEOUT_MS)
         self._suppress(3.0)
         self.playback.play_song_at_index(*loc)
 
-    def _finish_pending(self, pending: dict):
+    def _clear_pending(self, gen: int | None = None) -> bool:
+        if self._pending is None:
+            return False
+        if gen is not None and self._pending.get("gen") != gen:
+            return False
+        self._pending_timer.stop()
         self._pending = None
+        return True
+
+    def _on_pending_timeout(self, gen: int | None = None):
+        """Uzak şarkı PENDING_TIMEOUT_MS içinde başlamadıysa pending kilidini güvenli temizle."""
+        if self._pending is None:
+            return
+        if gen is not None and self._pending.get("gen") != gen:
+            return
+        timed_out = self._pending
+        self._pending_timer.stop()
+        self._pending = None
+        # Mevcut çalma durumunun yanlışlıkla geri yayınlanmasını önle
+        self._suppress(1.5)
+        log.warning("Uzak şarkı yükleme zaman aşımına uğradı: %s", timed_out.get("url", "?"))
+
+    def _finish_pending(self, pending: dict):
+        if not self._clear_pending(pending.get("gen")):
+            return
         self._suppress(4.0)
         QTimer.singleShot(1600, lambda: self._after_remote_start(pending))
 

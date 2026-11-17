@@ -66,6 +66,7 @@ def service(library_store):
         songStarted = Signal(str, int, dict, bool)
         playStateChanged = Signal(bool)
         seeked = Signal(int)
+        playError = Signal(str, int)
 
         def __init__(self):
             super().__init__()
@@ -99,7 +100,7 @@ def _join(svc, host_id="h1", my_id="me", state=None):
     assert svc.join("wss://srv.example", "abc123", "Ali")
     ws = svc._test_sockets[-1]
     ws.connected.emit()
-    assert ws.sent[0] == {"t": "join", "v": 1, "room": "ABC123", "name": "Ali", "pw": ""}
+    assert ws.sent[0] == {"t": "join", "v": 2, "room": "ABC123", "name": "Ali", "pw": ""}
     ws.textMessageReceived.emit(json.dumps({
         "t": "joined", "id": my_id, "host": host_id,
         "members": [{"id": host_id, "name": "Veli"}, {"id": my_id, "name": "Ali"}],
@@ -220,7 +221,9 @@ def test_reconnect_resets_seq(service):
     pb = service._test_pb
     pb._current_song_ref = dict(SONG)
     ws.textMessageReceived.emit(_state(50, playing=False, pos=5000, frm="h1"))
-    assert service._seq == 50
+    # Uzak seq istemcinin yerel sayacını bozmaz
+    assert service._seq == 0
+    assert service._last_by_sender["h1"] == 50
 
     service._connection_lost()
     service._reconnect.stop()
@@ -233,9 +236,10 @@ def test_reconnect_resets_seq(service):
     }))
 
     assert service._seq == 0
+    assert service._last_by_sender == {}
     reconnected.textMessageReceived.emit(_state(1, playing=False, pos=6000, frm="h1"))
 
-    assert service._seq == 1
+    assert service._seq == 0
     assert service._last_by_sender["h1"] == 1
     assert [call.args for call in pb.seek.call_args_list] == [(5000,), (6000,)]
 
@@ -491,27 +495,31 @@ def test_relay_server_end_to_end():
     from websockets.asyncio.server import serve
 
     async def scenario():
+        server.ROOMS.clear()
+        server._FAILS.clear()
         async with serve(server.handler, "127.0.0.1", 0,
                          process_request=server.process_request) as srv:
             port = srv.sockets[0].getsockname()[1]
             url = f"ws://127.0.0.1:{port}"
+            valid_url1 = "https://www.youtube.com/watch?v=12345678901"
+            valid_url2 = "https://www.youtube.com/watch?v=abcdefghijk"
             async with connect(url) as a, connect(url) as b:
-                await a.send(json.dumps({"t": "join", "v": 1, "room": "room42", "name": "A"}))
+                await a.send(json.dumps({"t": "create", "v": 2, "room": "ROOM42", "name": "A"}))
                 ja = json.loads(await a.recv())
                 assert ja["t"] == "joined" and ja["host"] == ja["id"] and ja["state"] is None
-                await b.send(json.dumps({"t": "join", "v": 1, "room": "ROOM42", "name": "B"}))
+                await b.send(json.dumps({"t": "join", "v": 2, "room": "ROOM42", "name": "B"}))
                 jb = json.loads(await b.recv())
                 assert jb["host"] == ja["id"] and len(jb["members"]) == 2
                 assert json.loads(await a.recv())["t"] == "members"
 
                 await a.send(json.dumps({"t": "state", "seq": 1, "playing": True, "pos_ms": 10,
-                                         "song": {"webpage_url": "https://y/1", "title": "t",
+                                         "song": {"webpage_url": valid_url1, "title": "t",
                                                   "evil": "x"}}))
                 got = json.loads(await b.recv())
                 assert got["t"] == "state" and got["from"] == ja["id"]
                 assert "evil" not in got["song"]
 
-                # geçersiz şarkı (http değil) iletilmez
+                # geçersiz şarkı (izinli host değil / file://) iletilmez
                 await a.send(json.dumps({"t": "state", "seq": 2, "playing": True, "pos_ms": 1,
                                          "song": {"webpage_url": "file:///etc/passwd"}}))
                 await a.send(json.dumps({"t": "ping"}))
@@ -524,12 +532,12 @@ def test_relay_server_end_to_end():
                 await a.send(json.dumps({"t": "emoji", "e": "💀"}))      # izinli değil
                 await a.send(json.dumps({"t": "emoji", "e": "🔥"}))
                 assert json.loads(await b.recv())["e"] == "🔥"
-                await b.send(json.dumps({"t": "queue_add", "song": {"webpage_url": "https://y/q1", "title": "Q1"}}))
+                await b.send(json.dumps({"t": "queue_add", "song": {"webpage_url": valid_url2, "title": "Q1"}}))
                 qa = json.loads(await a.recv())
                 assert qa["t"] == "queue" and qa["items"][0]["by"] == "B"
                 assert json.loads(await b.recv())["t"] == "queue"
-                await a.send(json.dumps({"t": "queue_pop", "url": "https://y/yanlis"}))   # baştaki değil: yok sayılır
-                await a.send(json.dumps({"t": "queue_pop", "url": "https://y/q1"}))
+                await a.send(json.dumps({"t": "queue_pop", "url": "https://www.youtube.com/watch?v=yanlis"}))   # baştaki değil: yok sayılır
+                await a.send(json.dumps({"t": "queue_pop", "url": valid_url2}))
                 assert json.loads(await a.recv())["items"] == []
                 assert json.loads(await b.recv())["items"] == []
 
@@ -545,28 +553,30 @@ def test_relay_server_end_to_end():
 
                 # geç katılan mevcut durumu alır
                 async with connect(url) as c:
-                    await c.send(json.dumps({"t": "join", "v": 1, "room": "ROOM42", "name": "C"}))
+                    await c.send(json.dumps({"t": "join", "v": 2, "room": "ROOM42", "name": "C"}))
                     jc = json.loads(await c.recv())
-                    assert jc["state"]["seq"] == 1 and jc["state"]["song"]["webpage_url"] == "https://y/1"
+                    assert jc["state"]["seq"] == 1 and jc["state"]["song"]["webpage_url"] == valid_url1
 
             # şifreli oda
             import hashlib
             good = hashlib.sha256(b"x").hexdigest()
             async with connect(url) as p1, connect(url) as p2, connect(url) as p3:
-                await p1.send(json.dumps({"t": "join", "v": 1, "room": "LOCKED", "name": "P1", "pw": good}))
+                await p1.send(json.dumps({"t": "create", "v": 2, "room": "LOCKED", "name": "P1", "pw": good}))
                 assert json.loads(await p1.recv())["locked"] is True
-                await p2.send(json.dumps({"t": "join", "v": 1, "room": "LOCKED", "name": "P2", "pw": "0" * 64}))
+                await p2.send(json.dumps({"t": "join", "v": 2, "room": "LOCKED", "name": "P2", "pw": "0" * 64}))
                 assert json.loads(await p2.recv())["t"] == "error"
-                await p3.send(json.dumps({"t": "join", "v": 1, "room": "LOCKED", "name": "P3", "pw": good}))
+                await p3.send(json.dumps({"t": "join", "v": 2, "room": "LOCKED", "name": "P3", "pw": good}))
                 assert json.loads(await p3.recv())["t"] == "joined"
 
             # kötü kod reddedilir
             async with connect(url) as d:
-                await d.send(json.dumps({"t": "join", "v": 1, "room": "!", "name": "D"}))
+                await d.send(json.dumps({"t": "create", "v": 2, "room": "!", "name": "D"}))
                 assert json.loads(await d.recv())["t"] == "error"
         assert server.ROOMS == {} or True
 
     asyncio.run(scenario())
+    server.ROOMS.clear()
+    server._FAILS.clear()
 
 
 def _relay():
@@ -603,16 +613,21 @@ def test_relay_room_limit_and_lockout_end_to_end(monkeypatch):
 
     async def join(url, room, pw=""):
         async with connect(url) as ws:
-            await ws.send(json.dumps({"t": "join", "v": 1, "room": room, "name": "X", "pw": pw}))
+            await ws.send(json.dumps({"t": "join", "v": 2, "room": room, "name": "X", "pw": pw}))
+            return json.loads(await ws.recv())
+
+    async def create(url, room, pw=""):
+        async with connect(url) as ws:
+            await ws.send(json.dumps({"t": "create", "v": 2, "room": room, "name": "X", "pw": pw}))
             return json.loads(await ws.recv())
 
     async def scenario():
         async with serve(server.handler, "127.0.0.1", 0, process_request=server.process_request) as srv:
             url = f"ws://127.0.0.1:{srv.sockets[0].getsockname()[1]}"
             async with connect(url) as keeper:                   # ilk oda açık kalır
-                await keeper.send(json.dumps({"t": "join", "v": 1, "room": "LOCKED", "name": "K", "pw": good}))
+                await keeper.send(json.dumps({"t": "create", "v": 2, "room": "LOCKED", "name": "K", "pw": good}))
                 assert json.loads(await keeper.recv())["t"] == "joined"
-                full = await join(url, "OTHER1")                 # ikinci oda: sınır
+                full = await create(url, "OTHER1")               # ikinci oda: sınır
                 assert full["t"] == "error" and "dolu" in full["msg"]
                 for _ in range(server.FAIL_MAX):
                     assert "yanlış" in (await join(url, "LOCKED", "0" * 64))["msg"]
@@ -622,3 +637,265 @@ def test_relay_room_limit_and_lockout_end_to_end(monkeypatch):
     asyncio.run(scenario())
     server._FAILS.clear()
     server.ROOMS.clear()
+
+
+# ---------- Güvenlik ve Regresyon Testleri ----------
+def test_sequence_poisoning_does_not_affect_local_seq_or_other_senders(service):
+    ws = _join(service)
+    pb = service._test_pb
+    pb._current_song_ref = dict(SONG)
+    pb.player.is_playing.return_value = True
+
+    # Kötü niyetli katılımcı 'att' 2^31 - 1 büyüklüğünde sequence gönderir
+    poison_seq = 2_147_483_647
+    ws.textMessageReceived.emit(_state(poison_seq, playing=False, pos=5000, frm="att"))
+
+    # İstemcinin yerel sayacı zehirlenmemeli, 0 kalmalıdır
+    assert service._seq == 0
+    assert service._last_by_sender["att"] == poison_seq
+
+    # Host 'h1' normal seq=1 gönderdiğinde başarıyla işlenmeli
+    ws.textMessageReceived.emit(_state(1, playing=False, pos=6000, frm="h1"))
+    assert service._seq == 0
+    assert service._last_by_sender["h1"] == 1
+    assert pb.seek.call_count >= 1
+
+    # Yerel kullanıcı eylem yaptığında seq=1 ile yayın yapmalı (zehirlenmiş seq değil)
+    service._suppress_until = 0.0
+    pb.seeked.emit(15_000)
+    local_state = [m for m in ws.sent if m["t"] == "state"][-1]
+    assert local_state["seq"] == 1
+    assert service._seq == 1
+
+
+def test_server_rejects_poisoned_or_invalid_sequence_numbers():
+    server = _relay()
+    # Monotonik artış kontrolü
+    assert server.clean_state({"t": "state", "seq": 5}, last_seq=5) is None
+    assert server.clean_state({"t": "state", "seq": 4}, last_seq=5) is None
+    assert server.clean_state({"t": "state", "seq": 0}, last_seq=0) is None
+    assert server.clean_state({"t": "state", "seq": -1}, last_seq=0) is None
+    assert server.clean_state({"t": "state", "seq": True}, last_seq=0) is None
+    assert server.clean_state({"t": "state", "seq": 5.5}, last_seq=0) is None
+    assert server.clean_state({"t": "state", "seq": "5"}, last_seq=0) is None
+    assert server.clean_state({"t": "state", "seq": 2_147_483_648}, last_seq=0) is None
+    
+    # Geçerli artış kabul edilmeli
+    valid = server.clean_state({
+        "t": "state", "seq": 6, "playing": True, "pos_ms": 100,
+        "song": {"webpage_url": "https://www.youtube.com/watch?v=12345678901", "title": "t"}
+    }, last_seq=5)
+    assert valid is not None and valid["seq"] == 6
+
+
+def test_pending_timeout_cleans_up_safely_and_resumes_heartbeat(service):
+    ws = _join(service, host_id="me", my_id="me")
+    # Uzak şarkı isteği geldiğinde pending kurulur
+    service._receive_state({
+        "t": "state", "seq": 1, "from": "h2",
+        "song": dict(SONG), "playing": True, "pos_ms": 1000
+    })
+    assert service._pending is not None
+    assert service._pending_timer.isActive()
+    assert service._quiet() is True
+    current_gen = service._pending_gen
+
+    # Timeout simülasyonu
+    service._on_pending_timeout(current_gen)
+    assert service._pending is None
+    assert not service._pending_timer.isActive()
+    service._suppress_until = 0.0
+    assert service._quiet() is False
+
+    # Timeout sonrası host heartbeat mekanizması çalışabilmeli
+    service._test_pb._current_song_ref = dict(SONG)
+    service._broadcast(True, 15_000, kind="hb", hb=True)
+    assert ws.sent[-1]["hb"] is True
+
+
+def test_pending_cancelled_on_song_started_or_error(service):
+    from mustiefly_qt.services.listen_together import SHARED_PLAYLIST
+    _join(service)
+    pb = service._test_pb
+    
+    # Şarkı başladığında pending temizlenmeli
+    service._receive_state({
+        "t": "state", "seq": 1, "from": "h2",
+        "song": dict(SONG), "playing": True, "pos_ms": 1000
+    })
+    assert service._pending is not None
+    pb.songStarted.emit("L", 0, dict(SONG), False)
+    assert service._pending is None
+    assert not service._pending_timer.isActive()
+
+    # Çalma hatasında da pending temizlenmeli
+    service._receive_state({
+        "t": "state", "seq": 2, "from": "h2",
+        "song": dict(SONG, webpage_url="https://youtu.be/def"), "playing": True, "pos_ms": 1000
+    })
+    assert service._pending is not None
+    pb.playError.emit(SHARED_PLAYLIST, 0)
+    assert service._pending is None
+    assert not service._pending_timer.isActive()
+
+
+def test_pending_rapid_song_changes_generation_safety(service):
+    _join(service)
+    service._receive_state({
+        "t": "state", "seq": 1, "from": "h2",
+        "song": dict(SONG), "playing": True, "pos_ms": 1000
+    })
+    gen1 = service._pending_gen
+
+    # Yeni bir şarkı yüklendiğinde yeni bir jenerasyon oluşur
+    service._receive_state({
+        "t": "state", "seq": 2, "from": "h2",
+        "song": dict(SONG, webpage_url="https://youtu.be/second"), "playing": True, "pos_ms": 2000
+    })
+    gen2 = service._pending_gen
+    assert gen2 != gen1
+
+    # Eski şarkının timeout'u yeni şarkının pending durumunu silmemeli
+    service._on_pending_timeout(gen1)
+    assert service._pending is not None
+    assert service._pending["url"] == "https://youtu.be/second"
+
+    # Doğru jenerasyonun timeout'u temizlemeli
+    service._on_pending_timeout(gen2)
+    assert service._pending is None
+
+
+def test_pending_heartbeat_does_not_reset_started_at(service):
+    _join(service)
+    service._receive_state({
+        "t": "state", "seq": 1, "from": "h2",
+        "song": dict(SONG), "playing": True, "pos_ms": 1000
+    })
+    started_at_orig = service._pending["started_at"]
+
+    # Heartbeat geldiğinde started_at sıfırlanmamalı
+    service._receive_state({
+        "t": "state", "seq": 2, "from": "h2",
+        "song": dict(SONG), "playing": True, "pos_ms": 3000, "hb": True
+    })
+    assert service._pending["started_at"] == started_at_orig
+    assert service._pending["pos"] == 3000
+
+
+def test_create_vs_join_distinct_messages(service):
+    assert service.create_room("wss://srv.example", "ABC123", "Owner")
+    ws_create = service._test_sockets[-1]
+    ws_create.connected.emit()
+    assert ws_create.sent[0]["t"] == "create"
+    service.leave()
+
+    assert service.join("wss://srv.example", "ABC123", "Guest")
+    ws_join = service._test_sockets[-1]
+    ws_join.connected.emit()
+    assert ws_join.sent[0]["t"] == "join"
+
+
+def test_server_create_vs_join_isolation():
+    server = _relay()
+    from websockets.asyncio.client import connect
+    from websockets.asyncio.server import serve
+
+    async def scenario():
+        server.ROOMS.clear()
+        server._FAILS.clear()
+        async with serve(server.handler, "127.0.0.1", 0, process_request=server.process_request) as srv:
+            url = f"ws://127.0.0.1:{srv.sockets[0].getsockname()[1]}"
+            async with connect(url) as ws1:
+                # Olmayan odaya katılma isteği hata dönmeli
+                await ws1.send(json.dumps({"t": "join", "v": 2, "room": "NOTFOUND", "name": "A"}))
+                err = json.loads(await ws1.recv())
+                assert err["t"] == "error" and err["code"] == "room_not_found"
+
+            async with connect(url) as ws2, connect(url) as ws3:
+                # Açıkça oda oluşturma
+                await ws2.send(json.dumps({"t": "create", "v": 2, "room": "NEWROOM", "name": "Owner"}))
+                res = json.loads(await ws2.recv())
+                assert res["t"] == "joined"
+
+                # Var olan odayı tekrar oluşturma reddedilmeli
+                await ws3.send(json.dumps({"t": "create", "v": 2, "room": "NEWROOM", "name": "Imposter"}))
+                err2 = json.loads(await ws3.recv())
+                assert err2["t"] == "error" and err2["code"] == "room_exists"
+
+    asyncio.run(scenario())
+    server.ROOMS.clear()
+    server._FAILS.clear()
+
+
+def test_strict_url_validation():
+    from mustiefly_qt.services.listen_together import is_valid_share_url, is_valid_thumbnail_url
+    server = _relay()
+
+    # Geçerli YouTube URL'leri
+    valid_urls = [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+    ]
+    for url in valid_urls:
+        assert is_valid_share_url(url)
+        assert server.is_valid_share_url(url)
+
+    # Geçersiz ve saldırı amaçlı URL'ler
+    invalid_urls = [
+        "http://www.youtube.com/watch?v=dQw4w9WgXcQ",           # HTTP reddedilmeli
+        "https://evil-youtube.com/watch?v=dQw4w9WgXcQ",         # Farklı domain
+        "https://youtube.com.attacker.com/watch?v=dQw4w9WgXcQ",  # Subdomain aldatmacası
+        "https://user:pass@youtube.com/watch?v=dQw4w9WgXcQ",     # Kimlik bilgisi
+        "https://youtube.com:8443/watch?v=dQw4w9WgXcQ",          # Standart dışı port
+        "file:///etc/passwd",                                    # Yerel dosya
+        "local://c:/secret.mp3",                                 # Yerel protokol
+        "javascript:alert(1)",                                  # Script enjeksiyonu
+        "https://youtube.com/",                                  # Video id yok
+    ]
+    for url in invalid_urls:
+        assert not is_valid_share_url(url)
+        assert not server.is_valid_share_url(url)
+
+    # Thumbnail kontrolü
+    assert is_valid_thumbnail_url("https://i.ytimg.com/vi/abc/hqdefault.jpg")
+    assert not is_valid_thumbnail_url("http://i.ytimg.com/vi/abc/hqdefault.jpg")
+    assert not is_valid_thumbnail_url("https://evil.com/img.jpg")
+
+
+def test_websocket_server_url_validation():
+    from mustiefly_qt.services.listen_together import normalize_server_url
+
+    # Uzak sunucular mutlaka WSS olmalı
+    assert normalize_server_url("https://myrelay.onrender.com") == "wss://myrelay.onrender.com"
+    assert normalize_server_url("wss://myrelay.onrender.com") == "wss://myrelay.onrender.com"
+    assert normalize_server_url("http://myrelay.onrender.com") == ""     # Uzak HTTP reddedilir
+    assert normalize_server_url("ws://myrelay.onrender.com") == ""       # Uzak WS reddedilir
+
+    # Yalnızca loopback için WS serbest
+    assert normalize_server_url("http://localhost:8765") == "ws://localhost:8765"
+    assert normalize_server_url("http://127.0.0.1:8765") == "ws://127.0.0.1:8765"
+    assert normalize_server_url("http://[::1]:8765") == "ws://[::1]:8765"
+    assert normalize_server_url("ws://127.0.0.1:8765") == "ws://127.0.0.1:8765"
+
+
+def test_server_untrusted_proxy_header_rejected(monkeypatch):
+    server = _relay()
+
+    class FakeRequest:
+        def __init__(self, headers):
+            self.headers = headers
+
+    class FakeWS:
+        def __init__(self, ip, headers):
+            self.remote_address = (ip, 12345)
+            self.request = FakeRequest(headers)
+
+    # Güvenilmeyen bir istemci sahte X-Forwarded-For başlığı gönderirse yok sayılmalı
+    untrusted_ws = FakeWS("198.51.100.10", {"X-Forwarded-For": "203.0.113.50"})
+    assert server.client_ip(untrusted_ws) == "198.51.100.10"
+
+    # Güvenilen bir reverse-proxy üzerinden geliyorsa header dikkate alınmalı
+    trusted_ws = FakeWS("198.51.100.10", {"X-Forwarded-For": "203.0.113.50"})
+    assert server.client_ip(trusted_ws, trusted_proxies="198.51.100.10") == "203.0.113.50"
