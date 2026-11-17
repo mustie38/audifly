@@ -6,7 +6,7 @@ Veriler gerçek kütüphaneden (play_count / last_played / duration) hesaplanır
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox, QHBoxLayout, QLabel, QListWidgetItem, QScrollArea, QVBoxLayout, QWidget,
@@ -30,6 +30,8 @@ def format_listen_time(seconds: float) -> str:
 
 
 class StatsView(QWidget):
+    startRadioRequested = Signal(dict)
+
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
         super().__init__(parent)
@@ -195,6 +197,7 @@ class StatsView(QWidget):
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue(pl, i, s))
             row.playNextRequested.connect(
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue_next(pl, i, s))
+            row.startRadioRequested.connect(self.startRadioRequested.emit)
             # ⋮ menüsündeki sil/indir/taşı öğeleri de çalışsın
             row.removeRequested.connect(
                 lambda i, pl=pl_name: self.store.remove_song(pl, i))

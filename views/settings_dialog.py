@@ -384,6 +384,12 @@ class SettingsView(QWidget):
             "Crossfade", self._hbox(self.crossfade_check, self.crossfade_spin),
             "Şarkılar arası yumuşak ses geçişi ve geçiş süresi."))
 
+        self.autoplay_check = QCheckBox()
+        self.autoplay_check.setChecked(self.settings.get("autoplay_enabled", True))
+        audio_card.layout().addWidget(self._row(
+            "Sonsuz Çalma (Autoplay)", self.autoplay_check,
+            "Çalma listesi bittiğinde benzer şarkıları otomatik bularak kesintisiz çalmaya devam eder."))
+
         controls_card = self._card("Denetimler")
         self.media_keys_check = QCheckBox()
         self.media_keys_check.setChecked(self.settings.get("global_media_keys", False))
@@ -793,6 +799,7 @@ class SettingsView(QWidget):
         self.settings["auto_ytdlp_update"] = self.auto_ytdlp_check.isChecked()
         self.settings["crossfade_enabled"] = self.crossfade_check.isChecked()
         self.settings["crossfade_seconds"] = self.crossfade_spin.value()
+        self.settings["autoplay_enabled"] = self.autoplay_check.isChecked()
         self.settings["smtc_enabled"] = self.smtc_check.isChecked()
         self.settings["spotify_client_id"] = self.spotify_id_edit.text().strip()
         self.settings["spotify_client_secret"] = self.spotify_secret_edit.text().strip()

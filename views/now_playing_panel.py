@@ -14,6 +14,7 @@ from mustiefly_qt.widgets.player_icons import icon as vicon
 
 class NowPlayingPanel(QWidget):
     collapseRequested = Signal()  # paneli gizleme isteği (MainWindow yönetir)
+    startRadioRequested = Signal(dict)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
@@ -69,6 +70,11 @@ class NowPlayingPanel(QWidget):
         lyrics_btn.setToolTip("Sözler penceresini açar (Ayarlar > Sözler)")
         self.lyrics_btn = lyrics_btn
         btn_row.addWidget(lyrics_btn)
+
+        self.radio_btn = QPushButton("📻 Radyo")
+        self.radio_btn.setToolTip("Bu şarkı için Şarkı Radyosu başlatır")
+        self.radio_btn.clicked.connect(self._on_start_radio)
+        btn_row.addWidget(self.radio_btn)
         layout.addLayout(btn_row)
 
         # --- İlerleme çubuğu (radyo modunda gizlenir) ---
@@ -219,6 +225,10 @@ class NowPlayingPanel(QWidget):
     def set_playing_state(self, playing: bool):
         """Plak dönüşünü çalma durumuna bağlar (MainWindow/player_bar'dan beslenir)."""
         self.vinyl.set_playing(playing)
+
+    def _on_start_radio(self):
+        if self.playback.current_song:
+            self.startRadioRequested.emit(self.playback.current_song)
 
     def _toggle_like(self):
         pl = self.playback.playing_playlist or getattr(self, "_playlist_name", None)

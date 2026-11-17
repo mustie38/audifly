@@ -153,6 +153,8 @@ class PlaybackEngine(QObject):
         # Birlikte Dinle: True dönerse crossfade başlatılmaz. Crossfade sıradaki şarkıyı
         # YEREL olarak seçer; odada bunu yalnız oda sahibi (ve ortak sıra boşsa) yapabilir.
         self.crossfade_guard = None
+        # Sonsuz Çalma (Autoplay): Çalma listesi sona erdiğinde çağrılır; True dönerse autoplay devreye girer
+        self.autoplay_handler = None
 
         # Radyo modu: playlist çalmasıyla AYNI VLC player'ı paylaşır; radyo
         # çalarken playing_playlist None'a çekilir (orijinal davranış).
@@ -1122,6 +1124,12 @@ class PlaybackEngine(QObject):
         if nxt != -1:
             self.play_song_at_index(self.playing_playlist, nxt, auto=True)
         else:
+            if callable(self.autoplay_handler) and self.settings.get("autoplay_enabled", True):
+                try:
+                    if self.autoplay_handler():
+                        return
+                except Exception as e:
+                    log.warning("%s %s", "Autoplay tetikleme hatası:", e)
             self._end_listen(completed=True)
             self.player.stop()
             self.playStateChanged.emit(False)

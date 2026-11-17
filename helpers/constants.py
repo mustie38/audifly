@@ -181,6 +181,7 @@ DEFAULT_SETTINGS = {
     "smtc_enabled": True,          # Windows medya denetimleri (winsdk gerekir)
     "crossfade_enabled": False,
     "crossfade_seconds": 3,
+    "autoplay_enabled": True,
     "settings_version": 2,
     "sleep_fade_enabled": True,
     "smart_rules": [],

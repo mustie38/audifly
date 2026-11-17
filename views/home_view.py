@@ -112,6 +112,7 @@ class HomeView(QWidget):
     openPlaylistRequested = Signal(str)
     openLikedRequested = Signal()
     playShuffledRequested = Signal()
+    startRadioRequested = Signal(dict)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails=None, username: str = "", parent=None):
@@ -305,6 +306,7 @@ class HomeView(QWidget):
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue(pl, i, s))
             row.playNextRequested.connect(
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue_next(pl, i, s))
+            row.startRadioRequested.connect(self.startRadioRequested.emit)
             # ⋮ menüsündeki öğeler de çalışsın (sessiz no-op olmasın):
             row.removeRequested.connect(
                 lambda i, pl=pl_name: self.store.remove_song(pl, i))

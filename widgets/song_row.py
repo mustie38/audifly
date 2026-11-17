@@ -75,6 +75,7 @@ class SongRow(QWidget):
     downloadRequested = Signal(int)
     addToQueueRequested = Signal(int)
     playNextRequested = Signal(int)
+    startRadioRequested = Signal(dict)
     moveRequested = Signal(int)
     addToRoomQueueRequested = Signal(int)
     room_queue_enabled = False   # Birlikte Dinle odasındayken menüde gösterilir (app_window ayarlar)
@@ -263,6 +264,7 @@ class SongRow(QWidget):
     def _open_menu(self):
         menu = QMenu(self)
         play_action = menu.addAction("▶ Çal")
+        radio_action = menu.addAction("📻 Şarkı Radyosu")
         play_next_action = menu.addAction("⏭ Sırada Çal")
         queue_action = menu.addAction("➕ Kuyruğa Ekle")
         room_action = None
@@ -281,6 +283,8 @@ class SongRow(QWidget):
         chosen = menu.exec(self.mapToGlobal(self.rect().bottomRight()))
         if chosen == play_action:
             self.playRequested.emit(self.index)
+        elif chosen == radio_action:
+            self.startRadioRequested.emit(self.song)
         elif chosen == play_next_action:
             self.playNextRequested.emit(self.index)
         elif chosen == queue_action:

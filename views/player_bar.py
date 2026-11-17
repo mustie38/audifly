@@ -172,6 +172,7 @@ class PlayerBar(QWidget):
     queueRequested = Signal()
     lyricsRequested = Signal()
     jumpToPlayingRequested = Signal()
+    startRadioRequested = Signal(dict)
 
     SLEEP_OPTIONS = [("15 dakika", 15), ("30 dakika", 30),
                      ("45 dakika", 45), ("60 dakika", 60), ("90 dakika", 90)]
@@ -606,8 +607,17 @@ class PlayerBar(QWidget):
             action.setChecked(abs(rate - self._rate) < 0.01)
             action.setData(rate)
 
+        radio_action = None
+        if self.playback.current_song:
+            menu.addSeparator()
+            radio_action = menu.addAction("📻 Şarkı Radyosunu Başlat")
+
         chosen = menu.exec(self.more_btn.mapToGlobal(self.more_btn.rect().bottomRight()))
         if chosen is None:
+            return
+        if radio_action is not None and chosen == radio_action:
+            if self.playback.current_song:
+                self.startRadioRequested.emit(self.playback.current_song)
             return
         data = chosen.data()
         if chosen.parent() is sleep_menu:

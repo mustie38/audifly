@@ -29,6 +29,7 @@ from mustiefly_qt.services.download_manager import DownloadManager
 from mustiefly_qt.services.media_keys import GlobalMediaKeys
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
+from mustiefly_qt.services.song_radio import SongRadioService
 from mustiefly_qt.services.smtc import SMTC_AVAILABLE, SMTCService
 from mustiefly_qt.services.thumbnails import ThumbnailService
 from mustiefly_qt.theme import build_qss
@@ -82,6 +83,7 @@ class MainWindow(QMainWindow):
         self.store.load()
         self.store.backup_enabled = bool(settings.get("backup_enabled", True))
         self.playback = PlaybackEngine(self.store, paths, settings)
+        self.song_radio = SongRadioService(self.store, self.playback, parent=self)
         self.listen = ListenTogether(self.store, self.playback, parent=self)
         self._listen_dialog = None
         self._listen_unread = 0
@@ -255,7 +257,16 @@ class MainWindow(QMainWindow):
         self.player_bar.queueRequested.connect(self.show_queue_view)
         self.player_bar.lyricsRequested.connect(self._toggle_lyrics_window)
         self.player_bar.jumpToPlayingRequested.connect(self._jump_to_playing)
+        self.player_bar.startRadioRequested.connect(self.song_radio.start_radio_for_song)
         self.library_grid.openPlaylistRequested.connect(self.show_playlist_view)
+
+        # Şarkı Radyosu bağlantıları
+        self.library_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.home_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.stats_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.now_playing_panel.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.song_radio.radioStarted.connect(lambda pl, _: self.show_playlist_view(pl))
+        self.song_radio.autoplayTriggered.connect(lambda pl, _: self.show_playlist_view(pl))
 
         # "Şu An Çalıyor" panelini kapat/aç (ayarda kalıcı)
         self.now_playing_panel.collapseRequested.connect(self._hide_now_playing_panel)
