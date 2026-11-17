@@ -972,6 +972,12 @@ class MainWindow(QMainWindow):
                     if 0 <= idx < len(songs):
                         self._on_smtc_song_started(pp, idx, songs[idx], False)
         self.store.backup_enabled = bool(self.settings.get("backup_enabled", True))
+        # Crossfade ve ses normalizasyonu canlı uygulanır
+        self.playback.apply_crossfade_settings(
+            self.settings.get("crossfade_enabled", False),
+            self.settings.get("crossfade_seconds", 3),
+        )
+        self.playback.apply_normalization(self.settings.get("audio_normalization", False))
         # Tema + vurgu rengi artık canlı uygulanır (yeniden başlatma gerekmez)
         self._reset_accent()
         if self.settings.get("dynamic_theme", True):

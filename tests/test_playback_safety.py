@@ -310,3 +310,18 @@ def test_resolve_retries_once_on_transient_error(engine, monkeypatch):
     engine._play_generation = 5
     engine._resolve_and_play(5, "A", 0, engine.store.playlists["A"][0])
     assert len(calls) == 2 and ready and not failed
+
+
+def test_crossfade_and_normalization_settings_helpers(engine):
+    engine.apply_crossfade_settings(True, 6)
+    assert engine.settings["crossfade_enabled"] is True
+    assert engine.settings["crossfade_seconds"] == 6
+
+    engine.apply_normalization(True)
+    assert engine.settings["audio_normalization"] is True
+
+    # _prepare_media normvol ve replaygain opsiyonlarını eklemeli
+    media = engine._prepare_media("http://test.audio/stream.mp3")
+    added_options = [call.args[0] for call in media.add_option.call_args_list]
+    assert any(":audio-filter=normvol" in opt for opt in added_options)
+    assert any(":audio-replay-gain-mode=track" in opt for opt in added_options)

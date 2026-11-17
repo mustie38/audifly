@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget,
 )
 
 import vlc
@@ -31,8 +31,8 @@ class EqualizerWindow(QWidget):
         self.playback = playback
         self.settings = settings
         self.save_fn = save_fn
-        self.setWindowTitle("🎚 Ekolayzer")
-        self.resize(560, 340)
+        self.setWindowTitle("🎚 Ses & Ekolayzer")
+        self.resize(580, 420)
         if parent is not None:
             p = parent.geometry()
             self.move(p.x() + (p.width() - self.width()) // 2,
@@ -102,6 +102,55 @@ class EqualizerWindow(QWidget):
             bands_layout.addWidget(col)
             self.band_sliders.append(slider)
         root.addWidget(bands_row, stretch=1)
+
+        # --- Ses & Geçiş Efektleri Bölümü ---
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: rgba(255, 255, 255, 0.1); margin: 6px 0;")
+        root.addWidget(sep)
+
+        fx_card = QWidget()
+        fx_layout = QVBoxLayout(fx_card)
+        fx_layout.setContentsMargins(0, 0, 0, 0)
+        fx_layout.setSpacing(10)
+
+        # Crossfade satırı
+        cf_row = QHBoxLayout()
+        self.cf_check = QCheckBox("Crossfade (Yumuşak Geçiş)")
+        self.cf_check.setToolTip("Şarkı biterken sıradakine kesintisiz, pürüzsüz geçiş sağlar.")
+        self.cf_check.setChecked(bool(self.settings.get("crossfade_enabled", False)))
+        self.cf_check.toggled.connect(self._on_crossfade_toggled)
+        cf_row.addWidget(self.cf_check)
+
+        cf_row.addStretch(1)
+
+        cf_sec = int(self.settings.get("crossfade_seconds", 3))
+        self.cf_label = QLabel(f"{cf_sec} sn")
+        self.cf_label.setObjectName("Muted")
+        self.cf_label.setFixedWidth(40)
+        self.cf_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.cf_slider = QSlider(Qt.Horizontal)
+        self.cf_slider.setRange(1, 12)
+        self.cf_slider.setValue(cf_sec)
+        self.cf_slider.setFixedWidth(120)
+        self.cf_slider.valueChanged.connect(self._on_crossfade_seconds_changed)
+
+        cf_row.addWidget(self.cf_slider)
+        cf_row.addWidget(self.cf_label)
+        fx_layout.addLayout(cf_row)
+
+        # Ses Normalizasyonu satırı
+        norm_row = QHBoxLayout()
+        self.norm_check = QCheckBox("Ses Seviyesini Dengele (Eşit Ses / ReplayGain)")
+        self.norm_check.setToolTip("Farklı şarkılar arasındaki ani ses patlamalarını ve fısıltıları otomatik dengeler.")
+        self.norm_check.setChecked(bool(self.settings.get("audio_normalization", False)))
+        self.norm_check.toggled.connect(self._on_norm_toggled)
+        norm_row.addWidget(self.norm_check)
+        norm_row.addStretch(1)
+        fx_layout.addLayout(norm_row)
+
+        root.addWidget(fx_card)
 
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
@@ -207,5 +256,24 @@ class EqualizerWindow(QWidget):
         self._save_timer.start(400)
 
     # --- Kayıt (debounce'lu; kaydırıcı sürüklerken diske yazmamak için) ---
+    def _on_crossfade_toggled(self, checked: bool):
+        self.settings["crossfade_enabled"] = bool(checked)
+        if hasattr(self.playback, "apply_crossfade_settings"):
+            self.playback.apply_crossfade_settings(checked, self.cf_slider.value())
+        self._save_timer.start(400)
+
+    def _on_crossfade_seconds_changed(self, value: int):
+        self.cf_label.setText(f"{value} sn")
+        self.settings["crossfade_seconds"] = int(value)
+        if hasattr(self.playback, "apply_crossfade_settings"):
+            self.playback.apply_crossfade_settings(self.cf_check.isChecked(), value)
+        self._save_timer.start(400)
+
+    def _on_norm_toggled(self, checked: bool):
+        self.settings["audio_normalization"] = bool(checked)
+        if hasattr(self.playback, "apply_normalization"):
+            self.playback.apply_normalization(checked)
+        self._save_timer.start(400)
+
     def _flush_settings(self):
         self.save_fn()

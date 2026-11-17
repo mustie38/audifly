@@ -372,17 +372,17 @@ class SettingsView(QWidget):
         self.normalize_check.setChecked(self.settings.get("audio_normalization", False))
         audio_card.layout().addWidget(self._row(
             "Ses seviyesini dengele", self.normalize_check,
-            "Şarkılar arasındaki ses seviyesi farkını otomatik dengeler."))
+            "Farklı şarkılar arasındaki ses seviyesi farkını otomatik dengeler (normvol + ReplayGain)."))
 
         self.crossfade_check = QCheckBox()
         self.crossfade_check.setChecked(self.settings.get("crossfade_enabled", False))
         self.crossfade_spin = QSpinBox()
-        self.crossfade_spin.setRange(1, 10)
+        self.crossfade_spin.setRange(1, 12)
         self.crossfade_spin.setSuffix(" sn")
         self.crossfade_spin.setValue(int(self.settings.get("crossfade_seconds", 3)))
         audio_card.layout().addWidget(self._row(
             "Crossfade", self._hbox(self.crossfade_check, self.crossfade_spin),
-            "Şarkılar arası yumuşak ses geçişi ve geçiş süresi."))
+            "Şarkılar arası kesintisiz, yumuşak ses geçişi ve geçiş süresi (Equal-Power)."))
 
         self.autoplay_check = QCheckBox()
         self.autoplay_check.setChecked(self.settings.get("autoplay_enabled", True))

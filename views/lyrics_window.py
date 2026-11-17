@@ -150,9 +150,9 @@ class LyricsWindow(QWidget):
         self.stack.setCurrentIndex(PAGE_STATUS)
 
     def _current_song(self) -> dict | None:
-        song = self.playback.current_song
-        if song is not None:
-            return song
+        cur = getattr(self.playback, "current_song", None)
+        if isinstance(cur, dict):
+            return cur
         pp = self.playback.playing_playlist
         songs = self.playback.store.playlists.get(pp, []) if pp else []
         idx = self.playback.current_index
@@ -191,11 +191,8 @@ class LyricsWindow(QWidget):
         self.lyricsReady.emit(song, token, result)         # queued → GUI thread
 
     def _apply_result(self, song: dict, token: int, result):
-        if token != self._token:
+        if token != self._token or song is not self._current_song():
             return                                         # kullanıcı başka şarkıya geçti
-        cur = self._current_song()
-        if cur and song.get("title") != cur.get("title") and song.get("webpage_url") != cur.get("webpage_url"):
-            return
         if result.status == ly.ERROR:
             self._show_status("📡", "Sözler alınamadı", "İnternet bağlantını kontrol edip tekrar dene.", retry=True)
         elif result.instrumental:

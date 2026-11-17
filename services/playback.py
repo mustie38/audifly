@@ -7,6 +7,7 @@ thread'inde çalışır (tkinter'daki `self.after(0, fn)` jimnastiğine gerek yo
 """
 from __future__ import annotations
 
+import math
 import random
 import threading
 import time
@@ -514,7 +515,11 @@ class PlaybackEngine(QObject):
                 media.add_option(f":http-user-agent={ua}")
         if self.settings.get("audio_normalization"):
             media.add_option(":audio-filter=normvol")
-            media.add_option(":norm-buff-size=20")
+            media.add_option(":norm-buff-size=10")
+            media.add_option(":norm-max-level=1.6")
+            media.add_option(":audio-replay-gain-mode=track")
+            media.add_option(":audio-replay-gain-default=-6.0")
+            media.add_option(":audio-replay-gain-peak-protection=1")
         return media
 
     def _start_playback(self, generation, song, playlist_name, index, url, is_offline=False):
@@ -906,9 +911,13 @@ class PlaybackEngine(QObject):
             frac = min(state["t"] / steps, 1.0)
             self._xfade_blend = frac
             try:
+                # Eşit güç (equal-power) eğrisi: ses seviyesi ortada çökmez
+                angle = frac * (math.pi / 2.0)
+                vol_a = math.cos(angle)
+                vol_b = math.sin(angle)
                 live = self._master_volume()
-                self.player.audio_set_volume(int(live * (1.0 - frac)))
-                self.player_b.audio_set_volume(int(live * frac))
+                self.player.audio_set_volume(int(live * vol_a))
+                self.player_b.audio_set_volume(int(live * vol_b))
             except Exception:
                 pass
             if frac >= 1.0:
@@ -1315,6 +1324,15 @@ class PlaybackEngine(QObject):
         self.settings["_volume"] = value
         self._apply_volume()
         self.volumeChanged.emit(value)
+
+    def apply_normalization(self, enabled: bool):
+        """Ses normalizasyonu (eşit ses / normvol + ReplayGain) durumunu günceller."""
+        self.settings["audio_normalization"] = bool(enabled)
+
+    def apply_crossfade_settings(self, enabled: bool, seconds: int = 3):
+        """Crossfade geçiş durumunu ve süresini günceller."""
+        self.settings["crossfade_enabled"] = bool(enabled)
+        self.settings["crossfade_seconds"] = max(1, min(12, int(seconds)))
 
     def seek(self, ms: int):
         if self._xfade_active:
