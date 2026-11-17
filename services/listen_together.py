@@ -313,6 +313,7 @@ class ListenTogether(QObject):
 
         self._wanted = False
         self._create_mode = False
+        self._active_protocol_version = PROTOCOL_VERSION
         self._retry = 0
         self._seq = 0
         self._last_by_sender: dict[str, int] = {}
@@ -419,6 +420,7 @@ class ListenTogether(QObject):
         was_active = self._wanted or self.state != "disconnected"
         self._wanted = False
         self._create_mode = False
+        self._active_protocol_version = PROTOCOL_VERSION
         for t in (self._hb, self._reconnect, self._ping, self._watchdog, self._slow, self._pending_timer):
             t.stop()
         self._pending_gen += 1
@@ -585,9 +587,15 @@ class ListenTogether(QObject):
         ws.open(QUrl(self._url))
 
     def _on_ws_connected(self):
-        action = "create" if self._create_mode else "join"
-        self._send({"t": action, "v": PROTOCOL_VERSION, "room": self.room, "name": self.name,
-                    "pw": hash_password(self.room, self.password)})
+        v = getattr(self, "_active_protocol_version", PROTOCOL_VERSION)
+        if v == 1:
+            self._send({"t": "join", "v": 1, "room": self.room, "name": self.name,
+                        "pw": hash_password(self.room, self.password),
+                        "mode": "create" if self._create_mode else "join"})
+        else:
+            action = "create" if self._create_mode else "join"
+            self._send({"t": action, "v": PROTOCOL_VERSION, "room": self.room, "name": self.name,
+                        "pw": hash_password(self.room, self.password)})
 
     def _connect_timeout(self):
         """12 sn içinde 'joined' gelmediyse soketi bırakıp yeniden dene."""
@@ -684,6 +692,18 @@ class ListenTogether(QObject):
                     "Bu oda kodu zaten kullanımda. Yeni bir oda aç ya da mevcut odaya katıl.",
                     "error")
             elif err_code == "version_mismatch" or "uyumsuz" in normalized_error:
+                if getattr(self, "_active_protocol_version", PROTOCOL_VERSION) == 2:
+                    log.info("Sunucu v2 protokolünü desteklemiyor, geriye dönük uyumluluk (v1) deneniyor...")
+                    self._active_protocol_version = 1
+                    ws, self._ws = self._ws, None
+                    if ws is not None:
+                        try:
+                            ws.close()
+                            ws.deleteLater()
+                        except Exception:
+                            pass
+                    self._open_socket()
+                    return
                 self.leave(silent=True)
                 self.notice.emit(
                     "Uygulama sürümü sunucuyla uyumsuz. Lütfen Audifly'ı son sürüme güncelle.",

@@ -899,3 +899,45 @@ def test_server_untrusted_proxy_header_rejected(monkeypatch):
     # Güvenilen bir reverse-proxy üzerinden geliyorsa header dikkate alınmalı
     trusted_ws = FakeWS("198.51.100.10", {"X-Forwarded-For": "203.0.113.50"})
     assert server.client_ip(trusted_ws, trusted_proxies="198.51.100.10") == "203.0.113.50"
+
+
+def test_version_mismatch_fallback_to_v1_and_connects(service):
+    assert service.join("wss://srv.example", "ABC123", "Ali")
+    ws1 = service._test_sockets[-1]
+    ws1.connected.emit()
+    assert ws1.sent[0]["v"] == 2
+
+    # Eski sunucu version_mismatch dönerse otomatik v1 ile yeniden bağlanmalı
+    ws1.textMessageReceived.emit(json.dumps({
+        "t": "error", "code": "version_mismatch", "msg": "Uygulama sürümü sunucuyla uyumsuz."
+    }))
+    assert len(service._test_sockets) == 2
+    ws2 = service._test_sockets[-1]
+    ws2.connected.emit()
+    assert ws2.sent[0]["v"] == 1
+    assert service._active_protocol_version == 1
+
+
+def test_server_supports_both_v1_and_v2():
+    server = _relay()
+    from websockets.asyncio.client import connect
+    from websockets.asyncio.server import serve
+
+    async def scenario():
+        server.ROOMS.clear()
+        async with serve(server.handler, "127.0.0.1", 0, process_request=server.process_request) as srv:
+            url = f"ws://127.0.0.1:{srv.sockets[0].getsockname()[1]}"
+            # v1 istemcisi oda açıp bağlanabilmeli
+            async with connect(url) as ws_v1:
+                await ws_v1.send(json.dumps({"t": "join", "v": 1, "room": "ROOMV1", "name": "V1User"}))
+                res1 = json.loads(await ws_v1.recv())
+                assert res1["t"] == "joined"
+
+            # v2 istemcisi oda açıp bağlanabilmeli
+            async with connect(url) as ws_v2:
+                await ws_v2.send(json.dumps({"t": "create", "v": 2, "room": "ROOMV2", "name": "V2User"}))
+                res2 = json.loads(await ws_v2.recv())
+                assert res2["t"] == "joined"
+
+    asyncio.run(scenario())
+    server.ROOMS.clear()
