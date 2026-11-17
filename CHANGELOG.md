@@ -1,5 +1,14 @@
 # Değişiklikler
 
+## 0.5.3
+- **Discord Durum Çubuğunda Kapak Görseli Desteği (`services/discord_rpc.py`):**
+  - Discord Rich Presence'a dinamik olarak şarkının yüksek kaliteli kapak bağlantısı (`thumbnail`) aktarıldı. Discord harici HTTPS görsel adreslerini doğrudan durum penceresinde gösterir; küçük simgeye Audifly uygulama logosu eklendi.
+- **Akıllı Sanatçı ve Şarkı Adı Ayrıştırması (`helpers/lyrics.py`, `services/`, `views/`, `widgets/`):**
+  - YouTube başlıklarından ("Sanatçı - Şarkı") ve kanal isimlerinden gerçek icracı sanatçı ile parça adını ayrıştıran `parse_track_and_artist` mekanizması eklendi.
+  - Yapım şirketleri ve dağıtım kanalları (örn. *Avrupa Müzik*, *netd müzik*, *DMC*) tarafından yüklenen şarkılarda sanatçı adı yerine kanal adının görünmesi düzeltildi (örn. *Bengü - Saat 3* için sanatçı "Bengü", şarkı "Saat 3" olarak atanır).
+  - Başlıklardaki video gürültü etiketleri (`(Official Video)`, `| Video Klip`, `[Lyrics]`, `(Sözleri)` vb.) otomatik temizlendi.
+  - Hem yeni aramalarda, hem içe aktarmalarda, hem de mevcut çalma listesi satırlarında ve tüm oynatıcı barlarında düzgün gösterim sağlandı.
+
 ## 0.5.2
 - **Birlikte Dinle (Listen Together) Çift Yönlü Protokol Uyumluluğu:**
   - **Otomatik geriye dönük uyumluluk:** İstemci güncellenmemiş eski (v1) sunuculara bağlandığında "Uygulama sürümü sunucuyla uyumsuz" hatası vermek yerine otomatik ve sessizce v1 protokolüne geçerek odaya bağlanır.
