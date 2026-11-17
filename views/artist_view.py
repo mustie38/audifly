@@ -56,6 +56,8 @@ class ArtistDetailView(QWidget):
     backRequested = Signal()
     playSongRequested = Signal(dict)
     startRadioRequested = Signal(dict)
+    artistDataReady = Signal(int, str, object)
+    albumDataReady = Signal(int, object, str)
 
     def __init__(
         self,
@@ -85,6 +87,10 @@ class ArtistDetailView(QWidget):
         self._artist_data: dict | None = None
         self._album_data: dict | None = None
         self._token = 0
+        self._song_cover_labels: list[tuple[QLabel, str]] = []
+
+        self.artistDataReady.connect(self._apply_artist_data)
+        self.albumDataReady.connect(self._apply_album_data)
 
         self._build_ui()
         if self.thumbnails is not None:
@@ -408,11 +414,34 @@ class ArtistDetailView(QWidget):
                         b_id = res[0].get("browseId") or ""
                 if b_id:
                     data = ytm.get_artist(b_id)
+                if not data or not data.get("songs", {}).get("results"):
+                    # Popüler şarkıları doğrudan ara
+                    search_songs = ytm.search(clean_name, filter="songs")
+                    if search_songs:
+                        if not data:
+                            data = {"name": clean_name}
+                        data.setdefault("songs", {})["results"] = search_songs[:15]
+                else:
+                    # Daha fazla popüler şarkı ekle
+                    existing = data.get("songs", {}).get("results", [])
+                    if len(existing) < 10:
+                        try:
+                            extra_songs = ytm.search(clean_name, filter="songs")
+                            seen_ids = {s.get("videoId") for s in existing if s.get("videoId")}
+                            for s in extra_songs:
+                                vid = s.get("videoId")
+                                if vid and vid not in seen_ids:
+                                    existing.append(s)
+                                    seen_ids.add(vid)
+                                if len(existing) >= 15:
+                                    break
+                        except Exception:
+                            pass
             except Exception as e:
                 log.warning("Sanatçı verisi alınamadı (%s): %s", clean_name, e)
 
             if token == self._token:
-                QTimer.singleShot(0, lambda: self._apply_artist_data(token, clean_name, data))
+                self.artistDataReady.emit(token, clean_name, data)
 
         threading.Thread(target=worker, daemon=True, name="ArtistWorker").start()
 
@@ -435,10 +464,14 @@ class ArtistDetailView(QWidget):
     def _apply_artist_data(self, token: int, artist_name: str, data: dict | None):
         if token != self._token or self._current_mode != "artist":
             return
-        if hasattr(self, "loading_label"):
+        if hasattr(self, "loading_label") and self.loading_label:
             self.loading_label.deleteLater()
+            self.loading_label = None
 
         if not data:
+            no_info = QLabel("Çevrimiçi ek sanatçı verisi bulunamadı.")
+            no_info.setStyleSheet("color: rgba(255, 255, 255, 0.50); font-size: 13px; padding: 10px 0;")
+            self.sections_layout.addWidget(no_info)
             return
         self._artist_data = data
 
@@ -447,12 +480,13 @@ class ArtistDetailView(QWidget):
         if thumbs and self.thumbnails is not None:
             photo_url = thumbs[-1].get("url")
             if photo_url:
+                self._avatar_url = photo_url
                 fake_song = {"thumbnail": photo_url, "webpage_url": photo_url}
-                pm = self.thumbnails.pixmap_for(fake_song, 124, rounded=True)
+                pm = self.thumbnails.pixmap_for(fake_song, 130, rounded=True)
                 if pm is not None and not pm.isNull():
                     self.hero_avatar.setPixmap(pm)
                     self.hero_avatar.setText("")
-                    self.hero_avatar.setStyleSheet("border-radius: 62px; background: transparent;")
+                    self.hero_avatar.setStyleSheet("border-radius: 65px; background: transparent;")
 
         # Abone bilgisi
         subs = data.get("subscribers")
@@ -483,6 +517,7 @@ class ArtistDetailView(QWidget):
     # BÖLÜMLERİN OLUŞTURULMASI
     # =========================================================================
     def _clear_sections(self):
+        self._song_cover_labels.clear()
         while self.sections_layout.count():
             item = self.sections_layout.takeAt(0)
             w = item.widget()
@@ -561,7 +596,9 @@ class ArtistDetailView(QWidget):
         cover_lbl = QLabel()
         cover_lbl.setFixedSize(40, 40)
         cover_lbl.setAlignment(Qt.AlignCenter)
-        if self.thumbnails is not None and song.get("thumbnail"):
+        thumb_url = song.get("thumbnail")
+        if self.thumbnails is not None and thumb_url:
+            self._song_cover_labels.append((cover_lbl, thumb_url))
             pm = self.thumbnails.pixmap_for(song, 40, rounded=True)
             if pm is not None and not pm.isNull():
                 cover_lbl.setPixmap(pm)
@@ -703,6 +740,7 @@ class ArtistDetailView(QWidget):
         if thumbs and self.thumbnails is not None:
             thumb_url = thumbs[-1].get("url")
             fake = {"thumbnail": thumb_url, "webpage_url": thumb_url}
+            self._song_cover_labels.append((cover, thumb_url))
             pm = self.thumbnails.pixmap_for(fake, 120, rounded=True)
             if pm is not None and not pm.isNull():
                 cover.setPixmap(pm)
@@ -882,17 +920,21 @@ class ArtistDetailView(QWidget):
                 log.warning("Albüm verisi alınamadı (%s): %s", browse_id, e)
 
             if token == self._token:
-                QTimer.singleShot(0, lambda: self._apply_album_data(token, data, artist_name))
+                self.albumDataReady.emit(token, data, artist_name)
 
         threading.Thread(target=worker, daemon=True, name="AlbumWorker").start()
 
     def _apply_album_data(self, token: int, data: dict | None, artist_name: str):
         if token != self._token or self._current_mode != "album":
             return
-        if hasattr(self, "loading_label"):
+        if hasattr(self, "loading_label") and self.loading_label:
             self.loading_label.deleteLater()
+            self.loading_label = None
 
         if not data:
+            no_info = QLabel("Albüm içeriği yüklenemedi.")
+            no_info.setStyleSheet("color: rgba(255, 255, 255, 0.50); font-size: 13px; padding: 10px 0;")
+            self.sections_layout.addWidget(no_info)
             return
         self._album_data = data
 
@@ -1059,4 +1101,26 @@ class ArtistDetailView(QWidget):
         super().mousePressEvent(event)
 
     def _on_thumbnail_ready(self, key: str):
-        pass
+        # 1) Avatar güncellemesi
+        if getattr(self, "_avatar_url", None) == key and self.thumbnails is not None:
+            fake_song = {"thumbnail": key, "webpage_url": key}
+            is_artist = (self._current_mode == "artist")
+            pm = self.thumbnails.pixmap_for(fake_song, 130, rounded=is_artist)
+            if pm and not pm.isNull():
+                self.hero_avatar.setPixmap(pm)
+                self.hero_avatar.setText("")
+                rad = "65px" if is_artist else "16px"
+                self.hero_avatar.setStyleSheet(f"border-radius: {rad}; background: transparent;")
+
+        # 2) Parça & Albüm kapakları güncellemesi
+        for lbl, s_url in getattr(self, "_song_cover_labels", []):
+            try:
+                if s_url == key and self.thumbnails is not None:
+                    fake = {"thumbnail": key, "webpage_url": key}
+                    pm = self.thumbnails.pixmap_for(fake, lbl.width(), rounded=True)
+                    if pm and not pm.isNull():
+                        lbl.setPixmap(pm)
+                        lbl.setText("")
+                        lbl.setStyleSheet("border-radius: 6px; background: transparent;")
+            except Exception:
+                pass

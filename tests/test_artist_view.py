@@ -148,9 +148,11 @@ def test_apply_artist_data(artist_view_fixture):
         },
     }
 
-    view._apply_artist_data(token, "Tarkan", mock_data)
+    assert view.loading_label is not None
+    view.artistDataReady.emit(token, "Tarkan", mock_data)
     assert "1.2M Abone" in view.hero_sub.text()
     assert view._artist_data == mock_data
+    assert view.loading_label is None
 
 
 def test_show_album_and_apply_data(artist_view_fixture):
