@@ -237,6 +237,20 @@ def _draw_more(p: QPainter, color: str):
         p.drawEllipse(QPointF(x, 12), 1.6, 1.6)
 
 
+def _draw_fullscreen(p: QPainter, color: str):
+    pen = _stroke(color, 1.8)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawLine(QPointF(4, 9), QPointF(4, 4))
+    p.drawLine(QPointF(4, 4), QPointF(9, 4))
+    p.drawLine(QPointF(15, 4), QPointF(20, 4))
+    p.drawLine(QPointF(20, 4), QPointF(20, 9))
+    p.drawLine(QPointF(20, 15), QPointF(20, 20))
+    p.drawLine(QPointF(20, 20), QPointF(15, 20))
+    p.drawLine(QPointF(9, 20), QPointF(4, 20))
+    p.drawLine(QPointF(4, 20), QPointF(4, 15))
+
+
 _DRAWERS = {
     "play": _draw_play,
     "pause": _draw_pause,
@@ -247,6 +261,7 @@ _DRAWERS = {
     "repeat_one": _draw_repeat_one,
     "queue": _draw_queue,
     "lyrics": _draw_lyrics,
+    "fullscreen": _draw_fullscreen,
     "volume": _draw_volume,
     "volume_muted": _draw_volume_muted,
     "heart": lambda p, c: _draw_heart(p, c, False),

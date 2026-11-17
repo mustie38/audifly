@@ -171,6 +171,7 @@ class IconButton(QPushButton):
 class PlayerBar(QWidget):
     queueRequested = Signal()
     lyricsRequested = Signal()
+    karaokeRequested = Signal()
     jumpToPlayingRequested = Signal()
     startRadioRequested = Signal(dict)
 
@@ -398,6 +399,11 @@ class PlayerBar(QWidget):
         self.lyrics_btn.setToolTip("Sözler paneli")
         self.lyrics_btn.clicked.connect(self.lyricsRequested.emit)
         layout.addWidget(self.lyrics_btn)
+
+        self.karaoke_btn = IconButton("fullscreen", RIGHT_BTN_SIZE, ICON_RIGHT, color=ICON_MUTED)
+        self.karaoke_btn.setToolTip("Canlı Karaoke & Tam Ekran (F11)")
+        self.karaoke_btn.clicked.connect(self.karaokeRequested.emit)
+        layout.addWidget(self.karaoke_btn)
 
         # Volume: ikon her zaman görünür, slider sadece hover'da genişler
         volume_wrap = QHBoxLayout()

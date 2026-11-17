@@ -15,6 +15,7 @@ from mustiefly_qt.widgets.player_icons import icon as vicon
 class NowPlayingPanel(QWidget):
     collapseRequested = Signal()  # paneli gizleme isteği (MainWindow yönetir)
     startRadioRequested = Signal(dict)
+    karaokeRequested = Signal()
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
@@ -75,6 +76,12 @@ class NowPlayingPanel(QWidget):
         self.radio_btn.setToolTip("Bu şarkı için Şarkı Radyosu başlatır")
         self.radio_btn.clicked.connect(self._on_start_radio)
         btn_row.addWidget(self.radio_btn)
+
+        self.karaoke_btn = QPushButton("⛶")
+        self.karaoke_btn.setToolTip("Canlı Karaoke & Tam Ekran (F11)")
+        self.karaoke_btn.setFixedWidth(36)
+        self.karaoke_btn.clicked.connect(self.karaokeRequested.emit)
+        btn_row.addWidget(self.karaoke_btn)
         layout.addLayout(btn_row)
 
         # --- İlerleme çubuğu (radyo modunda gizlenir) ---

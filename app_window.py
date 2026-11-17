@@ -38,6 +38,7 @@ from mustiefly_qt.views.downloads_view import DownloadsView
 from mustiefly_qt.views.duplicate_finder_dialog import DuplicateFinderDialog
 from mustiefly_qt.views.equalizer_window import EqualizerWindow
 from mustiefly_qt.views.explore_view import ExploreView
+from mustiefly_qt.views.karaoke_view import KaraokeView
 from mustiefly_qt.views.home_view import HomeView
 from mustiefly_qt.views.import_dialogs import (
     SpotifyImportDialog, export_playlist_m3u_dialog, import_playlist_m3u,
@@ -107,9 +108,10 @@ class MainWindow(QMainWindow):
         self.discord_rpc = DiscordRPCService(client_id, self.playback, self)
         self.mini_player = MiniPlayer(self.playback)
 
-        # Ekolayzer + Sözler pencereleri (menüden açılır, tek örnek)
+        # Ekolayzer + Sözler + Karaoke pencereleri (menüden açılır, tek örnek)
         self._eq_window: EqualizerWindow | None = None
         self._lyrics_window: LyricsWindow | None = None
+        self._karaoke_view: KaraokeView | None = None
 
         # Global medya tuşları (ayar açıkken)
         self._media_keys = GlobalMediaKeys(
@@ -256,6 +258,7 @@ class MainWindow(QMainWindow):
         # Player bar kısayolları + kütüphane grid'i
         self.player_bar.queueRequested.connect(self.show_queue_view)
         self.player_bar.lyricsRequested.connect(self._toggle_lyrics_window)
+        self.player_bar.karaokeRequested.connect(self._toggle_karaoke_view)
         self.player_bar.jumpToPlayingRequested.connect(self._jump_to_playing)
         self.player_bar.startRadioRequested.connect(self.song_radio.start_radio_for_song)
         self.library_grid.openPlaylistRequested.connect(self.show_playlist_view)
@@ -271,6 +274,7 @@ class MainWindow(QMainWindow):
         # "Şu An Çalıyor" panelini kapat/aç (ayarda kalıcı)
         self.now_playing_panel.collapseRequested.connect(self._hide_now_playing_panel)
         self.now_playing_panel.lyrics_btn.clicked.connect(self._toggle_lyrics_window)
+        self.now_playing_panel.karaokeRequested.connect(self._toggle_karaoke_view)
         self.top_bar.panelToggleClicked.connect(self._show_now_playing_panel)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
@@ -521,6 +525,8 @@ class MainWindow(QMainWindow):
             self.playback.change_volume(min(100, int(self.settings.get("_volume", 80)) + 5))
         elif key == Qt.Key_Down:
             self.playback.change_volume(max(0, int(self.settings.get("_volume", 80)) - 5))
+        elif key == Qt.Key_F11:
+            self._toggle_karaoke_view()
         else:
             super().keyPressEvent(event)
 
@@ -529,6 +535,9 @@ class MainWindow(QMainWindow):
         menu_bar: QMenuBar = self.menuBar()
 
         app_menu = menu_bar.addMenu(APP_DISPLAY_NAME)
+        karaoke_action = app_menu.addAction("🎤 Canlı Karaoke / Tam Ekran")
+        karaoke_action.setShortcut("F11")
+        karaoke_action.triggered.connect(self._toggle_karaoke_view)
         mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
         mini_player_action.triggered.connect(self._toggle_mini_player)
         library_search_action = app_menu.addAction("🔎 Kütüphanede Ara…")
@@ -1004,6 +1013,14 @@ class MainWindow(QMainWindow):
         self._lyrics_window.show()
         self._lyrics_window.refresh()
 
+    def _toggle_karaoke_view(self):
+        if self._karaoke_view is not None and self._karaoke_view.isVisible():
+            self._karaoke_view.close()
+            return
+        if self._karaoke_view is None:
+            self._karaoke_view = KaraokeView(self.playback, self.thumbnails, self)
+        self._karaoke_view.showFullScreen()
+
     # --- Uygulama güncellemesi (GitHub Releases) ---
     def check_for_app_update(self, manual: bool = True):
         self._update_manual = manual
@@ -1171,6 +1188,8 @@ class MainWindow(QMainWindow):
             self._eq_window.close()
         if self._lyrics_window is not None:
             self._lyrics_window.close()
+        if self._karaoke_view is not None:
+            self._karaoke_view.close()
         self._media_keys.stop()
         # Son dinleme durumu: açılışta kaldığın yerden devam etmek için
         try:
