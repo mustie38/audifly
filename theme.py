@@ -34,7 +34,7 @@ def build_qss(t: Theme) -> str:
     #SongRow[current="true"] {{ background: {t.accent}; }}
     #PlaylistCard {{ border-radius: 24px; }}
     #PlaylistCard:hover {{ background: {t.bg_row_hover}; }}
-    #HomeContent, #DiscoveryContent {{ background: {t.bg_main}; }}
+    #HomeContent, #DiscoveryContent, #ArtistDetailView, #ArtistContent {{ background: {t.bg_main}; }}
     #HeroCard {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
             stop:0 {t.bg_card}, stop:1 {t.bg_main});

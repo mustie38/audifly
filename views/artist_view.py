@@ -31,6 +31,15 @@ log = get_logger(__name__)
 class _HorizontalScrollArea(QScrollArea):
     """Fare tekerleğini yatay kaydırmaya dönüştüren alan."""
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.viewport().setAutoFillBackground(False)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollArea > QWidget > QWidget { background: transparent; }
+        """)
+
     def wheelEvent(self, event):  # noqa: N802
         delta = event.angleDelta().y()
         if delta:
@@ -61,6 +70,13 @@ class ArtistDetailView(QWidget):
         self.thumbnails = thumbnails
 
         self.setObjectName("ArtistDetailView")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet("""
+            QWidget#ArtistDetailView {
+                background-color: #0c0a18;
+            }
+        """)
+        self.setFocusPolicy(Qt.StrongFocus)
         self._current_mode = "artist"  # "artist" | "album"
         self._current_artist = ""
         self._current_browse_id = ""
@@ -82,10 +98,42 @@ class ArtistDetailView(QWidget):
         # Ana dikey kaydırma alanı
         self.scroll = QScrollArea(self)
         self.scroll.setWidgetResizable(True)
+        self.scroll.viewport().setAutoFillBackground(False)
         self.scroll.setFrameShape(QFrame.NoFrame)
-        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll.setStyleSheet("""
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: transparent;
+                width: 8px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(255, 255, 255, 0.16);
+                border-radius: 4px;
+                min-height: 24px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(255, 255, 255, 0.32);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
 
         self.content_widget = QWidget()
+        self.content_widget.setObjectName("ArtistContent")
+        self.content_widget.setAttribute(Qt.WA_StyledBackground, True)
+        self.content_widget.setStyleSheet("""
+            QWidget#ArtistContent {
+                background-color: #0c0a18;
+            }
+        """)
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(28, 20, 28, 40)
         self.content_layout.setSpacing(24)
@@ -108,25 +156,31 @@ class ArtistDetailView(QWidget):
         hero_box = QWidget()
         hero_layout = QVBoxLayout(hero_box)
         hero_layout.setContentsMargins(0, 0, 0, 0)
-        hero_layout.setSpacing(16)
+        hero_layout.setSpacing(14)
 
         # Geri Dön butonu
         top_bar = QHBoxLayout()
         self.back_btn = QPushButton("← Geri")
         self.back_btn.setCursor(Qt.PointingHandCursor)
-        self.back_btn.setFixedHeight(32)
+        self.back_btn.setFixedHeight(34)
+        self.back_btn.setToolTip("Önceki sayfaya dön (Esc)")
         self.back_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.10);
                 color: #ffffff;
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 16px;
-                padding: 4px 14px;
-                font-size: 12px;
-                font-weight: 600;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 17px;
+                padding: 4px 18px;
+                font-size: 13px;
+                font-weight: bold;
             }
             QPushButton:hover {
-                background: rgba(255, 255, 255, 0.18);
+                background: #a980f9;
+                color: #ffffff;
+                border-color: #a980f9;
+            }
+            QPushButton:pressed {
+                background: #8b5cf6;
             }
         """)
         self.back_btn.clicked.connect(self._on_back_clicked)
@@ -135,14 +189,29 @@ class ArtistDetailView(QWidget):
         hero_layout.addLayout(top_bar)
 
         # Hero Kartı (Kapak + Başlık + Eylemler)
+        self.hero_card = QFrame()
+        self.hero_card.setObjectName("ArtistHeroCard")
+        self.hero_card.setStyleSheet("""
+            QFrame#ArtistHeroCard {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(169, 128, 249, 0.22),
+                    stop:0.65 rgba(22, 18, 36, 0.90),
+                    stop:1 rgba(14, 12, 24, 0.98));
+                border-radius: 20px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+        """)
+        card_layout = QVBoxLayout(self.hero_card)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+
         header_row = QHBoxLayout()
         header_row.setSpacing(24)
 
         # Avatar / Kapak Görseli
         self.hero_avatar = QLabel()
-        self.hero_avatar.setFixedSize(124, 124)
+        self.hero_avatar.setFixedSize(130, 130)
         self.hero_avatar.setAlignment(Qt.AlignCenter)
-        self.hero_avatar.setStyleSheet("border-radius: 62px; background: rgba(255, 255, 255, 0.08);")
+        self.hero_avatar.setStyleSheet("border-radius: 65px; background: rgba(255, 255, 255, 0.08);")
         shadow = QGraphicsDropShadowEffect(self.hero_avatar)
         shadow.setBlurRadius(28)
         shadow.setOffset(0, 8)
@@ -152,7 +221,7 @@ class ArtistDetailView(QWidget):
 
         # Başlık ve Bilgiler
         info_col = QVBoxLayout()
-        info_col.setSpacing(6)
+        info_col.setSpacing(8)
         info_col.addStretch(1)
 
         self.hero_tag = QLabel("SANATÇI")
@@ -162,12 +231,12 @@ class ArtistDetailView(QWidget):
         info_col.addWidget(self.hero_tag)
 
         self.hero_title = QLabel("Sanatçı Adı")
-        self.hero_title.setStyleSheet("color: #ffffff; font-size: 32px; font-weight: 800;")
+        self.hero_title.setStyleSheet("color: #ffffff; font-size: 34px; font-weight: 800;")
         self.hero_title.setWordWrap(True)
         info_col.addWidget(self.hero_title)
 
         self.hero_sub = QLabel("Doğrulanmış Sanatçı")
-        self.hero_sub.setStyleSheet("color: rgba(255, 255, 255, 0.65); font-size: 13px;")
+        self.hero_sub.setStyleSheet("color: rgba(255, 255, 255, 0.70); font-size: 13px;")
         info_col.addWidget(self.hero_sub)
 
         # Eylem Butonları Satırı
@@ -183,7 +252,7 @@ class ArtistDetailView(QWidget):
                 background: #a980f9;
                 color: #ffffff;
                 border-radius: 19px;
-                padding: 6px 20px;
+                padding: 6px 22px;
                 font-size: 13px;
                 font-weight: bold;
                 border: none;
@@ -261,7 +330,8 @@ class ArtistDetailView(QWidget):
         info_col.addStretch(1)
 
         header_row.addLayout(info_col, stretch=1)
-        hero_layout.addLayout(header_row)
+        card_layout.addLayout(header_row)
+        hero_layout.addWidget(self.hero_card)
 
         self.content_layout.addWidget(hero_box)
 
@@ -291,11 +361,22 @@ class ArtistDetailView(QWidget):
 
         # Placeholder avatar
         col = cover_color_for(clean_name)
+        if hasattr(self, "hero_card"):
+            self.hero_card.setStyleSheet(f"""
+                QFrame#ArtistHeroCard {{
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 {col}44,
+                        stop:0.65 rgba(20, 16, 34, 0.90),
+                        stop:1 rgba(12, 10, 24, 0.98));
+                    border-radius: 20px;
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                }}
+            """)
         self.hero_avatar.setPixmap(QPixmap())
         initial = clean_name[0].upper() if clean_name else "👤"
         self.hero_avatar.setText(initial)
         self.hero_avatar.setStyleSheet(
-            f"border-radius: 62px; background: {col}; color: #ffffff; font-size: 42px; font-weight: bold;"
+            f"border-radius: 65px; background: {col}; color: #ffffff; font-size: 44px; font-weight: bold;"
         )
 
         # Kütüphanedeki parçaları topla
@@ -311,7 +392,7 @@ class ArtistDetailView(QWidget):
 
         # Durum göstergesi: Yükleniyor
         self.loading_label = QLabel("⏳ Sanatçı bilgileri ve popüler parçalar yükleniyor…")
-        self.loading_label.setObjectName("Muted")
+        self.loading_label.setStyleSheet("color: rgba(255, 255, 255, 0.65); font-size: 13px; padding: 10px 0;")
         self.sections_layout.addWidget(self.loading_label)
 
         # 2) Arka plan iş parçacığı: YouTube Music verilerini çek
@@ -577,6 +658,8 @@ class ArtistDetailView(QWidget):
         hscroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
         cards_widget = QWidget()
+        cards_widget.setAttribute(Qt.WA_StyledBackground, True)
+        cards_widget.setStyleSheet("background: transparent;")
         cards_layout = QHBoxLayout(cards_widget)
         cards_layout.setContentsMargins(0, 0, 0, 0)
         cards_layout.setSpacing(16)
@@ -669,6 +752,8 @@ class ArtistDetailView(QWidget):
         hscroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
         cards_widget = QWidget()
+        cards_widget.setAttribute(Qt.WA_StyledBackground, True)
+        cards_widget.setStyleSheet("background: transparent;")
         cards_layout = QHBoxLayout(cards_widget)
         cards_layout.setContentsMargins(0, 0, 0, 0)
         cards_layout.setSpacing(16)
@@ -765,6 +850,17 @@ class ArtistDetailView(QWidget):
         self.radio_btn.setVisible(False)
 
         col = cover_color_for(title or "Albüm")
+        if hasattr(self, "hero_card"):
+            self.hero_card.setStyleSheet(f"""
+                QFrame#ArtistHeroCard {{
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 {col}44,
+                        stop:0.65 rgba(20, 16, 34, 0.90),
+                        stop:1 rgba(12, 10, 24, 0.98));
+                    border-radius: 20px;
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                }}
+            """)
         self.hero_avatar.setPixmap(QPixmap())
         self.hero_avatar.setText("💿")
         self.hero_avatar.setStyleSheet(
@@ -773,7 +869,7 @@ class ArtistDetailView(QWidget):
 
         self._clear_sections()
         self.loading_label = QLabel("⏳ Albüm parçaları yükleniyor…")
-        self.loading_label.setObjectName("Muted")
+        self.loading_label.setStyleSheet("color: rgba(255, 255, 255, 0.65); font-size: 13px; padding: 10px 0;")
         self.sections_layout.addWidget(self.loading_label)
 
         def worker():
@@ -947,6 +1043,20 @@ class ArtistDetailView(QWidget):
                 self.store.save()
             self.store.playlistsChanged.emit()
             self.store.statusMessage.emit(f"✓ \"{target_name}\" kütüphaneye eklendi ({len(song_list)} şarkı).", "success")
+
+    def keyPressEvent(self, event):  # noqa: N802
+        if event.key() in (Qt.Key_Escape, Qt.Key_Back):
+            self._on_back_clicked()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def mousePressEvent(self, event):  # noqa: N802
+        if event.button() == Qt.BackButton:
+            self._on_back_clicked()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def _on_thumbnail_ready(self, key: str):
         pass

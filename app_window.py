@@ -729,6 +729,7 @@ class MainWindow(QMainWindow):
             return
         if self.view_stack.currentWidget() is not self.artist_view:
             self._pre_artist_index = self.view_stack.currentIndex()
+            self._pre_artist_playlist = getattr(self.library_view, "_last_playlist_name", None) or self.store.active_playlist
         self.artist_view.show_artist(clean, browse_id)
         self._switch_view(10)
 
@@ -737,12 +738,30 @@ class MainWindow(QMainWindow):
             return
         if self.view_stack.currentWidget() is not self.artist_view:
             self._pre_artist_index = self.view_stack.currentIndex()
+            self._pre_artist_playlist = getattr(self.library_view, "_last_playlist_name", None) or self.store.active_playlist
         self.artist_view.show_album(browse_id, title, artist)
         self._switch_view(10)
 
     def _close_artist_view(self):
         prev = getattr(self, "_pre_artist_index", 0)
         self._switch_view(prev)
+        index_to_nav = {
+            0: "home",
+            1: "library" if getattr(self.library_view, "_mode", "playlist") == "playlist" else getattr(self.library_view, "_mode", "liked"),
+            2: "radio",
+            3: "explore",
+            4: "stats",
+            5: "library",
+            6: "downloads",
+            8: "mixes",
+            9: "wrapped",
+        }
+        self._select_nav_silent(index_to_nav.get(prev, "home"))
+        if prev == 1 and hasattr(self, "library_view"):
+            if getattr(self.library_view, "_mode", "playlist") == "playlist":
+                pl = getattr(self, "_pre_artist_playlist", None) or self.store.active_playlist
+                if pl and pl in self.store.playlists:
+                    self.library_view.show_playlist(pl)
 
     def _play_single_track(self, song: dict):
         if not song:

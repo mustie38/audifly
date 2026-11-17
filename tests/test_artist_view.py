@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication
 
 from mustiefly_qt.views.artist_view import ArtistDetailView
@@ -204,6 +204,13 @@ def test_navigation_back_stack(artist_view_fixture):
 
     # Tekrar geri tıkla -> backRequested sinyali yayılmalı
     view._on_back_clicked()
+    assert back_requested
+
+    # Esc tuşuna basınca da geri tetiklenmeli
+    back_requested = False
+    from PySide6.QtGui import QKeyEvent
+    esc_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key_Escape, Qt.NoModifier)
+    view.keyPressEvent(esc_event)
     assert back_requested
 
 
