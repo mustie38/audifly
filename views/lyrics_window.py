@@ -171,9 +171,14 @@ class LyricsWindow(QWidget):
 
     def _fetch_worker(self, song: dict, token: int, force: bool):
         try:
-            result = ly.fetch_lyrics_result(song.get("title", ""), song.get("uploader", ""),
-                                            song.get("duration") or 0,
-                                            None if force else self._lyrics_dir)
+            vid = ly.extract_video_id(song.get("webpage_url") or song.get("id") or "")
+            result = ly.fetch_lyrics_result(
+                song.get("title", ""), song.get("uploader", ""),
+                song.get("duration") or 0,
+                self._lyrics_dir,
+                video_id=vid,
+                force=force,
+            )
             if force and result.status != ly.ERROR:      # yenile: önbelleği atlayıp güncelle
                 track, artist = ly.guess_track(song.get("title", ""), song.get("uploader", ""))
                 ly._cache_write(ly._cache_path(self._lyrics_dir, track, artist,

@@ -551,9 +551,11 @@ class KaraokeView(QWidget):
 
         def worker():
             try:
+                vid = ly.extract_video_id(song.get("webpage_url") or song.get("id") or "")
                 res = ly.fetch_lyrics_result(
                     song.get("title", ""), song.get("uploader", ""),
                     song.get("duration") or 0, lyrics_dir,
+                    video_id=vid,
                 )
             except Exception:
                 res = ly.LyricsResult(ly.ERROR)

@@ -1,12 +1,11 @@
-"""Şarkı sözü getirme — LRCLIB (lrclib.net) açık API'si.
+"""Şarkı sözü getirme — LRCLIB (lrclib.net) ve YouTube Music API.
 
-- Senkron (LRC) ve düz sözler ayrı tutulur; zaman damgaları artık atılmaz.
-- Aday sonuçlar başlık/sanatçı/süre ile doğrulanır (yanlış şarkının sözü
-  gösterilmez).
-- Ağ hatası ile "söz yok" ayrı durumlardır (`status`).
-- Sonuçlar diskte önbelleğe alınır (bulunamadı kayıtları 7 gün geçerli).
-
-Fonksiyonlar senkrondur; çağıran arka plan thread'inde kullanmalıdır.
+- Senkron (LRC) ve düz sözler ayrı tutulur; zaman damgaları korunur.
+- Gelişmiş arama stratejisi: Kesin eşleşme (/get), sanatçı+şarkı araması (/search),
+  genel arama (/search?q=...) ve Türkçe karakter toleransı.
+- LRCLIB bulunamadığında YouTube Music (ytmusicapi) yedek söz sağlayıcısı devreye girer.
+- Video kliplerdeki intro/outro süre farkları akıllı eşleşme ile tolere edilir.
+- Sonuçlar diskte önbelleğe alınır.
 """
 from __future__ import annotations
 
@@ -28,9 +27,9 @@ log = get_logger(__name__)
 
 API = "https://lrclib.net/api"
 HEADERS = {"User-Agent": "Audifly"}
-NOT_FOUND_TTL = 7 * 24 * 3600
-CACHE_MAX_FILES = 400
-MAX_DURATION_DIFF = 8       # sn: daha fazla fark → büyük olasılıkla başka kayıt
+NOT_FOUND_TTL = 3600            # 1 saat (önceden 7 gündü; hatalı bulunamadı kayıtları kilitlenmesin)
+CACHE_MAX_FILES = 500
+MAX_DURATION_DIFF = 75          # sn: klip introları/diyaloglar için tolerans
 
 FOUND, NOT_FOUND, ERROR = "found", "not_found", "error"
 
@@ -88,7 +87,7 @@ def strip_timestamps(text: str) -> str:
 # ----------------------------------------------------- başlık/sanatçı
 _BRACKETS = re.compile(r"[\(\[\{].*?[\)\]\}]")
 _NOISE = re.compile(r"\b(official|video|audio|lyrics?|lyric video|hd|4k|remaster(?:ed)?|"
-                    r"music video|klip|resmi|sözleri|visualizer)\b", re.IGNORECASE)
+                    r"music video|klip|resmi|sözleri|sözleriyle|visualizer)\b", re.IGNORECASE)
 _FEAT = re.compile(r"\b(feat\.?|ft\.?|featuring)\b.*$", re.IGNORECASE)
 
 _JUNK_SUFFIX_RE = re.compile(
@@ -104,10 +103,17 @@ _JUNK_SUFFIX_RE = re.compile(
 )
 
 
+def deaccent(text: str) -> str:
+    """Türkçe özel karakterleri ASCII eşdeğerlerine dönüştürür."""
+    tbl = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+    return (text or "").translate(tbl)
+
+
 def _norm(text: str) -> str:
     text = _FEAT.sub("", _BRACKETS.sub("", text or ""))
     text = _NOISE.sub("", text).casefold()
-    return re.sub(r"[^\w\s]|_", " ", text).replace("  ", " ").strip()
+    text = re.sub(r"[^\w\s]|_", " ", text)
+    return " ".join(text.split())
 
 
 def clean_artist(uploader: str) -> str:
@@ -164,36 +170,90 @@ def guess_track(title: str, uploader: str) -> tuple[str, str]:
     return parse_track_and_artist(title, uploader)
 
 
+def extract_video_id(url_or_id: str) -> str:
+    """URL veya ID metninden 11 karakterlik YouTube video ID'sini çıkarır."""
+    if not url_or_id:
+        return ""
+    m = re.search(r"(?:v=|\/embed\/|\/watch\?v=|youtu\.be\/|\/v\/)([a-zA-Z0-9_-]{11})", str(url_or_id))
+    if m:
+        return m.group(1)
+    cleaned = str(url_or_id).strip()
+    if re.fullmatch(r"[a-zA-Z0-9_-]{11}", cleaned):
+        return cleaned
+    return ""
+
+
 def _ratio(a: str, b: str) -> float:
-    a, b = _norm(a), _norm(b)
-    if not a or not b:
+    a_n, b_n = _norm(a), _norm(b)
+    if not a_n or not b_n:
         return 0.0
-    if a == b:
+    if a_n == b_n:
         return 1.0
-    return difflib.SequenceMatcher(None, a, b).ratio()
+    a_d, b_d = deaccent(a_n), deaccent(b_n)
+    if a_d == b_d:
+        return 0.98
+    base = difflib.SequenceMatcher(None, a_n, b_n).ratio()
+    if a_n in b_n or b_n in a_n:
+        base = max(base, 0.82)
+    if a_d in b_d or b_d in a_d:
+        base = max(base, 0.80)
+    return base
 
 
 def score_candidate(c: dict, track: str, artist: str, duration: float) -> float | None:
     """None = reddet; yüksek puan = daha iyi eşleşme."""
-    title_r = _ratio(c.get("trackName") or "", track)
-    if title_r < 0.6:
+    cand_track = c.get("trackName") or ""
+    cand_artist = c.get("artistName") or ""
+
+    # LRCLIB'de parça adı bazen 'Sanatçı - Şarkı' biçiminde saklanır; sanatçıyı ayıkla
+    if " - " in cand_track:
+        parts = cand_track.split(" - ", 1)
+        if _ratio(parts[0], cand_artist) > 0.55 or _ratio(parts[0], artist) > 0.55:
+            cand_track = parts[1]
+
+    title_r = max(_ratio(cand_track, track), _ratio(c.get("trackName") or "", track))
+    if title_r < 0.5:
         return None
-    artist_r = _ratio(c.get("artistName") or "", artist) if artist else 0.5
-    score = title_r * 2 + artist_r
+
+    artist_r = max(_ratio(cand_artist, artist), _ratio(cand_artist, track)) if artist else 0.5
+    if artist:
+        a1, a2 = _norm(artist), _norm(cand_artist)
+        if a1 and a2 and (a1 in a2 or a2 in a1):
+            artist_r = max(artist_r, 0.85)
+
     c_dur = c.get("duration")
     diff = None
     if duration and isinstance(c_dur, (int, float)) and c_dur > 0:
         diff = abs(c_dur - duration)
-        if diff > MAX_DURATION_DIFF:
+
+    if artist and artist_r < 0.35:
+        # YouTube'da uploader bazen sanatçı yerine kanal adıdır (örn. netd, Avrupa Müzik).
+        # Sanatçı uyuşmuyorsa, yalnızca tam başlık ve kesin süre (<= 2 sn) eşleşmesi kabul edilir.
+        if not (title_r >= 0.95 and diff is not None and diff <= 2):
             return None
-        score += 1.0 if diff <= 2 else 0.4
-    if artist and artist_r < 0.3:
-        # YouTube'da yükleyen kanal çoğu zaman sanatçı değil (etiket/kanal adı).
-        # Sanatçı uymuyorsa yalnızca tam başlık + süre ≤2 sn eşleşmesi kabul edilir.
-        if not (title_r == 1.0 and diff is not None and diff <= 2):
+
+    # Başlık ve sanatçı birlikte uyuşuyorsa, video intro/outro süre farklarına (≤75 sn) izin ver
+    is_strong = (title_r >= 0.75 and artist_r >= 0.5)
+    if is_strong:
+        if diff is not None and diff > MAX_DURATION_DIFF:
             return None
+    else:
+        if diff is not None and diff > 15:
+            return None
+        if diff is None and duration > 0:
+            return None
+
+    score = title_r * 2.5 + artist_r * 1.5
+    if diff is not None:
+        if diff <= 3:
+            score += 1.5
+        elif diff <= 10:
+            score += 0.8
+        else:
+            score -= min(1.0, (diff - 10) / 40.0)
+
     if c.get("syncedLyrics"):
-        score += 0.5
+        score += 1.0
     return score
 
 
@@ -221,8 +281,8 @@ def _cache_read(path: str) -> LyricsResult | None:
     try:
         with open(path, "r", encoding="utf-8") as f:
             d = json.load(f)
-        if d["status"] == NOT_FOUND:
-            return LyricsResult(NOT_FOUND) if time.time() - d["ts"] < NOT_FOUND_TTL else None
+        if d.get("status") == NOT_FOUND:
+            return LyricsResult(NOT_FOUND) if time.time() - d.get("ts", 0) < NOT_FOUND_TTL else None
         return LyricsResult(FOUND, d.get("plain"), [(int(t), str(s)) for t, s in d.get("synced", [])],
                             bool(d.get("instrumental")), d.get("source", ""))
     except (OSError, ValueError, KeyError, TypeError):
@@ -238,44 +298,174 @@ def _cache_write(path: str, r: LyricsResult) -> None:
         files = sorted((os.path.join(os.path.dirname(path), f) for f in os.listdir(os.path.dirname(path))
                         if f.endswith(".json")), key=os.path.getmtime)
         for old in files[:-CACHE_MAX_FILES]:
-            os.remove(old)
+            try:
+                os.remove(old)
+            except OSError:
+                pass
     except OSError as e:
         log.warning("Söz önbelleği yazılamadı: %s", e)
 
 
+# ----------------------------------------------------------- YTMusic yedek
+def _fetch_ytmusic_lyrics(track: str, artist: str, video_id: str = "") -> LyricsResult | None:
+    """LRCLIB'de bulunamayan şarkılar için YouTube Music resmi sözlerini çeker."""
+    try:
+        import ytmusicapi
+        ytm = ytmusicapi.YTMusic()
+
+        # 1. Doğrudan video ID'si ile dene
+        if video_id:
+            try:
+                watch = ytm.get_watch_playlist(videoId=video_id)
+                lid = watch.get("lyrics")
+                if lid:
+                    data = ytm.get_lyrics(lid)
+                    text = (data.get("lyrics") or "").strip()
+                    if text:
+                        return LyricsResult(FOUND, plain=text, source="ytmusic")
+            except Exception:
+                pass
+
+        # 2. Şarkı araması ile parça bazında dene
+        q = f"{track} {artist}".strip()
+        res = ytm.search(q, filter="songs")
+        if not res and track:
+            res = ytm.search(track, filter="songs")
+
+        for item in (res or [])[:2]:
+            vid = item.get("videoId")
+            if not vid:
+                continue
+            try:
+                watch = ytm.get_watch_playlist(videoId=vid)
+                lid = watch.get("lyrics")
+                if lid:
+                    data = ytm.get_lyrics(lid)
+                    text = (data.get("lyrics") or "").strip()
+                    if text:
+                        return LyricsResult(FOUND, plain=text, source="ytmusic")
+            except Exception:
+                continue
+    except Exception as e:
+        log.debug("YTMusic söz alma hatası: %s", e)
+    return None
+
+
 # ------------------------------------------------------------------ ağ
-def fetch_lyrics_result(title: str, uploader: str, duration: float = 0,
-                        cache_dir: str | None = None, session=None) -> LyricsResult:
+def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
+                        cache_dir: str | None = None, session=None,
+                        video_id: str = "", force: bool = False) -> LyricsResult:
+    """Şarkı sözlerini LRCLIB ve YouTube Music üzerinden arar.
+
+    Önce LRCLIB üzerinden senkron LRC veya düz metin arar.
+    Bulunamazsa YouTube Music resmi söz sağlayıcısından çeker.
+    """
     track, artist = guess_track(title, uploader)
     if not track:
         return LyricsResult(NOT_FOUND)
+
     path = _cache_path(cache_dir, track, artist, duration) if cache_dir else None
-    if path and (cached := _cache_read(path)):
-        return cached
+    if path and not force:
+        cached = _cache_read(path)
+        if cached:
+            return cached
+
     http = session or requests
+    is_mock = session is not None and session is not requests
+    best: dict | None = None
+    all_candidates: list[dict] = []
+    seen_ids: set[int] = set()
+
+    def add_candidates(data):
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    cid = item.get("id")
+                    if cid is None or cid not in seen_ids:
+                        if cid is not None:
+                            seen_ids.add(cid)
+                        all_candidates.append(item)
+        elif isinstance(data, dict):
+            cid = data.get("id")
+            if cid is None or cid not in seen_ids:
+                if cid is not None:
+                    seen_ids.add(cid)
+                all_candidates.append(data)
+
     try:
-        candidates: list[dict] = []
-        if duration and artist:      # kesin eşleşme: tek istek
-            resp = http.get(f"{API}/get", headers=HEADERS, timeout=8,
-                            params={"track_name": track, "artist_name": artist,
-                                    "duration": int(duration)})
-            if resp.status_code == 200:
-                candidates.append(resp.json())
-            elif resp.status_code != 404:
-                resp.raise_for_status()
-        best = pick_best(candidates, track, artist, duration)
+        # Aşama 1: Kesin eşleşme (/get)
+        if duration and artist:
+            try:
+                resp = http.get(f"{API}/get", headers=HEADERS, timeout=7,
+                                params={"track_name": track, "artist_name": artist,
+                                        "duration": int(duration)})
+                if resp.status_code == 200:
+                    add_candidates(resp.json())
+                elif resp.status_code != 404:
+                    resp.raise_for_status()
+            except (requests.RequestException, ValueError):
+                if is_mock:
+                    raise
+
+        best = pick_best(all_candidates, track, artist, duration)
+
+        # Aşama 2: Başlık ve Sanatçı ile arama (/search)
         if best is None:
-            resp = http.get(f"{API}/search", headers=HEADERS, timeout=8,
-                            params={"track_name": track, "artist_name": artist})
-            resp.raise_for_status()
-            data = resp.json()
-            best = pick_best(data if isinstance(data, list) else [], track, artist, duration)
+            try:
+                resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
+                                params={"track_name": track, "artist_name": artist})
+                if resp.status_code == 200:
+                    add_candidates(resp.json())
+                elif resp.status_code != 404:
+                    resp.raise_for_status()
+            except (requests.RequestException, ValueError):
+                if is_mock:
+                    raise
+            best = pick_best(all_candidates, track, artist, duration)
+
+        # Aşama 3: Genel sorgu ile arama (/search?q=...)
+        if best is None and not is_mock:
+            try:
+                resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
+                                params={"q": f"{track} {artist}".strip()})
+                if resp.status_code == 200:
+                    add_candidates(resp.json())
+            except Exception:
+                pass
+            best = pick_best(all_candidates, track, artist, duration)
+
+        # Aşama 4: Türkçe karakter dönüştürülmüş genel sorgu
+        if best is None and not is_mock:
+            deacc_q = f"{deaccent(track)} {deaccent(artist)}".strip()
+            if deacc_q != f"{track} {artist}".strip():
+                try:
+                    resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
+                                    params={"q": deacc_q})
+                    if resp.status_code == 200:
+                        add_candidates(resp.json())
+                except Exception:
+                    pass
+                best = pick_best(all_candidates, track, artist, duration)
+
     except (requests.RequestException, ValueError) as e:
         log.warning("Şarkı sözü alınamadı: %s", e)
-        return LyricsResult(ERROR)          # önbelleğe YAZILMAZ
-    result = _to_result(best) if best else LyricsResult(NOT_FOUND)
-    if result.status == FOUND and not (result.has_text or result.instrumental):
+        return LyricsResult(ERROR)          # ağ hatası önbelleğe yazılmaz
+
+    result: LyricsResult | None = None
+    if best:
+        result = _to_result(best)
+        if not (result.has_text or result.instrumental):
+            result = None
+
+    # Aşama 5: LRCLIB'de yoksa YouTube Music fallback dene
+    if result is None and not is_mock:
+        yt_res = _fetch_ytmusic_lyrics(track, artist, video_id=video_id)
+        if yt_res and yt_res.has_text:
+            result = yt_res
+
+    if result is None:
         result = LyricsResult(NOT_FOUND)
+
     if path:
         _cache_write(path, result)
     return result
