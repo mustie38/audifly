@@ -91,6 +91,18 @@ _NOISE = re.compile(r"\b(official|video|audio|lyrics?|lyric video|hd|4k|remaster
                     r"music video|klip|resmi|sözleri|visualizer)\b", re.IGNORECASE)
 _FEAT = re.compile(r"\b(feat\.?|ft\.?|featuring)\b.*$", re.IGNORECASE)
 
+_JUNK_SUFFIX_RE = re.compile(
+    r"\s*(?:"
+    r"[\(\[]\s*(?:official\s+(?:music\s+)?video|official\s+audio|official\s+visualizer|"
+    r"official\s+lyric\s+video|official\s+mv|music\s+video|video\s+klip|klip|"
+    r"lyric\s+video|lyrics\s+video|lyrics|lyric|sözleri|sözleriyle|audio|visualizer|"
+    r"4k|hd|uhd|hq|clip|video)\s*[\)\]]|"
+    r"\|\s*(?:video\s*klip|official\s*video|official\s*audio|netd\s*m[uü]zik|avrupa\s*m[uü]zik|klip).*$|"
+    r"//\s*(?:video\s*klip|official\s*video|official\s*audio|netd\s*m[uü]zik|avrupa\s*m[uü]zik|klip).*$"
+    r")",
+    re.IGNORECASE,
+)
+
 
 def _norm(text: str) -> str:
     text = _FEAT.sub("", _BRACKETS.sub("", text or ""))
@@ -104,15 +116,52 @@ def clean_artist(uploader: str) -> str:
     return a
 
 
+def clean_track_title(title: str) -> str:
+    """Parça başlığındaki '(Official Video)', '| Video Klip' gibi gereksiz video etiketlerini temizler."""
+    if not title:
+        return ""
+    cleaned = _JUNK_SUFFIX_RE.sub("", title).strip()
+    return cleaned or title
+
+
+def parse_track_and_artist(title: str, uploader: str = "", entry: dict | None = None) -> tuple[str, str]:
+    """YouTube başlığı ve kanal bilgisinden şarkı adı ve gerçek sanatçıyı ayrıştırır.
+
+    Örnekler:
+        "Bengü - Saat 3 (Official Video)", "Avrupa Müzik" -> ("Saat 3", "Bengü")
+        "Motive - HANIMEFENDİ", "Motive" -> ("HANIMEFENDİ", "Motive")
+        "Uzi & Motive - Cennet", "UZI" -> ("Cennet", "Uzi & Motive")
+        "Saat 3", "Bengü - Topic" -> ("Saat 3", "Bengü")
+    """
+    raw_title = str(title or "").strip()
+    raw_uploader = str(uploader or "").strip()
+
+    if isinstance(entry, dict):
+        exp_artist = str(entry.get("artist") or entry.get("creator") or "").strip()
+        exp_track = str(entry.get("track") or "").strip()
+        if exp_artist and exp_track:
+            return clean_track_title(exp_track), exp_artist
+        if exp_artist and not raw_uploader:
+            raw_uploader = exp_artist
+
+    cleaned_uploader = clean_artist(raw_uploader)
+
+    # Başlıkta "Sanatçı - Şarkı" ayrımı var mı? ( - , – , — )
+    if re.search(r"\s+[-–—]\s+", raw_title):
+        parts = re.split(r"\s+[-–—]\s+", raw_title, maxsplit=1)
+        if len(parts) == 2:
+            left, right = parts[0].strip(), parts[1].strip()
+            cleaned_right = clean_track_title(right)
+            if left and cleaned_right:
+                return cleaned_right, left
+
+    cleaned_title = clean_track_title(raw_title)
+    return cleaned_title or raw_title, cleaned_uploader or "Bilinmeyen Sanatçı"
+
+
 def guess_track(title: str, uploader: str) -> tuple[str, str]:
     """YouTube başlığından (track, artist) tahmini. 'Sanatçı - Şarkı' kalıbı desteklenir."""
-    artist = clean_artist(uploader)
-    cleaned = _BRACKETS.sub("", title or "").strip()
-    if " - " in cleaned:
-        left, right = [p.strip() for p in cleaned.split(" - ", 1)]
-        if not artist or _norm(left) == _norm(artist) or _norm(artist) in _norm(left):
-            return right, left
-    return cleaned, artist
+    return parse_track_and_artist(title, uploader)
 
 
 def _ratio(a: str, b: str) -> float:

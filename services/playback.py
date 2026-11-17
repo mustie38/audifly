@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from mustiefly_qt.helpers.constants import (
     AppPaths, needs_stream_resolve, offline_path_for, resolve_stream_url, yt_dlp_base_opts,
 )
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.history_store import HistoryStore
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.helpers.logging_setup import get_logger
@@ -273,11 +274,16 @@ class PlaybackEngine(QObject):
                 thumb = e.get("thumbnail")
                 if not thumb and e.get("thumbnails"):
                     thumb = e["thumbnails"][-1].get("url")
+                clean_title, clean_artist = parse_track_and_artist(
+                    e.get("title", "Bilinmeyen Şarkı"),
+                    e.get("uploader") or e.get("channel") or "Bilinmeyen Sanatçı",
+                    e,
+                )
                 results.append({
-                    "title": e.get("title", "Bilinmeyen Şarkı"),
+                    "title": clean_title,
                     "webpage_url": url,
                     "duration": e.get("duration") or 0,
-                    "uploader": e.get("uploader") or e.get("channel") or "Bilinmeyen Sanatçı",
+                    "uploader": clean_artist,
                     "thumbnail": thumb,
                     "liked": False,
                     "added_date": datetime.now().isoformat(),

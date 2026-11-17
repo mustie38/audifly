@@ -29,6 +29,10 @@ def test_guess_track_from_youtube_titles():
     assert ly.guess_track("Ceza - Holocaust (Official Video)", "CezaVEVO") == ("Holocaust", "Ceza")
     assert ly.guess_track("Yalnızım Dostum [Lyrics]", "Mabel Matiz - Topic") == ("Yalnızım Dostum", "Mabel Matiz")
     assert ly.guess_track("Bir Şarkı", "Kanal") == ("Bir Şarkı", "Kanal")
+    # Bengü - Saat 3 uploaded by Avrupa Müzik
+    assert ly.parse_track_and_artist("Bengü - Saat 3 (Official Video)", "Avrupa Müzik") == ("Saat 3", "Bengü")
+    assert ly.parse_track_and_artist("Bengü - Saat 3 | Video Klip", "netd müzik") == ("Saat 3", "Bengü")
+    assert ly.parse_track_and_artist("Motive - HANIMEFENDİ", "Motive") == ("HANIMEFENDİ", "Motive")
 
 
 def cand(name, artist, dur, synced=True):

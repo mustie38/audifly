@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 import yt_dlp
 
 from mustiefly_qt.helpers.constants import yt_dlp_base_opts
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.helpers.spotify_import import (
     SpotifyApiError, SpotifyAuthError, extract_spotify_playlist_id,
     export_playlist_m3u, fetch_spotify_playlist, parse_m3u_file,
@@ -251,11 +252,16 @@ def extract_youtube_playlist(url: str) -> tuple[str, list[dict]]:
         if not web or "://" not in web:
             continue
         thumbs = e.get("thumbnails") or []
+        clean_title, clean_artist = parse_track_and_artist(
+            e.get("title") or "Bilinmeyen Şarkı",
+            e.get("uploader") or e.get("channel") or "",
+            e,
+        )
         songs.append({
-            "title": e.get("title") or "Bilinmeyen Şarkı",
+            "title": clean_title,
             "webpage_url": web,
             "duration": int(e.get("duration") or 0),
-            "uploader": e.get("uploader") or e.get("channel") or "",
+            "uploader": clean_artist,
             "thumbnail": (thumbs[-1] or {}).get("url") if thumbs else e.get("thumbnail"),
             "liked": False,
             "added_date": datetime.now().isoformat(),
@@ -362,11 +368,16 @@ def import_playlist_m3u(store: PlaylistStore, parent=None):
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
+                clean_title, clean_artist = parse_track_and_artist(
+                    info.get('title', title_hint or 'Bilinmeyen Şarkı'),
+                    info.get('uploader') or info.get('channel') or 'Bilinmeyen Sanatçı',
+                    info,
+                )
                 items.append({
-                    'title': info.get('title', title_hint or 'Bilinmeyen Şarkı'),
+                    'title': clean_title,
                     'webpage_url': info.get('webpage_url', url),
                     'duration': info.get('duration', dur_hint) or 0,
-                    'uploader': info.get('uploader') or info.get('channel') or 'Bilinmeyen Sanatçı',
+                    'uploader': clean_artist,
                     'thumbnail': info.get('thumbnail'),
                     'liked': False,
                     'added_date': datetime.now().isoformat(),

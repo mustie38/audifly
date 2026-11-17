@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from mustiefly_qt.helpers.constants import format_time, offline_path_for
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 
 SONG_MIME = "application/x-mustiefly-song"
 
@@ -137,12 +138,16 @@ class SongRow(QWidget):
         )
         layout.addWidget(self.thumb_label)
 
-        title = song.get("title", "Bilinmeyen Şarkı")
+        parsed_title, parsed_artist = parse_track_and_artist(
+            song.get("title", "Bilinmeyen Şarkı"),
+            song.get("uploader", "Bilinmeyen Sanatçı"),
+            song,
+        )
         text_box = QWidget()
         text_layout = QHBoxLayout(text_box)
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(4)
-        title_label = QLabel(title if len(title) <= 60 else title[:57] + "...")
+        title_label = QLabel(parsed_title if len(parsed_title) <= 60 else parsed_title[:57] + "...")
         title_label.setStyleSheet("font-weight: 600;")
         text_layout.addWidget(title_label)
         self.offline_badge = QLabel("✓")
@@ -155,7 +160,7 @@ class SongRow(QWidget):
         layout.addWidget(text_box, stretch=1)
 
         if show_uploader:
-            uploader_label = QLabel(song.get("uploader", "Bilinmeyen Sanatçı"))
+            uploader_label = QLabel(parsed_artist)
             uploader_label.setObjectName("Muted")
             uploader_label.setFixedWidth(180)
             layout.addWidget(uploader_label)

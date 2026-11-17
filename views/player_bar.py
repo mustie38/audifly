@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (QGraphicsDropShadowEffect, QGraphicsOpacityEffect
                                QWidget, QFrame, QApplication, QInputDialog)
 
 from mustiefly_qt.helpers.constants import cover_color_for, format_time
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.sleep_timer import SleepTimer
 from mustiefly_qt.services.thumbnails import ThumbnailService
@@ -695,7 +696,12 @@ class PlayerBar(QWidget):
             self._current_key = None
             return
         self._current_key = song.get("webpage_url")
-        self._set_now_text(song.get("title", ""), song.get("uploader", "") or "YouTube Stream")
+        clean_title, clean_artist = parse_track_and_artist(
+            song.get("title", ""),
+            song.get("uploader", "") or "YouTube Stream",
+            song,
+        )
+        self._set_now_text(clean_title, clean_artist)
         self.like_btn.set_active(bool(song.get("liked")))
         pm = self.thumbnails.pixmap_for(song, COVER_SIZE) if self.thumbnails else None
         if pm is not None and not pm.isNull():

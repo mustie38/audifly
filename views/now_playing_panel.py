@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from mustiefly_qt.helpers.constants import cover_color_for, format_time, shade_color
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
@@ -163,15 +164,19 @@ class NowPlayingPanel(QWidget):
     def _on_song_started(self, playlist_name, index, song, is_offline):
         self._playlist_name = playlist_name
         self._index = index
-        title = song.get("title", "")
-        self.title_label.setText(title)
+        clean_title, clean_artist = parse_track_and_artist(
+            song.get("title", ""),
+            song.get("uploader", ""),
+            song,
+        )
+        self.title_label.setText(clean_title)
         if song.get("local_path"):
             source = "💽 Yerel Dosya"
         elif is_offline:
             source = "📀 Çevrimdışı"
         else:
             source = "🌐 Çevrimiçi"
-        self.artist_label.setText(f"{song.get('uploader', '')} • {playlist_name} • {source}")
+        self.artist_label.setText(f"{clean_artist} • {playlist_name} • {source}")
         self.like_btn.setVisible(True)
         self.like_btn.setText("♥ Beğenildi" if song.get("liked") else "♡ Beğen")
         self.progress_section.setVisible(True)

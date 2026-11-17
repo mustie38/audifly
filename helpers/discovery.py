@@ -33,6 +33,7 @@ from datetime import datetime
 import yt_dlp
 
 from mustiefly_qt.helpers.constants import yt_dlp_base_opts
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.helpers.logging_setup import get_logger
 from mustiefly_qt.helpers.persistence import atomic_write_json
 from mustiefly_qt.helpers.spotify_import import fetch_spotify_playlist, search_spotify_playlist
@@ -607,11 +608,16 @@ class DiscoveryService:
         if not thumb:
             thumbs = entry.get("thumbnails") or []
             thumb = thumbs[-1].get("url") if thumbs else None
+        clean_title, clean_artist = parse_track_and_artist(
+            entry.get("title", "Bilinmeyen Şarkı"),
+            entry.get("uploader") or entry.get("channel") or "Bilinmeyen Sanatçı",
+            entry,
+        )
         return {
-            "title": entry.get("title", "Bilinmeyen Şarkı"),
+            "title": clean_title,
             "webpage_url": webpage_url,
             "duration": entry.get("duration", 0) or 0,
-            "uploader": entry.get("uploader") or entry.get("channel") or "Bilinmeyen Sanatçı",
+            "uploader": clean_artist,
             "thumbnail": thumb,
             "liked": False,
             "added_date": datetime.now().isoformat(),

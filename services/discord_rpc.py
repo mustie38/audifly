@@ -10,6 +10,7 @@ except ImportError:
 from PySide6.QtCore import QObject
 
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.helpers.logging_setup import get_logger
 
@@ -85,20 +86,29 @@ class DiscordRPCService(QObject):
         if not self.is_connected or not self.rpc or not self.current_song:
             return
 
-        title = self.current_song.get("title", "Bilinmeyen Şarkı")
-        artist = self.current_song.get("uploader", "Bilinmeyen Sanatçı")
-        
+        raw_title = self.current_song.get("title", "Bilinmeyen Şarkı")
+        raw_uploader = self.current_song.get("uploader", "Bilinmeyen Sanatçı")
+        title, artist = parse_track_and_artist(raw_title, raw_uploader, self.current_song)
+
         # Duruma göre metin ayarı
         state_text = f"👤 {artist[:120]}" if self.is_playing else "⏸ Duraklatıldı"   # Discord 128 karakter sınırı
-        details_text = f"🎵 {title[:125]}" # Discord API sınırlarına göre kırpıyoruz
-        
+        details_text = f"🎵 {title[:125]}"  # Discord API sınırlarına göre kırpıyoruz
+
         payload = dict(
             state=state_text,
             details=details_text,
-            large_image="logo",  # İleride Discord Developer Portal'a logo eklersen bu key'i kullanır
-            large_text=f"{APP_DISPLAY_NAME} Müzik Çalar",
             start=self.start_time if self.is_playing else None,
         )
+        thumb = (self.current_song.get("thumbnail") or "").strip()
+        if thumb.startswith(("http://", "https://")):
+            payload["large_image"] = thumb
+            payload["large_text"] = title[:120] if len(title) >= 2 else f"{APP_DISPLAY_NAME} Müzik Çalar"
+            payload["small_image"] = "logo"
+            payload["small_text"] = f"{APP_DISPLAY_NAME} Müzik Çalar"
+        else:
+            payload["large_image"] = "logo"
+            payload["large_text"] = f"{APP_DISPLAY_NAME} Müzik Çalar"
+
         with self._presence_lock:
             self._presence_pending = payload
             if self._presence_worker_running:

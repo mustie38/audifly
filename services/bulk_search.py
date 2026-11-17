@@ -16,6 +16,7 @@ import yt_dlp
 from PySide6.QtCore import QObject, Signal
 
 from mustiefly_qt.helpers.constants import BULK_SEARCH_WORKERS, yt_dlp_base_opts
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
@@ -94,11 +95,16 @@ class BulkSearchWorker(QObject):
                     thumb = info.get('thumbnail')
                     if not thumb and info.get('thumbnails'):
                         thumb = (info['thumbnails'][-1] or {}).get('url')
+                    clean_title, clean_artist = parse_track_and_artist(
+                        info.get('title') or 'Bilinmeyen Şarkı',
+                        info.get('uploader') or info.get('channel') or 'Bilinmeyen Sanatçı',
+                        info,
+                    )
                     item = {
-                        'title': info.get('title') or 'Bilinmeyen Şarkı',
+                        'title': clean_title,
                         'webpage_url': webpage_url,
                         'duration': int(info.get('duration') or 0),
-                        'uploader': info.get('uploader') or info.get('channel') or 'Bilinmeyen Sanatçı',
+                        'uploader': clean_artist,
                         'thumbnail': thumb,
                         'liked': False,
                         'added_date': datetime.now().isoformat(),

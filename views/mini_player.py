@@ -6,6 +6,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
+from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 
 
@@ -70,9 +71,13 @@ class MiniPlayer(QWidget):
         self.playback.radioStopped.connect(self._on_radio_stopped)
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
-        title = song.get("title", "Bilinmeyen Şarkı")
-        self.title_label.setText(title[:35] + "…" if len(title) > 35 else title)
-        self.artist_label.setText(song.get("uploader", ""))
+        clean_title, clean_artist = parse_track_and_artist(
+            song.get("title", "Bilinmeyen Şarkı"),
+            song.get("uploader", ""),
+            song,
+        )
+        self.title_label.setText(clean_title[:35] + "…" if len(clean_title) > 35 else clean_title)
+        self.artist_label.setText(clean_artist)
         self.play_btn.setText("⏸")
 
     def _on_radio_started(self, station: dict):
