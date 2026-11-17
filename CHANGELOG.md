@@ -1,5 +1,10 @@
 # Değişiklikler
 
+## 0.5.2
+- **Birlikte Dinle (Listen Together) Çift Yönlü Protokol Uyumluluğu:**
+  - **Otomatik geriye dönük uyumluluk:** İstemci güncellenmemiş eski (v1) sunuculara bağlandığında "Uygulama sürümü sunucuyla uyumsuz" hatası vermek yerine otomatik ve sessizce v1 protokolüne geçerek odaya bağlanır.
+  - **Sunucuda çift sürüm desteği:** `relay_server/server.py` hem eski sürümleri (v1) hem de yeni 0.5.x sürümlerini (v2) aynı anda destekleyecek şekilde güncellendi.
+
 ## 0.5.1
 - **Birlikte Dinle (Listen Together) Güvenlik ve Kararlılık Sertleştirmesi (Protokol v2):**
   - **Sequence poisoning açığı giderildi:** İstemcinin yerel sayacı ile uzak katılımcı sayaçları ayrıldı; sunucuda her katılımcı bazında kesin monoton artış denetimi eklendi.
