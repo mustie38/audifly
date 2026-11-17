@@ -202,6 +202,27 @@ class PlaybackEngine(QObject):
         self._playbackReady.connect(self._start_playback)
         self._playbackFailed.connect(self._on_resolve_failed)
 
+    @property
+    def current_song(self) -> dict | None:
+        """Şu an çalan şarkının sözlük referansı."""
+        if self._current_song_ref is not None:
+            return self._current_song_ref
+        pl = self.playing_playlist
+        idx = self.current_index
+        if pl and idx >= 0:
+            songs = self.store.playlists.get(pl, [])
+            if 0 <= idx < len(songs):
+                return songs[idx]
+        return None
+
+    @property
+    def is_playing(self) -> bool:
+        """Müziğin aktif çalıp çalmadığını döndürür."""
+        try:
+            return bool(self.player.is_playing())
+        except Exception:
+            return False
+
     # --- Ekolayzer ---
     def _setup_equalizer(self):
         """VLC'nin native ekolayzerini hazırlar ve kayıtlı ayarları (varsa) uygular."""

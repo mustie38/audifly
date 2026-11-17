@@ -446,8 +446,9 @@ class KaraokeView(QWidget):
         super().closeEvent(event)
 
     # --- Güncelleme & Şarkı Değişimi ---
-    def _sync_all(self):
-        song = self.playback.current_song
+    def _sync_all(self, song: dict | None = None):
+        if song is None:
+            song = self.playback.current_song
         if not song:
             self.title_label.setText("Şarkı Çalınmıyor")
             self.artist_label.setText("")
@@ -494,7 +495,7 @@ class KaraokeView(QWidget):
         self._load_lyrics(song)
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
-        self._sync_all()
+        self._sync_all(song)
 
     def _on_play_state(self, playing: bool):
         self.play_btn.setText("⏸" if playing else "▶")
