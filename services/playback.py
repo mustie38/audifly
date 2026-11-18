@@ -1275,16 +1275,23 @@ class PlaybackEngine(QObject):
         self.next_song_preloaded = None
 
         try:
-            media = self.vlc_instance.media_new(url)
+            old_media = self.player.get_media()
+            media = self._prepare_media(url)
             try:  # şarkıdan radyoya geçişte de aynı set_media/play yarışını önle
                 if self.player.get_state() not in (vlc.State.NothingSpecial, vlc.State.Stopped):
                     self.player.stop()
             except Exception:
                 pass
             self.player.set_media(media)
+            if old_media is not None:
+                try:
+                    old_media.release()
+                except Exception:
+                    pass
             self.player.play()
             self.player.audio_set_volume(self._master_volume())
             self._apply_saved_rate()
+            self._apply_active_equalizer()
         except Exception as e:
             log.error("%s %s", "Radyo çalınamadı:", e)
             self.statusMessage.emit("⚠️ İstasyon çalınamadı, başka bir tane dene.", "error")
@@ -1351,9 +1358,9 @@ class PlaybackEngine(QObject):
         master = self._master_volume()
         try:
             if self._xfade_is_ramping():
-                frac = self._xfade_blend
-                self.player.audio_set_volume(int(master * (1.0 - frac)))
-                self.player_b.audio_set_volume(int(master * frac))
+                angle = self._xfade_blend * (math.pi / 2.0)
+                self.player.audio_set_volume(int(master * math.cos(angle)))
+                self.player_b.audio_set_volume(int(master * math.sin(angle)))
             else:
                 self.player.audio_set_volume(master)
         except Exception:

@@ -94,6 +94,18 @@ class MiniPlayer(QWidget):
     def _on_play_state(self, playing: bool):
         self.play_btn.setText("⏸" if playing else "▶")
 
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        station = getattr(self.playback, "radio_playing", None)
+        song = getattr(self.playback, "current_song", None)
+        playing = bool(getattr(self.playback, "is_playing", False))
+        if isinstance(station, dict):
+            self._on_radio_started(station)
+            self._on_play_state(playing)
+        elif isinstance(song, dict):
+            self._on_song_started("", 0, song, False)
+            self._on_play_state(playing)
+
     def closeEvent(self, event):  # noqa: N802
         self.closed.emit()
         super().closeEvent(event)

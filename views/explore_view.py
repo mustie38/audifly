@@ -319,6 +319,8 @@ class DiscoverySection(QWidget):
         self.thumbnails = thumbnails
         self.items: list[dict] = []
         self._is_artist = cat_def.get("kind") == "artist"
+        self._track_cards: dict[str, list[TrackCard]] = {}
+        self._artist_cards: dict[str, list[ArtistCard]] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -376,6 +378,8 @@ class DiscoverySection(QWidget):
         return title
 
     def _clear_row(self):
+        self._track_cards.clear()
+        self._artist_cards.clear()
         while self.row_layout.count():
             item = self.row_layout.takeAt(0)
             w = item.widget()
@@ -411,12 +415,18 @@ class DiscoverySection(QWidget):
                 card = ArtistCard(artist, self.thumbnails)
                 card.clicked.connect(lambda a=artist: self.artistClicked.emit(a))
                 self.row_layout.addWidget(card)
+                t_key = artist.get("thumbnail")
+                if t_key:
+                    self._artist_cards.setdefault(t_key, []).append(card)
         else:
             for i, track in enumerate(self.items):
                 card = TrackCard(track, self.thumbnails, rank=(i + 1) if rank_enabled else None)
                 card.playRequested.connect(self.playRequested.emit)
                 card.addRequested.connect(self.addRequested.emit)
                 self.row_layout.addWidget(card)
+                t_key = track.get("webpage_url")
+                if t_key:
+                    self._track_cards.setdefault(t_key, []).append(card)
         self.row_layout.addStretch(1)
 
 
@@ -510,18 +520,21 @@ class ExploreView(QWidget):
             if pm is not None and not pm.isNull():
                 self.hero.art.setPixmap(pm)
                 self.hero.art.setText("")
-        for card in self.findChildren(TrackCard):
-            if card.track.get("webpage_url") == key:
-                pm = self.thumbnails.pixmap_for(card.track, TrackCard.THUMB_H, radius=14)
+        for section in self._sections.values():
+            t_cards = section._track_cards.get(key)
+            if t_cards:
+                pm = self.thumbnails.pixmap_for(t_cards[0].track, TrackCard.THUMB_H, radius=14)
                 if pm is not None:
-                    card.set_pixmap(pm)
-        for acard in self.findChildren(ArtistCard):
-            if acard.artist.get("thumbnail") == key:
+                    for card in t_cards:
+                        card.set_pixmap(pm)
+            a_cards = section._artist_cards.get(key)
+            if a_cards:
                 fake = {"webpage_url": key, "thumbnail": key}
                 pm = self.thumbnails.pixmap_for(fake, ArtistCard.SIZE, radius=ArtistCard.SIZE // 2)
                 if pm is not None and not pm.isNull():
-                    acard.photo.setPixmap(pm)
-                    acard.photo.setText("")
+                    for acard in a_cards:
+                        acard.photo.setPixmap(pm)
+                        acard.photo.setText("")
 
     # --- Yaşam döngüsü ---
     def _load_cache_then_refresh(self):

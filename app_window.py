@@ -297,6 +297,8 @@ class MainWindow(QMainWindow):
         self.now_playing_panel.artistClicked.connect(self.open_artist_page)
         self.library_view.artistRequested.connect(self.open_artist_page)
         self.explore_view.artistRequested.connect(self.open_artist_page)
+        self.home_view.artistRequested.connect(self.open_artist_page)
+        self.stats_view.artistRequested.connect(self.open_artist_page)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
             self.top_bar.set_panel_toggle_visible(True)

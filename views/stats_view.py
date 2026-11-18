@@ -31,6 +31,7 @@ def format_listen_time(seconds: float) -> str:
 
 class StatsView(QWidget):
     startRadioRequested = Signal(dict)
+    artistRequested = Signal(str)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
@@ -198,6 +199,7 @@ class StatsView(QWidget):
             row.playNextRequested.connect(
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue_next(pl, i, s))
             row.startRadioRequested.connect(self.startRadioRequested.emit)
+            row.artistRequested.connect(self.artistRequested.emit)
             # ⋮ menüsündeki sil/indir/taşı öğeleri de çalışsın
             row.removeRequested.connect(
                 lambda i, pl=pl_name: self.store.remove_song(pl, i))
@@ -235,8 +237,15 @@ class StatsView(QWidget):
             note.setObjectName("Muted")
             self.artists_box.addWidget(note)
         for row in artists:
-            lbl = QLabel(f"• {row['artist']} — {row['plays']} dinleme, "
+            art_name = row.get("artist", "")
+            lbl = QLabel(f"• {art_name} — {row['plays']} dinleme, "
                          f"{format_listen_time(row['seconds'])}")
+            if art_name and art_name not in ("Bilinmeyen Sanatçı", "?"):
+                lbl.setCursor(Qt.PointingHandCursor)
+                lbl.setToolTip(f"👤 {art_name} profiline git")
+                lbl.mousePressEvent = lambda e, a=art_name: (
+                    self.artistRequested.emit(a) if e.button() == Qt.LeftButton else None
+                )
             self.artists_box.addWidget(lbl)
         for e in recent:
             try:
