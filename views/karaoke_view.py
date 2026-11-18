@@ -29,6 +29,7 @@ from mustiefly_qt.helpers import lyrics as ly
 from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.thumbnails import ThumbnailService
+from mustiefly_qt.widgets.audio_visualizer import MODE_LABELS, NeonAudioVisualizer
 from mustiefly_qt.widgets.click_slider import ClickSlider
 from mustiefly_qt.widgets.player_icons import icon as vicon
 
@@ -127,6 +128,21 @@ class KaraokeView(QWidget):
     def _build_ui(self):
         # Arka plan katmanı
         self.ambient = _AmbientBackground(self)
+
+        # Arka plan Canlı Neon Spektrum Katmanı
+        st = getattr(self.playback, "settings", {}) or {}
+        init_mode = st.get("visualizer_mode", "bars") if st.get("visualizer_enabled", True) else "off"
+        init_pal = st.get("visualizer_palette", "dynamic")
+        self.visualizer = NeonAudioVisualizer(
+            playback=self.playback,
+            mode=init_mode,
+            palette=init_pal,
+            bar_count=64,
+            interactive=False,
+            transparent_bg=True,
+            parent=self,
+        )
+        self.visualizer.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(48, 36, 48, 36)
@@ -292,8 +308,9 @@ class KaraokeView(QWidget):
 
         left_col.addLayout(controls_row)
 
-        # Vokal Ayırma / Enstrümantal Mod (Apple Music Sing stili)
+        # Vokal Ayırma / Enstrümantal Mod & Canlı Spektrum Modu
         vocal_row = QHBoxLayout()
+        vocal_row.setSpacing(10)
         vocal_row.setAlignment(Qt.AlignCenter)
         self.vocal_btn = QPushButton("🎙️ Vokal: Açık")
         self.vocal_btn.setCursor(Qt.PointingHandCursor)
@@ -302,6 +319,15 @@ class KaraokeView(QWidget):
         if hasattr(self.playback, "toggle_vocal_remover"):
             self.vocal_btn.clicked.connect(self.playback.toggle_vocal_remover)
         vocal_row.addWidget(self.vocal_btn)
+
+        self.viz_btn = QPushButton()
+        self.viz_btn.setCursor(Qt.PointingHandCursor)
+        self.viz_btn.setFixedHeight(36)
+        self.viz_btn.setToolTip("Arka plan Neon Spektrum modunu değiştir (Kısayol: G)")
+        self.viz_btn.clicked.connect(self._cycle_visualizer_mode)
+        self._update_viz_btn_ui()
+        vocal_row.addWidget(self.viz_btn)
+
         left_col.addSpacing(12)
         left_col.addLayout(vocal_row)
 
@@ -395,7 +421,11 @@ class KaraokeView(QWidget):
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
-        self.ambient.setGeometry(0, 0, self.width(), self.height())
+        w, h = self.width(), self.height()
+        self.ambient.setGeometry(0, 0, w, h)
+        if hasattr(self, "visualizer"):
+            viz_h = max(140, int(h * 0.36))
+            self.visualizer.setGeometry(0, h - viz_h, w, viz_h)
 
     def _wire_signals(self):
         self.playback.songStarted.connect(self._on_song_started)
@@ -407,6 +437,54 @@ class KaraokeView(QWidget):
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
         self._update_vocal_ui(getattr(self.playback, "vocal_remover_enabled", False))
+
+    def _cycle_visualizer_mode(self):
+        new_mode = self.visualizer.cycle_mode(include_off=True)
+        st = getattr(self.playback, "settings", None)
+        if isinstance(st, dict):
+            if new_mode == "off":
+                st["visualizer_enabled"] = False
+            else:
+                st["visualizer_enabled"] = True
+                st["visualizer_mode"] = new_mode
+        self._update_viz_btn_ui()
+
+    def _update_viz_btn_ui(self):
+        mode = self.visualizer.mode
+        label = MODE_LABELS.get(mode, "📊 Neon Barlar")
+        self.viz_btn.setText(f"{label}")
+        active = mode != "off"
+        if active:
+            self.viz_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(0, 240, 255, 0.16);
+                    color: #ffffff;
+                    border: 1px solid rgba(0, 240, 255, 0.42);
+                    border-radius: 18px;
+                    padding: 4px 16px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                QPushButton:hover {
+                    background: rgba(0, 240, 255, 0.28);
+                }
+            """)
+        else:
+            self.viz_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.08);
+                    color: rgba(255, 255, 255, 0.65);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 18px;
+                    padding: 4px 16px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.16);
+                    color: #ffffff;
+                }
+            """)
 
     def _update_vocal_ui(self, enabled: bool):
         if enabled:
@@ -465,6 +543,10 @@ class KaraokeView(QWidget):
         if k == Qt.Key_V:
             if hasattr(self.playback, "toggle_vocal_remover"):
                 self.playback.toggle_vocal_remover()
+            event.accept()
+            return
+        if k == Qt.Key_G:
+            self._cycle_visualizer_mode()
             event.accept()
             return
         if k in (Qt.Key_Right, Qt.Key_L):
@@ -553,6 +635,8 @@ class KaraokeView(QWidget):
             except Exception:
                 pass
         self.ambient.set_colors(accent)
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_accent(accent)
 
         # Şarkı sözlerini çek
         self._load_lyrics(song)
@@ -576,6 +660,8 @@ class KaraokeView(QWidget):
                     extracted = dominant_accent_color(img)
                     if extracted:
                         self.ambient.set_colors(extracted)
+                        if hasattr(self, "visualizer"):
+                            self.visualizer.set_accent(extracted)
 
     def _on_play_state(self, playing: bool):
         self.play_btn.setText("⏸" if playing else "▶")

@@ -85,6 +85,14 @@ class _DualWaveform:
     def set_playing(self, playing: bool):
         self._strip.set_playing(playing)
 
+    def set_palette(self, palette: str):
+        if hasattr(self._strip, "set_palette"):
+            self._strip.set_palette(palette)
+
+    def set_enabled_state(self, enabled: bool):
+        if hasattr(self._strip, "set_enabled_state"):
+            self._strip.set_enabled_state(enabled)
+
 
 class _ClickableBox(QWidget):
     clicked = Signal()

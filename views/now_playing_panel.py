@@ -8,6 +8,7 @@ from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
+from mustiefly_qt.widgets.audio_visualizer import MODE_LABELS, NeonAudioVisualizer
 from mustiefly_qt.widgets.vinyl_cover import VinylCoverWidget
 from mustiefly_qt.widgets.player_icons import icon as vicon
 
@@ -17,6 +18,8 @@ class NowPlayingPanel(QWidget):
     startRadioRequested = Signal(dict)
     karaokeRequested = Signal()
     artistClicked = Signal(str)
+    visualizerModeChanged = Signal(str)
+    visualizerPaletteChanged = Signal(str)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, parent=None):
@@ -147,6 +150,63 @@ class NowPlayingPanel(QWidget):
         controls_row.addStretch(1)
         layout.addLayout(controls_row)
 
+        # --- Canlı Müzik Görselleştirici & Neon Spektrum ---
+        st = getattr(self.playback, "settings", {}) or {}
+        init_mode = st.get("visualizer_mode", "bars")
+        init_pal = st.get("visualizer_palette", "dynamic")
+        init_enabled = bool(st.get("visualizer_enabled", True))
+
+        self.visualizer_section = QWidget()
+        viz_layout = QVBoxLayout(self.visualizer_section)
+        viz_layout.setContentsMargins(0, 6, 0, 0)
+        viz_layout.setSpacing(6)
+
+        viz_header = QHBoxLayout()
+        viz_header.setContentsMargins(2, 0, 2, 0)
+        viz_lbl = QLabel("CANLI SPEKTRUM")
+        viz_lbl.setObjectName("Muted")
+        viz_lbl.setStyleSheet("font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        viz_header.addWidget(viz_lbl)
+        viz_header.addStretch(1)
+
+        self.viz_mode_btn = QPushButton(MODE_LABELS.get(init_mode, "📊 Neon Barlar"))
+        self.viz_mode_btn.setCursor(Qt.PointingHandCursor)
+        self.viz_mode_btn.setToolTip("Görselleştirici modunu değiştir (Sol tık: Mod, Sağ tık: Renk Paleti)")
+        self.viz_mode_btn.setFixedHeight(22)
+        self.viz_mode_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.07);
+                color: #cfc9e6;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 11px;
+                padding: 2px 10px;
+                font-size: 10px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: rgba(169, 128, 249, 0.22);
+                color: #ffffff;
+            }
+        """)
+        viz_header.addWidget(self.viz_mode_btn)
+        viz_layout.addLayout(viz_header)
+
+        self.visualizer = NeonAudioVisualizer(
+            playback=self.playback,
+            mode=init_mode,
+            palette=init_pal,
+            bar_count=34,
+            interactive=True,
+            transparent_bg=False,
+        )
+        self.visualizer.setFixedHeight(78)
+        self.viz_mode_btn.clicked.connect(lambda: self.visualizer.cycle_mode(include_off=False))
+        self.visualizer.modeChanged.connect(self._on_visualizer_mode_changed)
+        self.visualizer.paletteChanged.connect(self.visualizerPaletteChanged.emit)
+        viz_layout.addWidget(self.visualizer)
+        layout.addWidget(self.visualizer_section)
+        self.set_visualizer_enabled(init_enabled)
+
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.songLoading.connect(self._on_song_loading)
         self.playback.playStateChanged.connect(self._on_play_state)
@@ -220,6 +280,8 @@ class NowPlayingPanel(QWidget):
         self.vinyl.set_fallback_text("🎵")
         pm = self.thumbnails.pixmap_for(song, 220, rounded=False) if self.thumbnails else None
         self.vinyl.set_pixmap(pm)
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_accent(base)
 
     def _on_radio_started(self, station: dict):
         """Canlı radyo modu: albüm kapağı yok, plak dönmesin, süre çubuğu yok."""
@@ -253,8 +315,35 @@ class NowPlayingPanel(QWidget):
         super(QLabel, self.artist_label).mousePressEvent(event)
 
     def set_playing_state(self, playing: bool):
-        """Plak dönüşünü çalma durumuna bağlar (MainWindow/player_bar'dan beslenir)."""
+        """Plak dönüşünü ve spektrumu çalma durumuna bağlar (MainWindow/player_bar'dan beslenir)."""
         self.vinyl.set_playing(playing)
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_playing(playing)
+
+    def set_accent(self, color: str):
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_accent(color)
+
+    def set_visualizer_enabled(self, enabled: bool):
+        if hasattr(self, "visualizer_section"):
+            self.visualizer_section.setVisible(bool(enabled))
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_enabled_state(bool(enabled))
+
+    def set_visualizer_mode(self, mode: str):
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_mode(mode)
+        if hasattr(self, "viz_mode_btn"):
+            self.viz_mode_btn.setText(MODE_LABELS.get(mode, "📊 Neon Barlar"))
+
+    def set_visualizer_palette(self, palette: str):
+        if hasattr(self, "visualizer"):
+            self.visualizer.set_palette(palette)
+
+    def _on_visualizer_mode_changed(self, mode: str):
+        if hasattr(self, "viz_mode_btn"):
+            self.viz_mode_btn.setText(MODE_LABELS.get(mode, "📊 Neon Barlar"))
+        self.visualizerModeChanged.emit(mode)
 
     def _on_start_radio(self):
         if self.playback.current_song:

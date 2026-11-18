@@ -284,7 +284,10 @@ class MainWindow(QMainWindow):
         self.now_playing_panel.collapseRequested.connect(self._hide_now_playing_panel)
         self.now_playing_panel.lyrics_btn.clicked.connect(self._toggle_lyrics_window)
         self.now_playing_panel.karaokeRequested.connect(self._toggle_karaoke_view)
+        self.now_playing_panel.visualizerModeChanged.connect(self._on_visualizer_mode_changed)
+        self.now_playing_panel.visualizerPaletteChanged.connect(self._on_visualizer_palette_changed)
         self.top_bar.panelToggleClicked.connect(self._show_now_playing_panel)
+        self._apply_visualizer_settings()
 
         # Sanatçı ve Albüm Detay Görünümü
         self.artist_view.backRequested.connect(self._close_artist_view)
@@ -547,6 +550,8 @@ class MainWindow(QMainWindow):
             self._toggle_karaoke_view()
         elif key == Qt.Key_V:
             self.playback.toggle_vocal_remover()
+        elif key == Qt.Key_G:
+            self._cycle_visualizer_mode()
         else:
             super().keyPressEvent(event)
 
@@ -631,6 +636,10 @@ class MainWindow(QMainWindow):
         vocal_action.setChecked(self.playback.vocal_remover_enabled)
         vocal_action.triggered.connect(self.playback.toggle_vocal_remover)
         self.playback.vocalRemoverChanged.connect(vocal_action.setChecked)
+
+        viz_action = eq_menu_item.addAction("🌊 Görselleştirici Modunu Değiştir")
+        viz_action.setShortcut("G")
+        viz_action.triggered.connect(self._cycle_visualizer_mode)
 
         lyrics_action = eq_menu_item.addAction("🎤 Sözler Paneli…")
         lyrics_action.triggered.connect(self._toggle_lyrics_window)
@@ -863,6 +872,51 @@ class MainWindow(QMainWindow):
         if hasattr(self, "player_bar"):
             self.player_bar.waveform_strip.set_accent(color)
             self.player_bar.set_accent(color)  # YENİ: time_slider / volume_slider
+        if hasattr(self, "now_playing_panel"):
+            self.now_playing_panel.set_accent(color)
+
+    def _cycle_visualizer_mode(self):
+        from mustiefly_qt.widgets.audio_visualizer import MODE_LABELS
+        if hasattr(self, "now_playing_panel") and hasattr(self.now_playing_panel, "visualizer"):
+            new_mode = self.now_playing_panel.visualizer.cycle_mode(include_off=False)
+        else:
+            new_mode = "bars"
+        self._on_visualizer_mode_changed(new_mode)
+        label = MODE_LABELS.get(new_mode, new_mode)
+        self._on_status_message(f"🌊 Görselleştirici: {label}", "info")
+
+    def _on_visualizer_mode_changed(self, mode: str):
+        self.settings["visualizer_mode"] = mode
+        if hasattr(self, "now_playing_panel"):
+            self.now_playing_panel.set_visualizer_mode(mode)
+        if self._karaoke_view is not None and hasattr(self._karaoke_view, "visualizer"):
+            self._karaoke_view.visualizer.set_mode(mode)
+            self._karaoke_view._update_viz_btn_ui()
+        self.save_settings()
+
+    def _on_visualizer_palette_changed(self, palette: str):
+        self.settings["visualizer_palette"] = palette
+        if hasattr(self, "player_bar") and hasattr(self.player_bar, "waveform_strip"):
+            self.player_bar.waveform_strip.set_palette(palette)
+        if self._karaoke_view is not None and hasattr(self._karaoke_view, "visualizer"):
+            self._karaoke_view.visualizer.set_palette(palette)
+        self.save_settings()
+
+    def _apply_visualizer_settings(self):
+        enabled = bool(self.settings.get("visualizer_enabled", True))
+        mode = self.settings.get("visualizer_mode", "bars")
+        palette = self.settings.get("visualizer_palette", "dynamic")
+        if hasattr(self, "now_playing_panel"):
+            self.now_playing_panel.set_visualizer_enabled(enabled)
+            self.now_playing_panel.set_visualizer_mode(mode)
+            self.now_playing_panel.set_visualizer_palette(palette)
+        if hasattr(self, "player_bar") and hasattr(self.player_bar, "waveform_strip"):
+            self.player_bar.waveform_strip.set_enabled_state(enabled)
+            self.player_bar.waveform_strip.set_palette(palette)
+        if self._karaoke_view is not None and hasattr(self._karaoke_view, "visualizer"):
+            self._karaoke_view.visualizer.set_mode(mode if enabled else "off")
+            self._karaoke_view.visualizer.set_palette(palette)
+            self._karaoke_view._update_viz_btn_ui()
 
     def _reset_accent(self):
         """Dinamik tema kapatıldığında / tema değiştiğinde temel renge döner."""
@@ -1064,6 +1118,7 @@ class MainWindow(QMainWindow):
         )
         self.playback.apply_normalization(self.settings.get("audio_normalization", False))
         self.playback.set_vocal_remover(self.settings.get("vocal_remover_enabled", False))
+        self._apply_visualizer_settings()
         # Tema + vurgu rengi artık canlı uygulanır (yeniden başlatma gerekmez)
         self._reset_accent()
         if self.settings.get("dynamic_theme", True):

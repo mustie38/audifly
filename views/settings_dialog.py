@@ -454,7 +454,41 @@ class SettingsView(QWidget):
             "Görünme Süresi", self.hud_dur_spin,
             "Bildirimin ekranda kalma süresi."))
 
-        return self._scroll_page(audio_card, controls_card, hud_card)
+        viz_card = self._card("Canlı Müzik Görselleştirici & Neon Spektrum")
+        self.visualizer_check = QCheckBox()
+        self.visualizer_check.setChecked(self.settings.get("visualizer_enabled", True))
+        viz_card.layout().addWidget(self._row(
+            "Görselleştiriciyi Etkinleştir", self.visualizer_check,
+            "Şu An Çalıyor panelinde, oynatıcı çubuğunda ve Tam Ekran Karaoke'de canlı neon spektrum gösterir."))
+
+        self.visualizer_mode_combo = QComboBox()
+        self.visualizer_mode_combo.addItem("📊 Neon Spektrum Barları", "bars")
+        self.visualizer_mode_combo.addItem("🌊 Akışkan Neon Dalga", "wave")
+        self.visualizer_mode_combo.addItem("💠 Simetrik Spektrum", "mirror")
+        self.visualizer_mode_combo.addItem("⭕ Dairesel Radyal Nabız", "circular")
+        cur_vmode = self.settings.get("visualizer_mode", "bars")
+        v_idx = self.visualizer_mode_combo.findData(cur_vmode)
+        if v_idx >= 0:
+            self.visualizer_mode_combo.setCurrentIndex(v_idx)
+        viz_card.layout().addWidget(self._row(
+            "Görselleştirici Stili", self.visualizer_mode_combo,
+            "Spektrumun çizim stili (Kısayol: G veya spektrum üzerine sol tık)."))
+
+        self.visualizer_palette_combo = QComboBox()
+        self.visualizer_palette_combo.addItem("🎨 Dinamik (Kapak / Tema Rengi)", "dynamic")
+        self.visualizer_palette_combo.addItem("🌆 Cyberpunk (Pembe & Camgöbeği)", "cyberpunk")
+        self.visualizer_palette_combo.addItem("🌌 Aurora (Yeşil & Mavi)", "aurora")
+        self.visualizer_palette_combo.addItem("🔥 Ateş & Kehribar", "fire")
+        self.visualizer_palette_combo.addItem("🪐 Galaksi (Mor & Mavi)", "galaxy")
+        cur_vpal = self.settings.get("visualizer_palette", "dynamic")
+        p_idx = self.visualizer_palette_combo.findData(cur_vpal)
+        if p_idx >= 0:
+            self.visualizer_palette_combo.setCurrentIndex(p_idx)
+        viz_card.layout().addWidget(self._row(
+            "Neon Renk Paleti", self.visualizer_palette_combo,
+            "Spektrum dalgalarının neon renk geçişi (Spektrum üzerine sağ tıklayarak da değiştirebilirsin)."))
+
+        return self._scroll_page(audio_card, viz_card, controls_card, hud_card)
 
     def _build_storage_page(self) -> QWidget:
         cache_card = self._card("Önbellek Yönetimi")
@@ -619,6 +653,14 @@ class SettingsView(QWidget):
             self.language_combo.blockSignals(True)
             self.language_combo.setCurrentIndex(lang_idx)
             self.language_combo.blockSignals(False)
+        self.vocal_remover_check.setChecked(bool(self.settings.get("vocal_remover_enabled", False)))
+        self.visualizer_check.setChecked(bool(self.settings.get("visualizer_enabled", True)))
+        v_idx = self.visualizer_mode_combo.findData(self.settings.get("visualizer_mode", "bars"))
+        if v_idx >= 0:
+            self.visualizer_mode_combo.setCurrentIndex(v_idx)
+        p_idx = self.visualizer_palette_combo.findData(self.settings.get("visualizer_palette", "dynamic"))
+        if p_idx >= 0:
+            self.visualizer_palette_combo.setCurrentIndex(p_idx)
         translate_widget(self)
 
     # --- Tema & dil anında önizleme -----------------------------------
@@ -840,6 +882,9 @@ class SettingsView(QWidget):
         self.settings["crossfade_enabled"] = self.crossfade_check.isChecked()
         self.settings["crossfade_seconds"] = self.crossfade_spin.value()
         self.settings["vocal_remover_enabled"] = self.vocal_remover_check.isChecked()
+        self.settings["visualizer_enabled"] = self.visualizer_check.isChecked()
+        self.settings["visualizer_mode"] = self.visualizer_mode_combo.currentData() or "bars"
+        self.settings["visualizer_palette"] = self.visualizer_palette_combo.currentData() or "dynamic"
         self.settings["autoplay_enabled"] = self.autoplay_check.isChecked()
         self.settings["hud_overlay_enabled"] = self.hud_check.isChecked()
         self.settings["hud_overlay_only_background"] = self.hud_bg_only_check.isChecked()
