@@ -33,10 +33,11 @@ class TopBar(QFrame):
         row.setContentsMargins(24, 12, 24, 12)
         row.setSpacing(12)
 
-        # --- Küresel arama ---
+        # --- Küresel arama / Komut Paleti ---
         self.search_edit = QLineEdit()
         self.search_edit.setObjectName("TopSearch")
-        self.search_edit.setPlaceholderText("🔍  Ara…")
+        self.search_edit.setPlaceholderText("⚡  Ara veya komut çalıştır… (Ctrl + K)")
+        self.search_edit.setToolTip("Spotlight & Hızlı Komut Paleti (Ctrl + K)")
         self.search_edit.setFixedWidth(360)
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.returnPressed.connect(self._emit_search)

@@ -545,6 +545,27 @@ def _draw_sidebar_right(p: QPainter, color: str):
     p.drawLine(QPointF(14.5, 4.5), QPointF(14.5, 19.5))
 
 
+def _draw_search(p: QPainter, color: str):
+    p.setPen(_stroke(color, 1.8))
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(QRectF(4.0, 4.0, 10.0, 10.0))
+    p.drawLine(QPointF(11.2, 11.2), QPointF(18.5, 18.5))
+
+
+def _draw_bolt(p: QPainter, color: str):
+    p.setPen(_stroke(color, 1.6))
+    p.setBrush(Qt.NoBrush)
+    path = QPainterPath()
+    path.moveTo(13.0, 2.5)
+    path.lineTo(6.5, 12.0)
+    path.lineTo(11.5, 12.0)
+    path.lineTo(10.0, 21.5)
+    path.lineTo(17.5, 11.0)
+    path.lineTo(12.5, 11.0)
+    path.closeSubpath()
+    p.drawPath(path)
+
+
 _DRAWERS = {
     "play": _draw_play,
     "pause": _draw_pause,
@@ -581,6 +602,8 @@ _DRAWERS = {
     "gift": _draw_gift,
     "bell": _draw_bell,
     "sidebar_right": _draw_sidebar_right,
+    "search": _draw_search,
+    "bolt": _draw_bolt,
     "volume": _draw_volume,
     "volume_muted": _draw_volume_muted,
     "heart": lambda p, c: _draw_heart(p, c, False),

@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
 
         # Üst çubuk
         self.top_bar.searchSubmitted.connect(
-            lambda q: self._open_search_dialog(initial_query=q))
+            lambda q: self.open_command_palette(initial_query=q))
         self.top_bar.addSongRequested.connect(self._open_search_dialog)
         self.top_bar.bulkAddRequested.connect(self._open_bulk_add)
         self.top_bar.importYouTubeRequested.connect(
@@ -531,12 +531,17 @@ class MainWindow(QMainWindow):
 
     # --- Klavye kısayolları (metin kutusuna yazarken tetiklenmez) ---
     def keyPressEvent(self, event):  # noqa: N802
-        # Ctrl+F her koşulda üst aramaya odaklanır
-        if event.key() == Qt.Key_F and event.modifiers() & Qt.ControlModifier:
-            self.top_bar.search_edit.setFocus()
-            self.top_bar.search_edit.selectAll()
-            event.accept()
-            return
+        # Ctrl+F ve Ctrl+K kısayolları her koşulda çalışır
+        if event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key_F:
+                self.top_bar.search_edit.setFocus()
+                self.top_bar.search_edit.selectAll()
+                event.accept()
+                return
+            elif event.key() == Qt.Key_K:
+                self.open_command_palette()
+                event.accept()
+                return
         fw = self.focusWidget()
         if isinstance(fw, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox)):
             super().keyPressEvent(event)
@@ -577,9 +582,9 @@ class MainWindow(QMainWindow):
         karaoke_action.triggered.connect(self._toggle_karaoke_view)
         mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
         mini_player_action.triggered.connect(self._toggle_mini_player)
-        library_search_action = app_menu.addAction("🔎 Kütüphanede Ara…")
-        library_search_action.setShortcut("Ctrl+K")
-        library_search_action.triggered.connect(self._open_library_search_dialog)
+        palette_action = app_menu.addAction("⚡ Spotlight & Komut Paleti…")
+        palette_action.setShortcut("Ctrl+K")
+        palette_action.triggered.connect(self.open_command_palette)
         settings_action = app_menu.addAction("⚙ Ayarlar")
         settings_action.triggered.connect(self._open_settings_dialog)
         app_menu.addSeparator()
@@ -1040,6 +1045,20 @@ class MainWindow(QMainWindow):
         self._listen_dialog.show()
         self._listen_dialog.raise_()
         self._listen_dialog.activateWindow()
+
+    def open_command_palette(self, initial_query: str = ""):
+        """Spotlight & Hızlı Komut Paleti (Ctrl + K)."""
+        from mustiefly_qt.views.command_palette import CommandPaletteDialog
+        dialog = CommandPaletteDialog(
+            self.store,
+            self.playback,
+            self.thumbnails,
+            app_window=self,
+            parent=self,
+            initial_query=initial_query,
+        )
+        dialog.exec()
+        dialog.deleteLater()
 
     def _open_library_search_dialog(self):
         """Genel kütüphane arama: TÜM playlistlerde aynı anda arar."""
