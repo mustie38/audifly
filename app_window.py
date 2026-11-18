@@ -471,10 +471,18 @@ class MainWindow(QMainWindow):
 
     def changeEvent(self, event):
         if event.type() == event.Type.WindowStateChange:
+            is_min = bool(self.windowState() & Qt.WindowMinimized)
             # Ayar açıksa küçültünce tepsiye iner (pencere listeden kaybolur,
             # müzik tepsi ikonu üzerinden çalmaya devam eder).
-            if (self.windowState() & Qt.WindowMinimized) and self.settings.get("minimize_to_tray"):
+            if is_min and self.settings.get("minimize_to_tray"):
                 self.hide()
+            # Görev çubuğuna küçültüldüğünde görünmeyen animasyonları (plak, spektrum, dalga)
+            # duraklat; geri büyütüldüğünde devam ettir (arka planda %0 GUI CPU kullanımı).
+            active_anim = not is_min and bool(getattr(self.playback, "is_playing", False))
+            if hasattr(self, "now_playing_panel"):
+                self.now_playing_panel.set_playing_state(active_anim)
+            if hasattr(self, "player_bar") and hasattr(self.player_bar, "waveform_strip"):
+                self.player_bar.waveform_strip.set_playing(active_anim)
         super().changeEvent(event)
 
     def _quit_app(self):

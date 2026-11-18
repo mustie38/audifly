@@ -358,6 +358,9 @@ def _fetch_ytmusic_lyrics(track: str, artist: str, video_id: str = "") -> Lyrics
     return None
 
 
+_DEFAULT_SESSION = requests.Session()
+
+
 # ------------------------------------------------------------------ ağ
 def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                         cache_dir: str | None = None, session=None,
@@ -377,8 +380,8 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
         if cached:
             return cached
 
-    http = session or requests
-    is_mock = session is not None and session is not requests
+    http = session or _DEFAULT_SESSION
+    is_mock = session is not None and session is not requests and session is not _DEFAULT_SESSION
     best: dict | None = None
     all_candidates: list[dict] = []
     seen_ids: set[int] = set()

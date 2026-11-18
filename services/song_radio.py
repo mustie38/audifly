@@ -98,46 +98,53 @@ def fetch_radio_recommendations(song: dict, limit: int = 25) -> list[dict]:
         seen_urls.add(seed_url)
 
     # 1) Birincil yöntem: ytmusicapi watch playlist
-    if YTMusic is not None and video_id:
+    if YTMusic is not None:
         try:
             ytm = YTMusic()
-            watch_res = ytm.get_watch_playlist(videoId=video_id, radio=True, limit=limit)
-            raw_tracks = watch_res.get("tracks") or []
-            for item in raw_tracks:
-                item_vid = item.get("videoId")
-                if not item_vid or item_vid == video_id:
-                    continue
-                item_url = f"https://www.youtube.com/watch?v={item_vid}"
-                if item_url in seen_urls:
-                    continue
-                seen_urls.add(item_url)
+            if not video_id and (clean_title or clean_artist):
+                q_str = f"{clean_artist} {clean_title}".strip() if clean_artist != clean_title else clean_title
+                if hasattr(ytm, "search"):
+                    s_res = ytm.search(q_str, filter="songs")
+                    if s_res and isinstance(s_res, list):
+                        video_id = s_res[0].get("videoId")
+            if video_id:
+                watch_res = ytm.get_watch_playlist(videoId=video_id, radio=True, limit=limit)
+                raw_tracks = watch_res.get("tracks") or []
+                for item in raw_tracks:
+                    item_vid = item.get("videoId")
+                    if not item_vid or (seed_url and item_vid == video_id):
+                        continue
+                    item_url = f"https://www.youtube.com/watch?v={item_vid}"
+                    if item_url in seen_urls:
+                        continue
+                    seen_urls.add(item_url)
 
-                artists_list = item.get("artists") or []
-                item_artist = ", ".join(
-                    a["name"] for a in artists_list if isinstance(a, dict) and "name" in a
-                ) or "Bilinmeyen Sanatçı"
-                item_title = item.get("title") or "Bilinmeyen Şarkı"
-                t_clean, a_clean = parse_track_and_artist(item_title, item_artist, item)
+                    artists_list = item.get("artists") or []
+                    item_artist = ", ".join(
+                        a["name"] for a in artists_list if isinstance(a, dict) and "name" in a
+                    ) or "Bilinmeyen Sanatçı"
+                    item_title = item.get("title") or "Bilinmeyen Şarkı"
+                    t_clean, a_clean = parse_track_and_artist(item_title, item_artist, item)
 
-                thumbs = item.get("thumbnail") or []
-                thumb_url = None
-                if isinstance(thumbs, list) and thumbs:
-                    thumb_url = thumbs[-1].get("url")
-                elif isinstance(thumbs, str):
-                    thumb_url = thumbs
+                    thumbs = item.get("thumbnail") or []
+                    thumb_url = None
+                    if isinstance(thumbs, list) and thumbs:
+                        thumb_url = thumbs[-1].get("url")
+                    elif isinstance(thumbs, str):
+                        thumb_url = thumbs
 
-                duration = parse_duration_seconds(item.get("length"))
-                tracks.append({
-                    "title": t_clean,
-                    "webpage_url": item_url,
-                    "duration": duration,
-                    "uploader": a_clean,
-                    "thumbnail": thumb_url,
-                    "liked": False,
-                    "added_date": datetime.now().isoformat(),
-                })
-                if len(tracks) >= limit:
-                    break
+                    duration = parse_duration_seconds(item.get("length"))
+                    tracks.append({
+                        "title": t_clean,
+                        "webpage_url": item_url,
+                        "duration": duration,
+                        "uploader": a_clean,
+                        "thumbnail": thumb_url,
+                        "liked": False,
+                        "added_date": datetime.now().isoformat(),
+                    })
+                    if len(tracks) >= limit:
+                        break
         except Exception as e:
             log.warning("%s %s", "ytmusicapi get_watch_playlist başarısız, arama yedeğine geçiliyor:", e)
 
@@ -195,6 +202,8 @@ class SongRadioService(QObject):
     radioStarted = Signal(str, dict)       # playlist_name, seed_song
     radioReady = Signal(str, int)          # playlist_name, track_count
     autoplayTriggered = Signal(str, dict)  # playlist_name, first_song
+    _radioTracksFetched = Signal(dict, object, bool)
+    _autoplayTracksFetched = Signal(dict, object)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine, parent=None):
         super().__init__(parent)
@@ -206,6 +215,9 @@ class SongRadioService(QObject):
         self._prefetch_lock = threading.Lock()
         self._is_prefetching = False
         self._is_handling_autoplay = False
+
+        self._radioTracksFetched.connect(self._on_radio_tracks_fetched)
+        self._autoplayTracksFetched.connect(self._on_autoplay_tracks_fetched)
 
         # Çalan şarkı değiştikçe, eğer son şarkıysa arka planda sonsuz çalma önerilerini önceden çek
         self.playback.songStarted.connect(self._on_song_started)
@@ -219,39 +231,49 @@ class SongRadioService(QObject):
             return
 
         seed = copy.deepcopy(song)
-        # Önce tohum şarkıyı çalma listesinin başına koyarak anında başlat
-        self.store.playlists[RADIO_PLAYLIST_NAME] = [seed]
+        has_playable_url = bool(
+            seed.get("webpage_url") or seed.get("local_path") or seed.get("cached_file") or seed.get("url")
+        )
+        # Tohum şarkının çalınabilir URL'si varsa hemen başa koyup başlat;
+        # yoksa (örn. yalnızca sanatçı adı verildiyse) öneriler gelince ilk parçayı başlat.
+        self.store.playlists[RADIO_PLAYLIST_NAME] = [seed] if has_playable_url else []
         self.store.playlistsChanged.emit()
 
         clean_t, clean_a = parse_track_and_artist(seed.get("title", ""), seed.get("uploader", ""), seed)
         self.store.statusMessage.emit(f"📻 '{clean_t}' için Şarkı Radyosu başlatılıyor…", "info")
-        self.playback.play_song_at_index(RADIO_PLAYLIST_NAME, 0)
+        if has_playable_url:
+            self.playback.play_song_at_index(RADIO_PLAYLIST_NAME, 0)
         self.radioStarted.emit(RADIO_PLAYLIST_NAME, seed)
 
-        # Arka planda benzer parçaları çekip listeye ekle
+        # Arka planda benzer parçaları çekip ana thread'e sinyal ile teslim et
         def worker():
             recommendations = fetch_radio_recommendations(seed, limit=30)
-            if not recommendations:
-                self.store.statusMessage.emit("⚠️ Şarkı radyosu için benzer parça bulunamadı.", "warning")
-                return
-
-            current_list = self.store.playlists.get(RADIO_PLAYLIST_NAME, [])
-            existing_urls = {s.get("webpage_url") for s in current_list if s.get("webpage_url")}
-            added = 0
-            for r in recommendations:
-                if r.get("webpage_url") not in existing_urls:
-                    current_list.append(r)
-                    existing_urls.add(r.get("webpage_url"))
-                    added += 1
-
-            self.store.playlists[RADIO_PLAYLIST_NAME] = current_list
-            self.store.playlistsChanged.emit()
-            self.radioReady.emit(RADIO_PLAYLIST_NAME, len(current_list))
-            self.store.statusMessage.emit(
-                f"📻 Şarkı Radyosu hazır: {added} benzer parça eklendi.", "success"
-            )
+            self._radioTracksFetched.emit(seed, recommendations, not has_playable_url)
 
         threading.Thread(target=worker, daemon=True, name="SongRadioWorker").start()
+
+    def _on_radio_tracks_fetched(self, seed: dict, recommendations: list[dict], start_first: bool):
+        if not recommendations:
+            self.store.statusMessage.emit("⚠️ Şarkı radyosu için benzer parça bulunamadı.", "warning")
+            return
+
+        current_list = list(self.store.playlists.get(RADIO_PLAYLIST_NAME, []))
+        existing_urls = {s.get("webpage_url") for s in current_list if s.get("webpage_url")}
+        added = 0
+        for r in recommendations:
+            if r.get("webpage_url") not in existing_urls:
+                current_list.append(r)
+                existing_urls.add(r.get("webpage_url"))
+                added += 1
+
+        self.store.playlists[RADIO_PLAYLIST_NAME] = current_list
+        self.store.playlistsChanged.emit()
+        if start_first and current_list:
+            self.playback.play_song_at_index(RADIO_PLAYLIST_NAME, 0)
+        self.radioReady.emit(RADIO_PLAYLIST_NAME, len(current_list))
+        self.store.statusMessage.emit(
+            f"📻 Şarkı Radyosu hazır: {added} benzer parça eklendi.", "success"
+        )
 
     def _on_song_started(self, playlist_name: str, index: int, song: dict, is_offline: bool):
         """Son şarkıya gelindiyse Sonsuz Çalma (Autoplay) önerilerini önceden önbelleğe al."""
@@ -320,17 +342,25 @@ class SongRadioService(QObject):
         def worker():
             try:
                 tracks = fetch_radio_recommendations(seed, limit=20)
-                if tracks:
-                    self._apply_autoplay_tracks(seed, tracks)
-                else:
-                    self.store.statusMessage.emit("♾️ Benzer şarkı bulunamadı, çalma durduruldu.", "info")
-                    self.playback.player.stop()
-                    self.playback.playStateChanged.emit(False)
-            finally:
-                self._is_handling_autoplay = False
+            except Exception as e:
+                log.warning("Autoplay anlık öneri hatası: %s", e)
+                tracks = []
+            self._autoplayTracksFetched.emit(seed, tracks)
 
         threading.Thread(target=worker, daemon=True, name="AutoplayOnDemand").start()
         return True
+
+    def _on_autoplay_tracks_fetched(self, seed: dict, tracks: list[dict]):
+        try:
+            if tracks:
+                self._apply_autoplay_tracks(seed, tracks)
+            else:
+                self.store.statusMessage.emit("♾️ Benzer şarkı bulunamadı, çalma durduruldu.", "info")
+                if self.playback.player is not None:
+                    self.playback.player.stop()
+                self.playback.playStateChanged.emit(False)
+        finally:
+            self._is_handling_autoplay = False
 
     def _apply_autoplay_tracks(self, seed: dict, tracks: list[dict]):
         """Yeni öneri parçalarını '♾️ Sonsuz Çalma' listesine ekler ve oynatmayı başlatır."""

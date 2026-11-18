@@ -289,9 +289,9 @@ class EqualizerWindow(QWidget):
         self._save_timer.start(400)
 
     def _on_vocal_toggled(self, checked: bool):
-        self.settings["vocal_remover_enabled"] = bool(checked)
         if hasattr(self.playback, "set_vocal_remover"):
             self.playback.set_vocal_remover(checked)
+        self.settings["vocal_remover_enabled"] = bool(checked)
         self._save_timer.start(400)
 
     def _sync_vocal_check(self, enabled: bool):
@@ -302,3 +302,14 @@ class EqualizerWindow(QWidget):
 
     def _flush_settings(self):
         self.save_fn()
+
+    def closeEvent(self, event):  # noqa: N802
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+            self._flush_settings()
+        if hasattr(self.playback, "vocalRemoverChanged"):
+            try:
+                self.playback.vocalRemoverChanged.disconnect(self._sync_vocal_check)
+            except (RuntimeError, TypeError):
+                pass
+        super().closeEvent(event)

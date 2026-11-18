@@ -182,10 +182,6 @@ class LyricsWindow(QWidget):
                 video_id=vid,
                 force=force,
             )
-            if force and result.status != ly.ERROR:      # yenile: önbelleği atlayıp güncelle
-                track, artist = ly.guess_track(song.get("title", ""), song.get("uploader", ""))
-                ly._cache_write(ly._cache_path(self._lyrics_dir, track, artist,
-                                               song.get("duration") or 0), result)
         except Exception:                                 # söz hatası çalmayı/arayüzü bozmasın
             result = ly.LyricsResult(ly.ERROR)
         self.lyricsReady.emit(song, token, result)         # queued → GUI thread

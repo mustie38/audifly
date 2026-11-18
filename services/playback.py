@@ -181,6 +181,7 @@ class PlaybackEngine(QObject):
         self.equalizer = None
         self.eq_band_count = 0
         self.eq_preset_names: list[str] = []
+        self._vocal_remover_active = bool(self.settings.get("vocal_remover_enabled", False))
         self._setup_equalizer()
 
         self.next_song_preloaded = None
@@ -1386,15 +1387,16 @@ class PlaybackEngine(QObject):
     def set_vocal_remover(self, enabled: bool):
         """Vokal ayırma / enstrümantal modunu açar veya kapatır; ekolayzeri anında günceller."""
         enabled = bool(enabled)
-        if self.settings.get("vocal_remover_enabled") == enabled:
-            return
+        already_active = getattr(self, "_vocal_remover_active", None)
         self.settings["vocal_remover_enabled"] = enabled
+        self._vocal_remover_active = enabled
+        # Canlı ekolayzeri anında uygula (kesinti/baştan yükleme olmadan gerçek zamanlı)
+        self._apply_active_equalizer()
+        if already_active == enabled:
+            return
         self.vocalRemoverChanged.emit(enabled)
         msg = "🎙️ Vokal ayırma (Enstrümantal) açıldı" if enabled else "🎙️ Vokal ayırma kapatıldı (Orijinal ses)"
         self.statusMessage.emit(msg, "info")
-
-        # Canlı ekolayzeri anında uygula (kesinti/baştan yükleme olmadan gerçek zamanlı)
-        self._apply_active_equalizer()
 
     def seek(self, ms: int):
         if self._xfade_active:
