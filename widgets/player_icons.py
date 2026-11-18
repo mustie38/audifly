@@ -251,6 +251,23 @@ def _draw_fullscreen(p: QPainter, color: str):
     p.drawLine(QPointF(4, 20), QPointF(4, 15))
 
 
+def _draw_mic(p: QPainter, color: str):
+    pen = _stroke(color, 1.8)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # Mikrofon kapsülü
+    p.drawRoundedRect(QRectF(9, 3, 6, 10.5), 3, 3)
+    # U-şekilli tutucu çerçeve
+    cradle = QPainterPath()
+    cradle.moveTo(5.5, 9.5)
+    cradle.quadTo(5.5, 17, 12, 17)
+    cradle.quadTo(18.5, 17, 18.5, 9.5)
+    p.drawPath(cradle)
+    # Dikey ayak ve taban
+    p.drawLine(QPointF(12, 17), QPointF(12, 21))
+    p.drawLine(QPointF(8, 21), QPointF(16, 21))
+
+
 _DRAWERS = {
     "play": _draw_play,
     "pause": _draw_pause,
@@ -262,6 +279,7 @@ _DRAWERS = {
     "queue": _draw_queue,
     "lyrics": _draw_lyrics,
     "fullscreen": _draw_fullscreen,
+    "mic": _draw_mic,
     "volume": _draw_volume,
     "volume_muted": _draw_volume_muted,
     "heart": lambda p, c: _draw_heart(p, c, False),

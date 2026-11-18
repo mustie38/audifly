@@ -410,6 +410,12 @@ class PlayerBar(QWidget):
         self.karaoke_btn.clicked.connect(self.karaokeRequested.emit)
         layout.addWidget(self.karaoke_btn)
 
+        self.vocal_btn = IconButton("mic", RIGHT_BTN_SIZE, ICON_RIGHT, color=ICON_MUTED, active_color=accent)
+        self.vocal_btn.setToolTip("Vokal Ayırma / Enstrümantal Mod (V)")
+        if hasattr(self.playback, "toggle_vocal_remover"):
+            self.vocal_btn.clicked.connect(self.playback.toggle_vocal_remover)
+        layout.addWidget(self.vocal_btn)
+
         # Volume: ikon her zaman görünür, slider sadece hover'da genişler
         volume_wrap = QHBoxLayout()
         volume_wrap.setSpacing(6)
@@ -542,9 +548,19 @@ class PlayerBar(QWidget):
         self.playback.shuffleChanged.connect(self._on_shuffle_changed)
         self.playback.radioStarted.connect(self._on_radio_started)
         self.playback.radioStopped.connect(self._on_radio_stopped)
+        if hasattr(self.playback, "vocalRemoverChanged"):
+            self.playback.vocalRemoverChanged.connect(self._on_vocal_remover_changed)
         self.playback.store.playlistsChanged.connect(self._sync_like_state)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
+        self._on_vocal_remover_changed(getattr(self.playback, "vocal_remover_enabled", False))
+
+    def _on_vocal_remover_changed(self, enabled: bool):
+        self.vocal_btn.set_active(enabled)
+        if enabled:
+            self.vocal_btn.setToolTip("🎙️ Enstrümantal Mod (Vokal Kısık) — Kapatmak için tıkla (V)")
+        else:
+            self.vocal_btn.setToolTip("🎙️ Vokal Ayırma / Enstrümantal Mod (V)")
 
     # ------------------------------------------------------------------
     # ACCENT (dinamik tema)
@@ -559,6 +575,8 @@ class PlayerBar(QWidget):
         self._style_play_btn(color)
         self.shuffle_btn.set_color(ICON_MUTED, color)
         self.repeat_btn.set_color(ICON_MUTED, color)
+        self.vocal_btn._active_color = color
+        self.vocal_btn._refresh_icon()
 
     # ------------------------------------------------------------------
     # RESPONSIVE DAVRANIŞ

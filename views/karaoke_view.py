@@ -291,6 +291,20 @@ class KaraokeView(QWidget):
         controls_row.addWidget(self.like_btn)
 
         left_col.addLayout(controls_row)
+
+        # Vokal Ayırma / Enstrümantal Mod (Apple Music Sing stili)
+        vocal_row = QHBoxLayout()
+        vocal_row.setAlignment(Qt.AlignCenter)
+        self.vocal_btn = QPushButton("🎙️ Vokal: Açık")
+        self.vocal_btn.setCursor(Qt.PointingHandCursor)
+        self.vocal_btn.setFixedHeight(36)
+        self.vocal_btn.setToolTip("Şarkının vokalini kıs / enstrümantal karaoke moduna geç (Kısayol: V)")
+        if hasattr(self.playback, "toggle_vocal_remover"):
+            self.vocal_btn.clicked.connect(self.playback.toggle_vocal_remover)
+        vocal_row.addWidget(self.vocal_btn)
+        left_col.addSpacing(12)
+        left_col.addLayout(vocal_row)
+
         left_col.addStretch(1)
         main_layout.addWidget(left_box)
 
@@ -387,9 +401,48 @@ class KaraokeView(QWidget):
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.playStateChanged.connect(self._on_play_state)
         self.playback.positionChanged.connect(self._on_position)
+        if hasattr(self.playback, "vocalRemoverChanged"):
+            self.playback.vocalRemoverChanged.connect(self._update_vocal_ui)
         self.lyricsReady.connect(self._apply_lyrics_result)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
+        self._update_vocal_ui(getattr(self.playback, "vocal_remover_enabled", False))
+
+    def _update_vocal_ui(self, enabled: bool):
+        if enabled:
+            self.vocal_btn.setText("🎙️ Enstrümantal (Vokal Kısık)")
+            self.vocal_btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #ec4899);
+                    color: #ffffff;
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border-radius: 18px;
+                    padding: 4px 20px;
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #9d71f7, stop:1 #f472b6);
+                }
+            """)
+        else:
+            self.vocal_btn.setText("🎙️ Vokal: Açık (Orijinal)")
+            self.vocal_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.10);
+                    color: rgba(255, 255, 255, 0.85);
+                    border: 1px solid rgba(255, 255, 255, 0.18);
+                    border-radius: 18px;
+                    padding: 4px 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.18);
+                    color: #ffffff;
+                    border-color: rgba(255, 255, 255, 0.3);
+                }
+            """)
 
     def mouseMoveEvent(self, event):  # noqa: N802
         super().mouseMoveEvent(event)
@@ -407,6 +460,11 @@ class KaraokeView(QWidget):
             return
         if k == Qt.Key_Space:
             self.playback.toggle_play_pause()
+            event.accept()
+            return
+        if k == Qt.Key_V:
+            if hasattr(self.playback, "toggle_vocal_remover"):
+                self.playback.toggle_vocal_remover()
             event.accept()
             return
         if k in (Qt.Key_Right, Qt.Key_L):

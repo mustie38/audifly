@@ -99,6 +99,7 @@ class PlaybackEngine(QObject):
     shuffleChanged = Signal(bool)                      # karışık çal modu deşti
     radioStarted = Signal(dict)                        # radyo istasyonu çalmaya başladı
     radioStopped = Signal()
+    vocalRemoverChanged = Signal(bool)                 # Vokal ayırma / enstrümantal durumu (True=vokal kısık)
     # YouTube çıkarımı bozuk görünüyor (yt-dlp güncellemesi gerekebilir) — hata metni
     extractionFailed = Signal(str)
     # Crossfade iç sinyalleri: worker thread'den GUI'ye güvenli geçiş
@@ -147,6 +148,8 @@ class PlaybackEngine(QObject):
         # Şu an çalan şarkının CANLI sözlük referansı — şarkılar silinip
         # taşınınca index'i yeniden çözümlemek için gerekli (resync).
         self._current_song_ref: dict | None = None
+        self._current_url: str | None = None
+        self._current_is_offline: bool = False
         # Birlikte Dinle: oda sahibi olmayan kişide şarkı bitince sıradakini oda sahibi seçer
         self.suppress_auto_advance = False
         # Birlikte Dinle ortak sırası: (playlist, index) döndürürse önce o çalınır
@@ -507,14 +510,23 @@ class PlaybackEngine(QObject):
         self.playError.emit(*location)
 
     def _prepare_media(self, url: str, song: dict | None = None):
-        """VLC medyası oluşturur; YouTube CDN'in User-Agent kontrolü ve ses dengeleme seçeneklerini ekler."""
+        """VLC medyası oluşturur; YouTube CDN'in User-Agent kontrolü ve ses filtre seçeneklerini ekler."""
         media = self.vlc_instance.media_new(url)
         if isinstance(song, dict):
             ua = song.get("http_user_agent")
             if ua and isinstance(url, str) and url.startswith(("http://", "https://")):
                 media.add_option(f":http-user-agent={ua}")
+
+        filters = []
         if self.settings.get("audio_normalization"):
-            media.add_option(":audio-filter=normvol")
+            filters.append("normvol")
+        if self.settings.get("vocal_remover_enabled"):
+            filters.append("karaoke")
+
+        if filters:
+            media.add_option(f":audio-filter={':'.join(filters)}")
+
+        if self.settings.get("audio_normalization"):
             media.add_option(":norm-buff-size=10")
             media.add_option(":norm-max-level=1.6")
             media.add_option(":audio-replay-gain-mode=track")
@@ -532,6 +544,8 @@ class PlaybackEngine(QObject):
         playlist_name, index = location
         self.playing_playlist, self.current_index = location
         self._consecutive_play_failures = 0
+        self._current_url = url
+        self._current_is_offline = is_offline
 
         old_media = self.player.get_media()
         media = self._prepare_media(url, song)
@@ -868,6 +882,8 @@ class PlaybackEngine(QObject):
             self._abort_crossfade()
             return
         playlist_name, index = location
+        self._current_url = url
+        self._current_is_offline = is_offline
 
         old_media = self.player_b.get_media()
         media = self._prepare_media(url, song)
@@ -1333,6 +1349,60 @@ class PlaybackEngine(QObject):
         """Crossfade geçiş durumunu ve süresini günceller."""
         self.settings["crossfade_enabled"] = bool(enabled)
         self.settings["crossfade_seconds"] = max(1, min(12, int(seconds)))
+
+    @property
+    def vocal_remover_enabled(self) -> bool:
+        return bool(self.settings.get("vocal_remover_enabled", False))
+
+    def toggle_vocal_remover(self) -> bool:
+        """Vokal ayırma / enstrümantal modunu açar veya kapatır."""
+        new_state = not self.vocal_remover_enabled
+        self.set_vocal_remover(new_state)
+        return new_state
+
+    def set_vocal_remover(self, enabled: bool):
+        """Vokal ayırma filtresini (:audio-filter=karaoke) açar veya kapatır; çalan şarkıda anında uygular."""
+        enabled = bool(enabled)
+        if self.settings.get("vocal_remover_enabled") == enabled:
+            return
+        self.settings["vocal_remover_enabled"] = enabled
+        self.vocalRemoverChanged.emit(enabled)
+        msg = "🎙️ Vokal ayırma (Enstrümantal) açıldı" if enabled else "🎙️ Vokal ayırma kapatıldı (Orijinal ses)"
+        self.statusMessage.emit(msg, "info")
+
+        # Eğer şu an çalan / duraklatılmış bir şarkı varsa, pozisyonu koruyarak filtreyi canlı güncelle
+        if self.player is not None and self._current_song_ref is not None:
+            url = self._current_url
+            if not url:
+                url = (self._current_song_ref.get("cached_file")
+                       or self._current_song_ref.get("webpage_url")
+                       or self._current_song_ref.get("url"))
+            if url and not self._closed and not self._session_pending and self.radio_playing is None:
+                try:
+                    state = self.player.get_state()
+                    if state in (vlc.State.Playing, vlc.State.Paused):
+                        cur_time = self.player.get_time()
+                        was_paused = self._user_paused or (state == vlc.State.Paused)
+
+                        old_media = self.player.get_media()
+                        media = self._prepare_media(url, self._current_song_ref)
+                        self.player.set_media(media)
+                        if old_media is not None:
+                            try:
+                                old_media.release()
+                            except Exception:
+                                pass
+
+                        self.player.play()
+                        if cur_time > 0:
+                            self.player.set_time(cur_time)
+                            QTimer.singleShot(80, lambda t=cur_time: self.player.set_time(t) if self.player else None)
+
+                        if was_paused:
+                            self.player.pause()
+                            self._user_paused = True
+                except Exception as e:
+                    log.warning("Vokal filtresi anlık uygulanamadı: %s", e)
 
     def seek(self, ms: int):
         if self._xfade_active:

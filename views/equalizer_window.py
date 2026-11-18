@@ -150,6 +150,19 @@ class EqualizerWindow(QWidget):
         norm_row.addStretch(1)
         fx_layout.addLayout(norm_row)
 
+        # Vokal Ayırma / Enstrümantal Mod (Karaoke)
+        vocal_row = QHBoxLayout()
+        self.vocal_check = QCheckBox("🎙️ Vokal Ayırma / Enstrümantal Mod (Karaoke)")
+        self.vocal_check.setToolTip("Şarkının merkezindeki vokal seslerini bastırarak karaoke için enstrümantal ses üretir (Kısayol: V).")
+        self.vocal_check.setChecked(bool(self.settings.get("vocal_remover_enabled", False)))
+        self.vocal_check.toggled.connect(self._on_vocal_toggled)
+        vocal_row.addWidget(self.vocal_check)
+        vocal_row.addStretch(1)
+        fx_layout.addLayout(vocal_row)
+
+        if hasattr(self.playback, "vocalRemoverChanged"):
+            self.playback.vocalRemoverChanged.connect(self._sync_vocal_check)
+
         root.addWidget(fx_card)
 
         self._save_timer = QTimer(self)
@@ -274,6 +287,18 @@ class EqualizerWindow(QWidget):
         if hasattr(self.playback, "apply_normalization"):
             self.playback.apply_normalization(checked)
         self._save_timer.start(400)
+
+    def _on_vocal_toggled(self, checked: bool):
+        self.settings["vocal_remover_enabled"] = bool(checked)
+        if hasattr(self.playback, "set_vocal_remover"):
+            self.playback.set_vocal_remover(checked)
+        self._save_timer.start(400)
+
+    def _sync_vocal_check(self, enabled: bool):
+        if self.vocal_check.isChecked() != enabled:
+            self.vocal_check.blockSignals(True)
+            self.vocal_check.setChecked(enabled)
+            self.vocal_check.blockSignals(False)
 
     def _flush_settings(self):
         self.save_fn()

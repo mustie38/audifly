@@ -545,6 +545,8 @@ class MainWindow(QMainWindow):
             self.playback.change_volume(max(0, int(self.settings.get("_volume", 80)) - 5))
         elif key == Qt.Key_F11:
             self._toggle_karaoke_view()
+        elif key == Qt.Key_V:
+            self.playback.toggle_vocal_remover()
         else:
             super().keyPressEvent(event)
 
@@ -622,6 +624,13 @@ class MainWindow(QMainWindow):
         eq_menu_item = menu_bar.addMenu("Ses")
         equalizer_action = eq_menu_item.addAction("🎚 Ekolayzer…")
         equalizer_action.triggered.connect(self._toggle_equalizer_window)
+
+        vocal_action = eq_menu_item.addAction("🎙️ Vokal Ayırma / Enstrümantal Mod")
+        vocal_action.setShortcut("V")
+        vocal_action.setCheckable(True)
+        vocal_action.setChecked(self.playback.vocal_remover_enabled)
+        vocal_action.triggered.connect(self.playback.toggle_vocal_remover)
+        self.playback.vocalRemoverChanged.connect(vocal_action.setChecked)
 
         lyrics_action = eq_menu_item.addAction("🎤 Sözler Paneli…")
         lyrics_action.triggered.connect(self._toggle_lyrics_window)
@@ -1054,6 +1063,7 @@ class MainWindow(QMainWindow):
             self.settings.get("crossfade_seconds", 3),
         )
         self.playback.apply_normalization(self.settings.get("audio_normalization", False))
+        self.playback.set_vocal_remover(self.settings.get("vocal_remover_enabled", False))
         # Tema + vurgu rengi artık canlı uygulanır (yeniden başlatma gerekmez)
         self._reset_accent()
         if self.settings.get("dynamic_theme", True):

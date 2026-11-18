@@ -384,6 +384,12 @@ class SettingsView(QWidget):
             "Crossfade", self._hbox(self.crossfade_check, self.crossfade_spin),
             "Şarkılar arası kesintisiz, yumuşak ses geçişi ve geçiş süresi (Equal-Power)."))
 
+        self.vocal_remover_check = QCheckBox()
+        self.vocal_remover_check.setChecked(self.settings.get("vocal_remover_enabled", False))
+        audio_card.layout().addWidget(self._row(
+            "Vokal Ayırma / Enstrümantal Mod", self.vocal_remover_check,
+            "Şarkıların merkez frekanslarındaki vokal sesini kısarak enstrümantal karaoke modu sağlar (Kısayol: V)."))
+
         self.autoplay_check = QCheckBox()
         self.autoplay_check.setChecked(self.settings.get("autoplay_enabled", True))
         audio_card.layout().addWidget(self._row(
@@ -833,6 +839,7 @@ class SettingsView(QWidget):
         self.settings["auto_ytdlp_update"] = self.auto_ytdlp_check.isChecked()
         self.settings["crossfade_enabled"] = self.crossfade_check.isChecked()
         self.settings["crossfade_seconds"] = self.crossfade_spin.value()
+        self.settings["vocal_remover_enabled"] = self.vocal_remover_check.isChecked()
         self.settings["autoplay_enabled"] = self.autoplay_check.isChecked()
         self.settings["hud_overlay_enabled"] = self.hud_check.isChecked()
         self.settings["hud_overlay_only_background"] = self.hud_bg_only_check.isChecked()

@@ -86,6 +86,14 @@ class NowPlayingPanel(QWidget):
         self.karaoke_btn.setFixedWidth(36)
         self.karaoke_btn.clicked.connect(self.karaokeRequested.emit)
         btn_row.addWidget(self.karaoke_btn)
+
+        self.vocal_btn = QPushButton("🎙️")
+        self.vocal_btn.setToolTip("Vokal Ayırma / Enstrümantal Mod (V)")
+        self.vocal_btn.setFixedWidth(36)
+        self.vocal_btn.setCursor(Qt.PointingHandCursor)
+        if hasattr(self.playback, "toggle_vocal_remover"):
+            self.vocal_btn.clicked.connect(self.playback.toggle_vocal_remover)
+        btn_row.addWidget(self.vocal_btn)
         layout.addLayout(btn_row)
 
         # --- İlerleme çubuğu (radyo modunda gizlenir) ---
@@ -146,9 +154,12 @@ class NowPlayingPanel(QWidget):
         self.playback.positionChanged.connect(self._on_position)
         self.playback.radioStarted.connect(self._on_radio_started)
         self.playback.radioStopped.connect(self._on_radio_stopped)
+        if hasattr(self.playback, "vocalRemoverChanged"):
+            self.playback.vocalRemoverChanged.connect(self._sync_vocal_button)
         self.store.playlistsChanged.connect(self._sync_like_button)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
+        self._sync_vocal_button(getattr(self.playback, "vocal_remover_enabled", False))
 
     # --- İlerleme çubuğu ---
     def _on_position(self, current_ms: int, total_ms: int):
@@ -276,3 +287,19 @@ class NowPlayingPanel(QWidget):
             if current.get("webpage_url") == key and self.thumbnails is not None:
                 pm = self.thumbnails.pixmap_for(current, 220, rounded=False)
                 self.vinyl.set_pixmap(pm)
+
+    def _sync_vocal_button(self, enabled: bool):
+        if enabled:
+            self.vocal_btn.setToolTip("🎙️ Enstrümantal Mod (Vokal Kısık) — Kapatmak için tıkla (V)")
+            self.vocal_btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #ec4899);
+                    color: #ffffff;
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
+        else:
+            self.vocal_btn.setToolTip("🎙️ Vokal Ayırma / Enstrümantal Mod (V)")
+            self.vocal_btn.setStyleSheet("")
