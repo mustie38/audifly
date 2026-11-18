@@ -81,17 +81,6 @@ class MixesView(QWidget):
     def _card(self, mix: mixes.Mix) -> QWidget:
         card = QFrame()
         card.setObjectName("MixCard")
-        card.setStyleSheet("""
-            #MixCard {
-                background: rgba(255, 255, 255, 0.035);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 16px;
-            }
-            #MixCard:hover {
-                background: rgba(255, 255, 255, 0.06);
-                border-color: rgba(169, 128, 249, 0.4);
-            }
-        """)
         v = QVBoxLayout(card)
         v.setContentsMargins(18, 16, 18, 16)
         v.setSpacing(6)

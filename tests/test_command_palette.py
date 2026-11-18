@@ -140,3 +140,27 @@ def test_command_palette_key_events(library_store, monkeypatch):
     finally:
         dlg.close()
         engine.shutdown()
+
+
+def test_command_palette_toggle_theme_cycles_real_themes(library_store, monkeypatch):
+    from mustiefly_qt.helpers.constants import THEMES
+    from mustiefly_qt.helpers.win_theme import is_dark_theme
+
+    monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
+    engine = pb_mod.PlaybackEngine(library_store, library_store.paths, {})
+
+    fake_app = MagicMock()
+    fake_app.settings = {"theme": "audifly", "dynamic_theme": False}
+    dlg = CommandPaletteDialog(library_store, engine, app_window=fake_app)
+    try:
+        dlg._cmd_toggle_theme()
+        new_theme = fake_app.settings["theme"]
+        assert new_theme in THEMES
+        assert new_theme != "audifly"
+        fake_app._reset_accent.assert_called_once()
+        fake_app.save_settings.assert_called_once()
+        assert not is_dark_theme("mono_light")
+        assert is_dark_theme("audifly")
+    finally:
+        dlg.close()
+        engine.shutdown()

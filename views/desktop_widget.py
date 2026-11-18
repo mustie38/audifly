@@ -378,9 +378,19 @@ class DesktopWidget(QWidget):
         self._persist()
 
     def _restore_position(self):
+        from PySide6.QtGui import QGuiApplication
         pos = self.settings.get("desktop_widget_pos")
         if isinstance(pos, (list, tuple)) and len(pos) == 2:
-            self.move(int(pos[0]), int(pos[1]))
+            x, y = int(pos[0]), int(pos[1])
+            screens = QGuiApplication.screens()
+            # Kayıtlı konum mevcut ekranlardan birinin içindeyse kullan; aksi halde sağ alta taşı
+            if any(s.availableGeometry().contains(x + 20, y + 20) for s in screens):
+                self.move(x, y)
+                return
+        primary = QGuiApplication.primaryScreen()
+        if primary is not None:
+            geo = primary.availableGeometry()
+            self.move(geo.right() - self.width() - 24, geo.bottom() - self.height() - 24)
 
     def _save_position(self):
         self.settings["desktop_widget_pos"] = [self.x(), self.y()]

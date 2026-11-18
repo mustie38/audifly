@@ -154,17 +154,6 @@ class NowPlayingPanel(QWidget):
         # --- YENİ ODAK ALANI: Sıradaki Parça ve Sanatçı Bilgisi Kartı ---
         self.up_next_card = QFrame()
         self.up_next_card.setObjectName("UpNextCard")
-        self.up_next_card.setStyleSheet("""
-            #UpNextCard {
-                background: rgba(255, 255, 255, 0.04);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 12px;
-            }
-            #UpNextCard:hover {
-                background: rgba(255, 255, 255, 0.07);
-                border-color: rgba(0, 210, 255, 0.3);
-            }
-        """)
         self.up_next_card.setCursor(Qt.PointingHandCursor)
         self.up_next_card.mousePressEvent = lambda _: self.playback.play_next()
         up_next_layout = QVBoxLayout(self.up_next_card)
@@ -182,11 +171,12 @@ class NowPlayingPanel(QWidget):
         up_next_layout.addLayout(up_next_header)
 
         self.up_next_title = QLabel("Sırada parça yok")
-        self.up_next_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #FFFFFF;")
+        self.up_next_title.setStyleSheet("font-size: 12px; font-weight: bold;")
         up_next_layout.addWidget(self.up_next_title)
 
         self.up_next_artist = QLabel("Son şarkıdasın veya radyo başlat")
-        self.up_next_artist.setStyleSheet("font-size: 11px; color: #8F9CAE;")
+        self.up_next_artist.setObjectName("Muted")
+        self.up_next_artist.setStyleSheet("font-size: 11px;")
         up_next_layout.addWidget(self.up_next_artist)
 
         layout.addWidget(self.up_next_card)

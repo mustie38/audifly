@@ -22,7 +22,7 @@ from mustiefly_qt.helpers.constants import (
 )
 from mustiefly_qt.helpers.backup import export_library_dialog, import_library_dialog
 from mustiefly_qt.helpers.dynamic_theme import dominant_accent_color
-from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar, is_dark_theme
 from mustiefly_qt.helpers.local_files import pick_and_add_local_files
 from mustiefly_qt.services.discord_rpc import DiscordRPCService
 from mustiefly_qt.services.listen_together import ListenTogether
@@ -321,7 +321,7 @@ class MainWindow(QMainWindow):
         # Dinamik tema: çalan şarkının kapağından vurgu rengi
         base_theme = THEMES.get(settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
         self._current_accent = base_theme.accent
-        apply_dark_titlebar(self, dark=(settings.get("theme") != "light"))
+        apply_dark_titlebar(self, dark=is_dark_theme(settings.get("theme")))
         # Tüm uygulamanın QSS'ini yeniden kurmak pahalıdır: şarkı değişimini
         # bloklamasın diye ertelenir ve art arda tetiklenmeler tek işe iner.
         self._accent_timer = QTimer(self)
@@ -609,7 +609,9 @@ class MainWindow(QMainWindow):
         karaoke_action.triggered.connect(self._toggle_karaoke_view)
         self.addAction(karaoke_action)
         widget_action = app_menu.addAction("🖥️ Masaüstü Şeffaf Widget'ı")
+        widget_action.setShortcut("Ctrl+M")
         widget_action.triggered.connect(self._toggle_desktop_widget)
+        self.addAction(widget_action)
         palette_action = app_menu.addAction("⚡ Spotlight & Komut Paleti…")
         palette_action.setShortcut("Ctrl+K")
         palette_action.triggered.connect(self.open_command_palette)
@@ -669,7 +671,9 @@ class MainWindow(QMainWindow):
         duplicates_action.triggered.connect(self._open_duplicate_finder)
 
         undo_action = tools_menu.addAction("↩ Geri Al")
+        undo_action.setShortcut("Ctrl+Z")
         undo_action.triggered.connect(self._perform_undo)
+        self.addAction(undo_action)
         self._undo_menu_action = undo_action
 
         eq_menu_item = self._main_popup_menu.addMenu("Ses")
@@ -682,10 +686,12 @@ class MainWindow(QMainWindow):
         vocal_action.setChecked(self.playback.vocal_remover_enabled)
         vocal_action.triggered.connect(self.playback.toggle_vocal_remover)
         self.playback.vocalRemoverChanged.connect(vocal_action.setChecked)
+        self.addAction(vocal_action)
 
         viz_action = eq_menu_item.addAction("🌊 Görselleştirici Modunu Değiştir")
         viz_action.setShortcut("G")
         viz_action.triggered.connect(self._cycle_visualizer_mode)
+        self.addAction(viz_action)
 
         lyrics_action = eq_menu_item.addAction("🎤 Sözler Paneli…")
         lyrics_action.triggered.connect(self._toggle_lyrics_window)
@@ -918,7 +924,7 @@ class MainWindow(QMainWindow):
         base = THEMES.get(self.settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
         t = replace(base, accent=color, accent_dark=shade_color(color, 0.18))
         QApplication.instance().setStyleSheet(build_qss(t))
-        apply_dark_titlebar(self, dark=(self.settings.get("theme") != "light"))
+        apply_dark_titlebar(self, dark=is_dark_theme(self.settings.get("theme")))
         if hasattr(self, "player_bar"):
             self.player_bar.waveform_strip.set_accent(color)
             self.player_bar.set_accent(color)  # YENİ: time_slider / volume_slider

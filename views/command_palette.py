@@ -924,18 +924,23 @@ class CommandPaletteDialog(QDialog):
 
     def _cmd_toggle_theme(self):
         if self.app_window and hasattr(self.app_window, "settings"):
-            # Toggle between themes
-            current = self.app_window.settings.get("theme", "modern_dark")
-            themes = ["modern_dark", "neon_night", "midnight_blue", "pure_black"]
+            from mustiefly_qt.helpers.constants import DEFAULT_THEME_KEY, THEMES
+            theme_keys = list(THEMES.keys())
+            current = self.app_window.settings.get("theme", DEFAULT_THEME_KEY)
             try:
-                next_theme = themes[(themes.index(current) + 1) % len(themes)]
+                next_theme = theme_keys[(theme_keys.index(current) + 1) % len(theme_keys)]
             except ValueError:
-                next_theme = "modern_dark"
+                next_theme = DEFAULT_THEME_KEY
             self.app_window.settings["theme"] = next_theme
-            if hasattr(self.app_window, "_rebuild_stylesheet"):
-                self.app_window._rebuild_stylesheet()
+            if hasattr(self.app_window, "_reset_accent"):
+                self.app_window._reset_accent()
+            if self.app_window.settings.get("dynamic_theme", True) and hasattr(self.app_window, "_apply_dynamic_accent"):
+                self.app_window._apply_dynamic_accent()
+            if hasattr(self.app_window, "save_settings"):
+                self.app_window.save_settings()
+            label = THEMES[next_theme].name
             if hasattr(self.app_window, "show_success_message"):
-                self.app_window.show_success_message(f"Tema Değiştirildi: {next_theme}")
+                self.app_window.show_success_message(f"Tema Değiştirildi: {label}")
 
     def _cmd_open_settings(self):
         if self.app_window and hasattr(self.app_window, "_open_settings_dialog"):

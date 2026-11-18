@@ -35,13 +35,37 @@ def build_qss(t: Theme) -> str:
     #PlaylistCard {{ border-radius: 24px; }}
     #PlaylistCard:hover {{ background: {t.bg_row_hover}; }}
     #HomeContent, #DiscoveryContent, #ArtistDetailView, #ArtistContent {{ background: {t.bg_main}; }}
-    #HeroCard {{
+    #HomeHeroCard, #HeroCard {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
             stop:0 {t.bg_card}, stop:1 {t.bg_main});
-        border-radius: 16px; border: 1px solid {t.bg_row_hover};
+        border-radius: 18px; border: 1px solid {t.bg_row_hover};
     }}
-    #DiscoveryCard {{ background: transparent; border-radius: 14px; }}
-    #DiscoveryCard:hover {{ background: {t.bg_card}; }}
+    #HomeStatCard {{
+        background: {t.bg_card};
+        border: 1px solid {t.bg_row_hover};
+        border-radius: 14px;
+    }}
+    #HomeStatCard:hover {{
+        background: {t.bg_row_hover};
+    }}
+    #QuickAccessCard, #DiscoveryCard, #MixCard {{
+        background: {t.bg_card};
+        border: 1px solid {t.bg_row_hover};
+        border-radius: 16px;
+    }}
+    #QuickAccessCard:hover, #DiscoveryCard:hover, #MixCard:hover {{
+        background: {t.bg_row_hover};
+        border: 1px solid {t.accent};
+    }}
+    #UpNextCard {{
+        background: {t.bg_card};
+        border: 1px solid {t.bg_row_hover};
+        border-radius: 12px;
+    }}
+    #UpNextCard:hover {{
+        background: {t.bg_row_hover};
+        border-color: {t.accent};
+    }}
     #PlaylistBanner {{
         border-radius: 24px;
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1,

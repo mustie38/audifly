@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 import vlc
 from mustiefly_qt.helpers.logging_setup import get_logger
-from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar, is_dark_theme
 
 
 
@@ -34,7 +34,7 @@ class EqualizerWindow(QWidget):
         self.save_fn = save_fn
         self.setWindowTitle("🎚 Ses & Ekolayzer")
         self.resize(600, 430)
-        apply_dark_titlebar(self, dark=(settings.get("theme") != "light"))
+        apply_dark_titlebar(self, dark=is_dark_theme(settings.get("theme")))
         self.setStyleSheet("""
             #EqualizerWindow QSlider::groove:vertical {
                 background: rgba(255, 255, 255, 0.08);

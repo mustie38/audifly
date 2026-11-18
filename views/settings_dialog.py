@@ -118,7 +118,7 @@ class _ToggleSwitch(QCheckBox):
         if self.isChecked():
             track_color = QColor(self._accent)
         else:
-            track_color = QColor(255, 255, 255, 48 if self.underMouse() else 30)
+            track_color = QColor(127, 127, 127, 95 if self.underMouse() else 65)
 
         p.setPen(Qt.NoPen)
         p.setBrush(track_color)
@@ -175,36 +175,35 @@ class SettingsView(QWidget):
         self.setStyleSheet(f"""
             QWidget#SettingsView {{ background: {self._theme.bg_main}; }}
             QWidget#SettingsView QLabel#SettingsRowTitle {{
-                font-weight: 600; font-size: 13px; color: #FFFFFF;
+                font-weight: 600; font-size: 13px; color: {self._theme.text};
             }}
             QWidget#SettingsView QWidget#SettingsHeader {{
-                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-                background: rgba(255, 255, 255, 0.015);
+                border-bottom: 1px solid {self._theme.bg_row_hover};
+                background: {self._theme.bg_sidebar};
             }}
             QWidget#SettingsView QWidget#SettingsFooter {{
-                border-top: 1px solid rgba(255, 255, 255, 0.06);
-                background: rgba(255, 255, 255, 0.015);
+                border-top: 1px solid {self._theme.bg_row_hover};
+                background: {self._theme.bg_sidebar};
             }}
             QWidget#SettingsView QWidget#SettingsNav {{
-                border-right: 1px solid rgba(255, 255, 255, 0.06);
-                background: rgba(0, 0, 0, 0.14);
+                border-right: 1px solid {self._theme.bg_row_hover};
+                background: {self._theme.bg_sidebar};
             }}
             QWidget#SettingsView QWidget#Card {{
-                background: rgba(255, 255, 255, 0.032);
-                border: 1px solid rgba(255, 255, 255, 0.07);
+                background: {self._theme.bg_card};
+                border: 1px solid {self._theme.bg_row_hover};
                 border-radius: 16px;
             }}
             QWidget#SettingsView QLineEdit#SettingsSearch {{
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.10);
+                background: {self._theme.bg_card};
+                border: 1px solid {self._theme.bg_row_hover};
                 border-radius: 10px;
                 padding: 6px 12px;
-                color: #FFFFFF;
+                color: {self._theme.text};
                 font-size: 12px;
             }}
             QWidget#SettingsView QLineEdit#SettingsSearch:focus {{
                 border-color: {self._theme.accent};
-                background: rgba(255, 255, 255, 0.08);
             }}
         """)
 

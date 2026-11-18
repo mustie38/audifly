@@ -33,19 +33,7 @@ class StatCard(QFrame):
         self.setObjectName("HomeStatCard")
         self.setMinimumWidth(140)
         self.setFixedHeight(96)
-        self.setStyleSheet(f"""
-            #HomeStatCard {{
-                background: rgba(255, 255, 255, 0.032);
-                border: 1px solid rgba(255, 255, 255, 0.07);
-                border-left: 3px solid {accent};
-                border-radius: 14px;
-            }}
-            #HomeStatCard:hover {{
-                background: rgba(255, 255, 255, 0.055);
-                border-color: rgba(255, 255, 255, 0.14);
-                border-left: 3px solid {accent};
-            }}
-        """)
+        self.setStyleSheet(f"#HomeStatCard {{ border-left: 3px solid {accent}; }}")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 14, 12)
         layout.setSpacing(4)
@@ -72,7 +60,6 @@ class StatCard(QFrame):
         value_font.setPixelSize(22)
         value_font.setBold(True)
         self.value_label.setFont(value_font)
-        self.value_label.setStyleSheet("color: #FFFFFF;")
         layout.addWidget(self.value_label)
 
     def set_data(self, value: str):
@@ -87,17 +74,6 @@ class QuickAccessCard(QFrame):
         super().__init__(parent)
         self.setObjectName("QuickAccessCard")
         self.setFixedWidth(166)
-        self.setStyleSheet("""
-            #QuickAccessCard {
-                background: rgba(255, 255, 255, 0.032);
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                border-radius: 16px;
-            }
-            #QuickAccessCard:hover {
-                background: rgba(255, 255, 255, 0.065);
-                border: 1px solid rgba(169, 128, 249, 0.42);
-            }
-        """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 10)
         layout.setSpacing(6)
@@ -143,14 +119,14 @@ class QuickAccessCard(QFrame):
         title_font = QFont()
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #FFFFFF; font-size: 13px;")
+        title_label.setStyleSheet("font-size: 13px;")
         title_label.setFixedWidth(150)
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
         sub_label = QLabel(subtitle)
         sub_label.setObjectName("Muted")
-        sub_label.setStyleSheet("font-size: 11px; color: #8F9CAE;")
+        sub_label.setStyleSheet("font-size: 11px;")
         sub_label.setFixedWidth(150)
         layout.addWidget(sub_label)
 
@@ -213,16 +189,6 @@ class HomeView(QWidget):
         # --- Karşılama Hero Banner ---
         hero_card = QFrame()
         hero_card.setObjectName("HomeHeroCard")
-        hero_card.setStyleSheet("""
-            #HomeHeroCard {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(169, 128, 249, 0.18),
-                    stop:0.5 rgba(20, 24, 38, 0.94),
-                    stop:1 rgba(13, 16, 26, 0.98));
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 18px;
-            }
-        """)
         header_row = QHBoxLayout(hero_card)
         header_row.setContentsMargins(22, 18, 22, 18)
         header_row.setSpacing(16)
@@ -243,11 +209,10 @@ class HomeView(QWidget):
         welcome_font.setPixelSize(23)
         welcome_font.setBold(True)
         welcome.setFont(welcome_font)
-        welcome.setStyleSheet("color: #FFFFFF;")
         title_box.addWidget(welcome)
         subtitle = QLabel("Müziğin ritmiyle günü güzelleştir — kaldığın yerden devam et.")
         subtitle.setObjectName("Muted")
-        subtitle.setStyleSheet("font-size: 12px; color: #8F9CAE;")
+        subtitle.setStyleSheet("font-size: 12px;")
         title_box.addWidget(subtitle)
         header_row.addLayout(title_box, stretch=1)
 

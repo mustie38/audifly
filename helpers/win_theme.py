@@ -4,6 +4,11 @@ from __future__ import annotations
 import sys
 
 
+def is_dark_theme(theme_key: str | None) -> bool:
+    """Açık (mono_light) tema dışındaki tüm temalar karanlıktır."""
+    return (theme_key or "") != "mono_light"
+
+
 def apply_dark_titlebar(widget, dark: bool = True) -> None:
     """Windows üzerinde pencere başlık çubuğunu karanlık moda geçirir.
     Diğer platformlarda veya headless ortamlarda sessizce çıkar.

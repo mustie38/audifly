@@ -77,17 +77,6 @@ class TrackCard(QFrame):
         self.setObjectName("DiscoveryCard")
         self.setFixedWidth(self.CARD_W)
         self.setCursor(Qt.PointingHandCursor)
-        self.setStyleSheet("""
-            #DiscoveryCard {
-                background: rgba(255, 255, 255, 0.032);
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                border-radius: 16px;
-            }
-            #DiscoveryCard:hover {
-                background: rgba(255, 255, 255, 0.065);
-                border: 1px solid rgba(169, 128, 249, 0.42);
-            }
-        """)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 10)
@@ -160,7 +149,7 @@ class TrackCard(QFrame):
         title = track.get("title", "?")
         t_label = QLabel(title[:26] + ("…" if len(title) > 26 else ""))
         t_label.setWordWrap(True)
-        t_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #FFFFFF;")
+        t_label.setStyleSheet("font-weight: 600; font-size: 13px;")
         outer.addWidget(t_label)
 
         artist_name = track.get("uploader") or "Bilinmeyen Sanatçı"
@@ -169,7 +158,7 @@ class TrackCard(QFrame):
             meta += f" • {format_time(track['duration'] * 1000)}"
         m_label = QLabel(meta)
         m_label.setObjectName("Muted")
-        m_label.setStyleSheet("font-size: 11px; color: #8F9CAE;")
+        m_label.setStyleSheet("font-size: 11px;")
         if artist_name not in ("Bilinmeyen Sanatçı", "?"):
             m_label.setCursor(Qt.PointingHandCursor)
             m_label.setToolTip(f"👤 {artist_name} profiline git")
@@ -274,14 +263,6 @@ class HeroCard(QFrame):
         self.track: dict | None = None
         self.setObjectName("HeroCard")
         self.setMinimumHeight(220)
-        self.setStyleSheet(
-            "#HeroCard { "
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-            "stop:0 rgba(169, 128, 249, 0.20), stop:0.5 rgba(20, 24, 38, 0.95), "
-            "stop:1 rgba(13, 16, 26, 0.98)); "
-            "border: 1px solid rgba(255, 255, 255, 0.09); "
-            "border-radius: 20px; }"
-        )
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
@@ -318,13 +299,13 @@ class HeroCard(QFrame):
         text_col.addLayout(badge_row)
 
         self.title_label = QLabel("Yükleniyor…")
-        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
+        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold;")
         self.title_label.setWordWrap(True)
         text_col.addWidget(self.title_label)
 
         self.artist_label = QLabel("")
         self.artist_label.setObjectName("Muted")
-        self.artist_label.setStyleSheet("font-size: 13px; color: #C084FC; font-weight: 500;")
+        self.artist_label.setStyleSheet("font-size: 13px; font-weight: 500;")
         self.artist_label.setCursor(Qt.PointingHandCursor)
         self.artist_label.setToolTip("Sanatçı profiline git")
         self.artist_label.mousePressEvent = self._on_artist_click
@@ -332,7 +313,7 @@ class HeroCard(QFrame):
 
         self.desc_label = QLabel("Keşfet verileri hazırlanıyor…")
         self.desc_label.setObjectName("Muted")
-        self.desc_label.setStyleSheet("font-size: 12px; color: #8F9CAE;")
+        self.desc_label.setStyleSheet("font-size: 12px;")
         self.desc_label.setWordWrap(True)
         text_col.addWidget(self.desc_label)
         text_col.addStretch(1)
@@ -386,15 +367,6 @@ class HeroCard(QFrame):
         dur = format_time((track.get("duration") or 0) * 1000) if track.get("duration") else ""
         self.desc_label.setText(
             f"Günün öne çıkan seçimi{(' • ' + dur) if dur else ''} — Hemen dinle veya radyosunu başlat."
-        )
-        base = cover_color_for(title)
-        self.setStyleSheet(
-            "#HeroCard { "
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-            f"stop:0 {shade_color(base, 0.28)}, stop:0.5 rgba(20, 24, 38, 0.95), "
-            f"stop:1 rgba(13, 16, 26, 0.98)); "
-            "border: 1px solid rgba(255, 255, 255, 0.09); "
-            "border-radius: 20px; }"
         )
         self.art.setText("🎧")
         if self.thumbnails is not None:
