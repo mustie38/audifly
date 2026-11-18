@@ -59,8 +59,10 @@ class TopBar(QFrame):
         row.addWidget(self.add_btn)
 
         # --- Bildirim zili (yt-dlp güncellemesi vb.) ---
-        self.bell_btn = QPushButton("🔔")
+        self.bell_btn = QPushButton()
         self.bell_btn.setObjectName("IconSquare")
+        self.bell_btn.setIcon(vicon("bell", 16, "#cfc9e6"))
+        self.bell_btn.setIconSize(QSize(16, 16))
         self.bell_btn.setToolTip("Bildirimler")
         self.bell_btn.setCursor(Qt.PointingHandCursor)
         self.bell_btn.clicked.connect(self.notificationsClicked.emit)
@@ -68,8 +70,10 @@ class TopBar(QFrame):
         row.addWidget(self.bell_btn)
 
         # --- Panel geri açma (panel kapatıldığında görünür) ---
-        self.panel_btn = QPushButton("◫")
+        self.panel_btn = QPushButton()
         self.panel_btn.setObjectName("IconSquare")
+        self.panel_btn.setIcon(vicon("sidebar_right", 16, "#cfc9e6"))
+        self.panel_btn.setIconSize(QSize(16, 16))
         self.panel_btn.setToolTip('"Şu An Çalıyor" panelini göster')
         self.panel_btn.setCursor(Qt.PointingHandCursor)
         self.panel_btn.clicked.connect(self.panelToggleClicked.emit)

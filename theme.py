@@ -93,40 +93,50 @@ def build_qss(t: Theme) -> str:
     }}
 
     /* ============================================================
-       GENEL BUTONLAR
+       GENEL BUTONLAR — modern, yumuşak cam geçişli
        ============================================================ */
     QPushButton {{
-        background: transparent; 
-        border: none; 
+        background: rgba(255, 255, 255, 0.04); 
+        border: 1px solid rgba(255, 255, 255, 0.07); 
         color: {t.text}; 
-        padding: 6px;
+        padding: 6px 12px;
         border-radius: 12px;
+        font-weight: 600;
     }}
-    QPushButton:hover {{ color: {t.accent}; }}
-    QPushButton:disabled {{ color: {t.text_dim}; }}
+    QPushButton:hover {{
+        background: rgba(255, 255, 255, 0.10);
+        border: 1px solid {t.accent};
+        color: #ffffff;
+    }}
+    QPushButton:pressed {{
+        background: rgba(255, 255, 255, 0.15);
+    }}
+    QPushButton:disabled {{
+        color: {t.text_dim};
+        background: transparent;
+        border: 1px solid transparent;
+    }}
 
     /* ============================================================
-       PRIMARY — gradient + PILL (tam oval) + hover
-       Yükseklik SABİT tutulur: border-radius'un her platformda/fontta
-       gerçek bir "hap" (pill) şekli vermesi, köşeli/kaba durmaması için.
+       PRIMARY — gradient + PILL (tam oval) + parlak cam kenar
        ============================================================ */
     QPushButton#Primary {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
             stop:0 {t.accent}, stop:1 {t.accent_dark});
         color: white; 
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 20px;
-        font-weight: 600; 
+        border: 1px solid rgba(255, 255, 255, 0.20);
+        border-radius: 19px;
+        font-weight: 700; 
         font-size: 13px;
         padding: 0px 22px;
-        min-height: 40px;
-        max-height: 40px;
+        min-height: 38px;
+        max-height: 38px;
         letter-spacing: 0.3px;
     }}
     QPushButton#Primary:hover {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
             stop:0 {t.accent_dark}, stop:1 {t.accent});
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.42);
     }}
     QPushButton#Primary:pressed {{
         background: {t.accent_dark};
@@ -141,65 +151,144 @@ def build_qss(t: Theme) -> str:
        SECONDARY — cam efektli + PILL (tam oval)
        ============================================================ */
     QPushButton#Secondary {{
-        background: rgba(255, 255, 255, 0.07);
+        background: rgba(255, 255, 255, 0.06);
         color: {t.text};
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 19px;
         font-weight: 600; 
         font-size: 13px;
-        padding: 11px 24px;
+        padding: 9px 22px;
     }}
     QPushButton#Secondary:hover {{
-        background: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.13);
         border: 1px solid {t.accent};
-        color: {t.accent};
+        color: #ffffff;
     }}
     QPushButton#Secondary:pressed {{
         background: rgba(255, 255, 255, 0.05);
     }}
 
     /* ============================================================
-       NAV BUTTON — aktif durumda gradient + daha oval köşe
+       NAV BUTTON — kompakt, modern ve parlak vurgu
        ============================================================ */
     QPushButton#NavButton {{
+        background: transparent;
         text-align: left; 
-        padding: 11px 18px; 
-        border-radius: 16px;
+        padding: 8px 14px; 
+        border-radius: 12px;
         color: {t.text_dim}; 
         font-weight: 600;
+        font-size: 13px;
         border: 1px solid transparent;
     }}
     QPushButton#NavButton:hover {{ 
-        background: {t.bg_card}; 
+        background: rgba(255, 255, 255, 0.06); 
         color: {t.text};
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
     }}
     QPushButton#NavButton[active="true"] {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
             stop:0 {t.accent}, stop:1 {t.accent_dark});
         color: white;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-    }}
-
-    QPushButton#LinkButton {{ 
-        color: {t.accent}; font-weight: bold; text-align: left; 
-        padding: 6px 10px; border-radius: 10px;
-    }}
-    QPushButton#LinkButton:hover {{ 
-        color: {t.accent_dark}; 
-        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.22);
     }}
 
     /* ============================================================
-       ICON SQUARE — üst çubuk ikonları, TAM DAİRE
+       NAV FOLDER & SUB BUTTON — Katlanabilir "Akıllı Listeler" Klasörü
        ============================================================ */
+    QPushButton#NavFolderButton {{
+        background: rgba(255, 255, 255, 0.03);
+        text-align: left;
+        padding: 8px 14px;
+        border-radius: 12px;
+        color: {t.text};
+        font-weight: 600;
+        font-size: 12.5px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }}
+    QPushButton#NavFolderButton:hover {{
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid {t.accent};
+        color: #ffffff;
+    }}
+    QPushButton#NavFolderButton[has_active="true"] {{
+        background: rgba(169, 128, 249, 0.16);
+        border: 1px solid {t.accent};
+        color: #ffffff;
+    }}
+
+    QWidget#SmartFolderContainer {{
+        background: rgba(255, 255, 255, 0.02);
+        border-left: 2px solid {t.accent};
+        border-radius: 10px;
+        margin-left: 6px;
+        margin-bottom: 4px;
+    }}
+
+    QPushButton#NavSubButton {{
+        background: transparent;
+        text-align: left;
+        padding: 6px 12px;
+        border-radius: 10px;
+        color: {t.text_dim};
+        font-weight: 600;
+        font-size: 12px;
+        border: 1px solid transparent;
+    }}
+    QPushButton#NavSubButton:hover {{
+        background: rgba(255, 255, 255, 0.06);
+        color: {t.text};
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }}
+    QPushButton#NavSubButton[active="true"] {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 {t.accent}, stop:1 {t.accent_dark});
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.20);
+    }}
+
+    QPushButton#LinkButton {{ 
+        background: rgba(169, 128, 249, 0.08);
+        border: 1px dashed rgba(169, 128, 249, 0.32);
+        color: {t.accent};
+        font-weight: bold;
+        text-align: left; 
+        padding: 7px 12px;
+        border-radius: 11px;
+        margin-top: 2px;
+        margin-bottom: 4px;
+    }}
+    QPushButton#LinkButton:hover {{ 
+        color: #ffffff; 
+        background: {t.accent};
+        border: 1px solid {t.accent};
+    }}
+
+    /* ============================================================
+       SIDEBAR TOOL BTN & ICON SQUARE — Alt ve Üst Çubuk İkonları
+       ============================================================ */
+    QPushButton#SidebarToolBtn {{
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 12px;
+        padding: 0px;
+        min-width: 36px; max-width: 36px;
+        min-height: 36px; max-height: 36px;
+    }}
+    QPushButton#SidebarToolBtn:hover {{
+        background: {t.accent};
+        border: 1px solid rgba(255, 255, 255, 0.30);
+    }}
+
     QPushButton#IconSquare {{
         background: rgba(255, 255, 255, 0.07);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 21px; 
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px; 
         padding: 0px; 
-        min-width: 42px; max-width: 42px;
-        min-height: 42px; max-height: 42px;
+        min-width: 38px; max-width: 38px;
+        min-height: 38px; max-height: 38px;
     }}
     QPushButton#IconSquare:hover {{ 
         background: {t.accent};

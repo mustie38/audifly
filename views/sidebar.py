@@ -16,8 +16,13 @@ from PySide6.QtWidgets import (
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService, crop_to_square, pil_to_qimage
+from mustiefly_qt.widgets.player_icons import icon as vicon
 from mustiefly_qt.widgets.song_row import SONG_MIME
 from mustiefly_qt.helpers.logging_setup import get_logger
+
+SMART_FOLDER_KEYS = {
+    "most_played", "recent", "new_added", "mixes", "fav_artists", "forgotten", "smart_rules"
+}
 
 
 
@@ -175,41 +180,101 @@ class SidebarWidget(QWidget):
 
         # --- Navigasyon ---
         self._nav_buttons: dict[str, QPushButton] = {}
-        nav_items = (
-            ("home", "⌂  Ana Sayfa"),
-            ("explore", "◎  Keşfet"),
-            ("library", "▤  Kütüphane"),
-            ("liked", "♡  Beğenilenler"),
-            ("queue", "☰  Sırada"),
-            ("downloads", "↓  İndirmeler"),
-            ("most_played", "★  En Çok Dinlenen"),
-            ("recent", "◷  Son Çalınanlar"),
-            ("new_added", "✦  Yeni Eklenenler"),
-            ("mixes", "✨  Senin İçin Mix'ler"),
-            ("fav_artists", "♪  Favori Sanatçılar"),
-            ("forgotten", "◌  Unutulanlar"),
-            ("smart_rules", "⚙  Kural Listeleri"),
-            ("radio", "◉  Radyo"),
-            ("stats", "▦  İstatistikler"),
-            ("wrapped", "🎁  Wrapped"),
+        self._nav_icons: dict[str, str] = {}
+
+        primary_nav = (
+            ("home", "  Ana Sayfa", "home"),
+            ("explore", "  Keşfet", "compass"),
+            ("library", "  Kütüphane", "grid"),
+            ("liked", "  Beğenilenler", "heart"),
+            ("queue", "  Sırada", "queue"),
+            ("downloads", "  İndirmeler", "download"),
         )
-        for key, label in nav_items:
+        for key, label, ic_name in primary_nav:
             btn = QPushButton(label)
             btn.setObjectName("NavButton")
+            btn.setIcon(vicon(ic_name, 16, "#9e98b8"))
+            btn.setIconSize(QSize(16, 16))
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _=False, k=key: self._select_nav(k))
             top.addWidget(btn)
             self._nav_buttons[key] = btn
+            self._nav_icons[key] = ic_name
 
-        top.addSpacing(14)
+        # --- Katlanabilir Klasör: Akıllı Listeler & Mix'ler ---
+        self._smart_folder_open = False
+        self.smart_folder_btn = QPushButton("  Akıllı Listeler & Mix'ler   ▸")
+        self.smart_folder_btn.setObjectName("NavFolderButton")
+        self.smart_folder_btn.setIcon(vicon("folder", 16, "#b497ff"))
+        self.smart_folder_btn.setIconSize(QSize(16, 16))
+        self.smart_folder_btn.setCursor(Qt.PointingHandCursor)
+        self.smart_folder_btn.setToolTip(
+            "En Çok Dinlenen, Son Çalınanlar, Yeni Eklenenler, Mix'ler, Favori Sanatçılar ve Unutulanlar klasörünü aç/kapat"
+        )
+        self.smart_folder_btn.clicked.connect(self.toggle_smart_folder)
+        top.addWidget(self.smart_folder_btn)
+
+        self.smart_folder_container = QWidget()
+        self.smart_folder_container.setObjectName("SmartFolderContainer")
+        self.smart_folder_container.setVisible(False)
+        folder_layout = QVBoxLayout(self.smart_folder_container)
+        folder_layout.setContentsMargins(12, 3, 4, 4)
+        folder_layout.setSpacing(2)
+
+        smart_nav = (
+            ("most_played", "  En Çok Dinlenen", "star"),
+            ("recent", "  Son Çalınanlar", "clock"),
+            ("new_added", "  Yeni Eklenenler", "sparkle"),
+            ("mixes", "  Senin İçin Mix'ler", "disc"),
+            ("fav_artists", "  Favori Sanatçılar", "user"),
+            ("forgotten", "  Unutulanlar", "archive"),
+            ("smart_rules", "  Kural Listeleri", "sliders"),
+        )
+        for key, label, ic_name in smart_nav:
+            btn = QPushButton(label)
+            btn.setObjectName("NavSubButton")
+            btn.setIcon(vicon(ic_name, 14, "#9e98b8"))
+            btn.setIconSize(QSize(14, 14))
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _=False, k=key: self._select_nav(k))
+            folder_layout.addWidget(btn)
+            self._nav_buttons[key] = btn
+            self._nav_icons[key] = ic_name
+
+        top.addWidget(self.smart_folder_container)
+
+        # --- Alt Ana Navigasyon ---
+        secondary_nav = (
+            ("radio", "  Canlı Radyo", "radio"),
+            ("stats", "  İstatistikler", "chart"),
+            ("wrapped", "  Wrapped Özeti", "gift"),
+        )
+        for key, label, ic_name in secondary_nav:
+            btn = QPushButton(label)
+            btn.setObjectName("NavButton")
+            btn.setIcon(vicon(ic_name, 16, "#9e98b8"))
+            btn.setIconSize(QSize(16, 16))
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _=False, k=key: self._select_nav(k))
+            top.addWidget(btn)
+            self._nav_buttons[key] = btn
+            self._nav_icons[key] = ic_name
+
+        top.addSpacing(12)
 
         # --- Listeler bölümü ---
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(4, 0, 4, 0)
         header = QLabel("LİSTELER")
         header.setObjectName("SectionHeader")
-        top.addWidget(header)
+        header_row.addWidget(header)
+        header_row.addStretch(1)
+        top.addLayout(header_row)
 
-        new_btn = QPushButton("+ Yeni Liste Oluştur")
+        new_btn = QPushButton("  Yeni Liste Oluştur")
         new_btn.setObjectName("LinkButton")
+        new_btn.setIcon(vicon("plus", 13, "#a980f9"))
+        new_btn.setIconSize(QSize(13, 13))
         new_btn.setCursor(Qt.PointingHandCursor)
         new_btn.clicked.connect(self._create_playlist)
         top.addWidget(new_btn)
@@ -240,15 +305,17 @@ class SidebarWidget(QWidget):
         tools_row = QHBoxLayout()
         tools_row.setSpacing(8)
         tools = (
-            ("⚙", "Ayarlar", self.settingsRequested),
-            ("▤", "Ekolayzer", self.equalizerRequested),
-            ("♫", "Sözler Paneli", self.lyricsRequested),
-            ("▭", "Mini Oynatıcı", self.miniPlayerRequested),
-            ("🩺", "Sorun Bildir / Tanılama", self.reportRequested),
+            ("settings", "Ayarlar", self.settingsRequested),
+            ("sliders", "Ses & Ekolayzer", self.equalizerRequested),
+            ("lyrics", "Sözler Paneli", self.lyricsRequested),
+            ("mini_player", "Mini Oynatıcı", self.miniPlayerRequested),
+            ("diagnostics", "Sorun Bildir / Tanılama", self.reportRequested),
         )
-        for icon, tooltip, sig in tools:
-            btn = QPushButton(icon)
-            btn.setObjectName("IconSquare")
+        for ic_kind, tooltip, sig in tools:
+            btn = QPushButton()
+            btn.setObjectName("SidebarToolBtn")
+            btn.setIcon(vicon(ic_kind, 16, "#cfc9e6"))
+            btn.setIconSize(QSize(16, 16))
             btn.setToolTip(tooltip)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(sig.emit)
@@ -274,20 +341,45 @@ class SidebarWidget(QWidget):
         self._custom_cover_cache: dict[str, tuple] = {}
         self.refresh()
 
-    def _select_nav(self, key: str):
+    def toggle_smart_folder(self):
+        self.set_smart_folder_open(not self._smart_folder_open)
+
+    def set_smart_folder_open(self, opened: bool):
+        self._smart_folder_open = bool(opened)
+        self.smart_folder_container.setVisible(self._smart_folder_open)
+        arrow = "▾" if self._smart_folder_open else "▸"
+        self.smart_folder_btn.setText(f"  Akıllı Listeler & Mix'ler   {arrow}")
+        ic_kind = "folder_open" if self._smart_folder_open else "folder"
+        has_act = self.smart_folder_btn.property("has_active") == "true"
+        self.smart_folder_btn.setIcon(vicon(ic_kind, 16, "#ffffff" if has_act else "#b497ff"))
+
+    def set_active_nav(self, key: str | None):
+        """Navigasyon butonlarının aktif görünümünü ve vektör ikon renklerini günceller."""
         for k, btn in self._nav_buttons.items():
-            btn.setProperty("active", "true" if k == key else "false")
+            is_act = (k == key)
+            btn.setProperty("active", "true" if is_act else "false")
+            ic_name = self._nav_icons.get(k)
+            if ic_name:
+                sz = 14 if k in SMART_FOLDER_KEYS else 16
+                btn.setIcon(vicon(ic_name, sz, "#ffffff" if is_act else "#9e98b8"))
             btn.style().unpolish(btn)
             btn.style().polish(btn)
+
+        in_folder = bool(key in SMART_FOLDER_KEYS)
+        self.smart_folder_btn.setProperty("has_active", "true" if in_folder else "false")
+        ic_kind = "folder_open" if self._smart_folder_open else "folder"
+        self.smart_folder_btn.setIcon(vicon(ic_kind, 16, "#ffffff" if in_folder else "#b497ff"))
+        self.smart_folder_btn.style().unpolish(self.smart_folder_btn)
+        self.smart_folder_btn.style().polish(self.smart_folder_btn)
+
+    def _select_nav(self, key: str):
+        self.set_active_nav(key)
         self.playlist_list.clearSelection()
         self.navSelected.emit(key)
 
     def _on_playlist_clicked(self, item: QListWidgetItem):
         name = item.data(Qt.UserRole)
-        for btn in self._nav_buttons.values():
-            btn.setProperty("active", "false")
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
+        self.set_active_nav(None)
         self.store.switch_playlist(name)
         self.playlistSelected.emit(name)
 

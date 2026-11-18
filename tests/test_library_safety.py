@@ -106,6 +106,38 @@ def test_rename_playlist_clears_custom_cover_cache(library_store, monkeypatch):
     sidebar.deleteLater()
 
 
+def test_sidebar_smart_folder_collapsible(library_store):
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    from mustiefly_qt.views.sidebar import SMART_FOLDER_KEYS, SidebarWidget
+
+    _app = QApplication.instance() or QApplication([])
+    sidebar = SidebarWidget(library_store, paths=library_store.paths)
+    sidebar.show()
+
+    # Başlangıçta akıllı listeler klasörü kapalı olmalı
+    assert sidebar._smart_folder_open is False
+    assert sidebar.smart_folder_container.isVisible() is False
+
+    # Tıklanınca açılmalı ve içindeki tüm akıllı liste butonları erişilebilir olmalı
+    sidebar.smart_folder_btn.click()
+    assert sidebar._smart_folder_open is True
+    assert sidebar.smart_folder_container.isVisible() is True
+    for key in SMART_FOLDER_KEYS:
+        assert key in sidebar._nav_buttons
+
+    # İçeriden bir akıllı liste seçildiğinde klasör başlığı da aktif olarak işaretlenmeli
+    sidebar._select_nav("mixes")
+    assert sidebar.smart_folder_btn.property("has_active") == "true"
+    assert sidebar._nav_buttons["mixes"].property("active") == "true"
+
+    # Tekrar tıklanınca kapanmalı
+    sidebar.smart_folder_btn.click()
+    assert sidebar._smart_folder_open is False
+    assert sidebar.smart_folder_container.isVisible() is False
+    sidebar.deleteLater()
+
+
 def test_duplicate_cleanup_preserves_surviving_cache(library_store):
     path = Path(library_store.paths.cache_dir) / "song.mp3"
     path.write_bytes(b"audio")

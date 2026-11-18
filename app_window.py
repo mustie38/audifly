@@ -668,10 +668,13 @@ class MainWindow(QMainWindow):
     # --- Navigasyon / görünüm yönetimi ---
     def _select_nav_silent(self, key: str):
         """Sidebar buton görselini kod tarafından senkronlar (sinyal tetiklemeden)."""
-        for k, btn in self.sidebar._nav_buttons.items():
-            btn.setProperty("active", "true" if k == key else "false")
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
+        if hasattr(self.sidebar, "set_active_nav"):
+            self.sidebar.set_active_nav(key)
+        else:
+            for k, btn in self.sidebar._nav_buttons.items():
+                btn.setProperty("active", "true" if k == key else "false")
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
 
     def _switch_view(self, index: int):
         widget = self.view_stack.widget(index)
