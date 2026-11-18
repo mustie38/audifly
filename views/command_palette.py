@@ -458,6 +458,16 @@ class CommandPaletteDialog(QDialog):
             ),
             PaletteItem(
                 kind="command",
+                title="Masaüstü Şeffaf Widget Modu (Rainmeter)",
+                subtitle="Masaüstü duvar kağıdında süzülen cam efektli widget + spektrum",
+                category="KOMUT",
+                icon_name="spectrum",
+                icon_color="#00D2FF",
+                callback=self._cmd_toggle_desktop_widget,
+                keywords="widget masaustu rainmeter seffaf desktop glass",
+            ),
+            PaletteItem(
+                kind="command",
                 title="Gaming HUD Overlay Aç / Kapat",
                 subtitle="Oyunlarda ve tam ekranda ekran üstü mini çubuk",
                 category="KOMUT",
@@ -868,6 +878,10 @@ class CommandPaletteDialog(QDialog):
     def _cmd_toggle_mini_player(self):
         if self.app_window and hasattr(self.app_window, "_toggle_mini_player"):
             self.app_window._toggle_mini_player()
+
+    def _cmd_toggle_desktop_widget(self):
+        if self.app_window and hasattr(self.app_window, "_toggle_desktop_widget"):
+            self.app_window._toggle_desktop_widget()
 
     def _cmd_toggle_hud(self):
         if self.app_window and hasattr(self.app_window, "hud_overlay"):

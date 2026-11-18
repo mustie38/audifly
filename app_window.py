@@ -111,10 +111,11 @@ class MainWindow(QMainWindow):
         self.discord_rpc = DiscordRPCService(client_id, self.playback, self)
         self.mini_player = MiniPlayer(self.playback, thumbnails=self.thumbnails)
 
-        # Ekolayzer + Sözler + Karaoke pencereleri (menüden açılır, tek örnek)
+        # Ekolayzer + Sözler + Karaoke + Masaüstü Widget pencereleri (tek örnek)
         self._eq_window: EqualizerWindow | None = None
         self._lyrics_window: LyricsWindow | None = None
         self._karaoke_view: KaraokeView | None = None
+        self._desktop_widget = None
 
         # Global medya tuşları (ayar açıkken)
         self._media_keys = GlobalMediaKeys(
@@ -508,7 +509,9 @@ class MainWindow(QMainWindow):
     # --- Mini oynatıcı modu: mini açıkken ana pencere gizlenir ---
     def _toggle_mini_player(self):
         if self.mini_player.isVisible():
-            self.mini_player.close()  # closed sinyali ana pencereyi geri getirir
+            self.mini_player.close()
+        if self._desktop_widget is not None:
+            self._desktop_widget.close()  # closed sinyali ana pencereyi geri getirir
             return
         self.hide()
         self.mini_player.show()
@@ -517,6 +520,19 @@ class MainWindow(QMainWindow):
         if self.isHidden():
             self.showNormal()
             self.activateWindow()
+
+    def _toggle_desktop_widget(self):
+        """Rainmeter tarzı şeffaf masaüstü müzik widget'ını açar/kapatır."""
+        if self._desktop_widget is not None and self._desktop_widget.isVisible():
+            self._desktop_widget.close()
+            return
+        if self._desktop_widget is None:
+            from mustiefly_qt.views.desktop_widget import DesktopWidget
+            self._desktop_widget = DesktopWidget(
+                self.playback, self.thumbnails, self.settings, self.save_settings,
+            )
+        self._desktop_widget.show()
+        self._desktop_widget.raise_()
 
     # --- "Şu An Çalıyor" panelini kapat/aç ---
     def _hide_now_playing_panel(self):
@@ -604,6 +620,8 @@ class MainWindow(QMainWindow):
         self.addAction(karaoke_action)
         mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
         mini_player_action.triggered.connect(self._toggle_mini_player)
+        widget_action = app_menu.addAction("🖥️ Masaüstü Şeffaf Widget'ı")
+        widget_action.triggered.connect(self._toggle_desktop_widget)
         palette_action = app_menu.addAction("⚡ Spotlight & Komut Paleti…")
         palette_action.setShortcut("Ctrl+K")
         palette_action.triggered.connect(self.open_command_palette)
@@ -1389,6 +1407,8 @@ class MainWindow(QMainWindow):
         self.listen.shutdown()
         self.discord_rpc.close()
         self.mini_player.close()
+        if self._desktop_widget is not None:
+            self._desktop_widget.close()
         if self._eq_window is not None:
             self._eq_window.close()
         if self._lyrics_window is not None:
