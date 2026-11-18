@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import threading
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
@@ -15,6 +16,7 @@ from mustiefly_qt.helpers.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, app
 from mustiefly_qt.helpers.updates import installed_version, run_update, update_available
 from mustiefly_qt.helpers import ytdlp_runtime
 from mustiefly_qt.helpers.logging_setup import get_logger
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 
 
 
@@ -70,6 +72,67 @@ def _dir_sizes(paths: AppPaths, store) -> tuple[int, int, int]:
     return thumb, covers, backups
 
 
+class _ToggleSwitch(QCheckBox):
+    """Modern animasyonlu pill toggle switch (QCheckBox uyumlu)."""
+
+    def __init__(self, accent: str = "#a980f9", parent=None):
+        super().__init__(parent)
+        self._accent = accent
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(44, 24)
+        self._thumb_pos = 1.0 if self.isChecked() else 0.0
+        self._anim = QPropertyAnimation(self, b"thumbPos", self)
+        self._anim.setDuration(140)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.toggled.connect(self._animate)
+
+    def _get_thumb_pos(self) -> float:
+        return self._thumb_pos
+
+    def _set_thumb_pos(self, val: float):
+        self._thumb_pos = val
+        self.update()
+
+    thumbPos = Property(float, _get_thumb_pos, _set_thumb_pos)
+
+    def setChecked(self, checked: bool):  # noqa: N802
+        super().setChecked(checked)
+        self._thumb_pos = 1.0 if checked else 0.0
+        self.update()
+
+    def _animate(self, checked: bool):
+        self._anim.stop()
+        self._anim.setStartValue(self._thumb_pos)
+        self._anim.setEndValue(1.0 if checked else 0.0)
+        self._anim.start()
+
+    def hitButton(self, pos):  # noqa: N802
+        return self.rect().contains(pos)
+
+    def paintEvent(self, event):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        w, h = self.width(), self.height()
+        radius = h / 2.0
+        if self.isChecked():
+            track_color = QColor(self._accent)
+        else:
+            track_color = QColor(255, 255, 255, 48 if self.underMouse() else 30)
+
+        p.setPen(Qt.NoPen)
+        p.setBrush(track_color)
+        p.drawRoundedRect(QRectF(0, 0, w, h), radius, radius)
+
+        margin = 3.0
+        thumb_d = h - 2 * margin
+        x = margin + (w - thumb_d - 2 * margin) * self._thumb_pos
+
+        p.setBrush(QColor("#ffffff"))
+        p.drawEllipse(QRectF(x, margin, thumb_d, thumb_d))
+        p.end()
+
+
 class SettingsView(QWidget):
     """Ayarlar artık ayrı bir pencere/diyalog DEĞİL — ana uygulamanın içerik
     alanına gömülü bir sayfa. Sol üstteki "Geri" butonu (ya da alttaki
@@ -88,13 +151,13 @@ class SettingsView(QWidget):
     backRequested = Signal()
     diagnosticsRequested = Signal()
 
-    # (anahtar, ikon, başlık)
+    # (anahtar, vektör_ikon, başlık)
     CATEGORIES = (
-        ("general", "🎨", "Görünüm"),
-        ("playback", "▶", "Oynatma"),
-        ("storage", "🗄", "Depolama"),
-        ("integrations", "🎧", "Entegrasyonlar"),
-        ("updates", "⬆", "Güncellemeler"),
+        ("general", "sparkle", "Görünüm"),
+        ("playback", "play", "Oynatma"),
+        ("storage", "archive", "Depolama"),
+        ("integrations", "radio", "Entegrasyonlar"),
+        ("updates", "download", "Güncellemeler"),
     )
 
     def __init__(self, paths: AppPaths, settings: dict, parent=None, store=None,
@@ -105,33 +168,43 @@ class SettingsView(QWidget):
         self.store = store
         self._thumb_service = thumbnails
         self._theme = THEMES.get(settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
+        self._searchable_rows: list[tuple[str, str, QWidget]] = []  # (cat_key, text_lower, row_widget)
+        self._active_build_cat = "general"
 
         self.setObjectName("SettingsView")
         self.setStyleSheet(f"""
             QWidget#SettingsView {{ background: {self._theme.bg_main}; }}
             QWidget#SettingsView QLabel#SettingsRowTitle {{
-                font-weight: 600; font-size: 13px;
+                font-weight: 600; font-size: 13px; color: #FFFFFF;
             }}
             QWidget#SettingsView QWidget#SettingsHeader {{
                 border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                background: rgba(255, 255, 255, 0.015);
             }}
             QWidget#SettingsView QWidget#SettingsFooter {{
                 border-top: 1px solid rgba(255, 255, 255, 0.06);
+                background: rgba(255, 255, 255, 0.015);
             }}
             QWidget#SettingsView QWidget#SettingsNav {{
                 border-right: 1px solid rgba(255, 255, 255, 0.06);
+                background: rgba(0, 0, 0, 0.14);
             }}
-            QWidget#SettingsView QCheckBox::indicator {{
-                width: 38px; height: 20px; border-radius: 10px;
-                background: rgba(127, 127, 127, 0.28);
-                border: 1px solid rgba(127, 127, 127, 0.35);
+            QWidget#SettingsView QWidget#Card {{
+                background: rgba(255, 255, 255, 0.032);
+                border: 1px solid rgba(255, 255, 255, 0.07);
+                border-radius: 16px;
             }}
-            QWidget#SettingsView QCheckBox::indicator:checked {{
-                background: {self._theme.accent};
-                border: 1px solid {self._theme.accent};
+            QWidget#SettingsView QLineEdit#SettingsSearch {{
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                border-radius: 10px;
+                padding: 6px 12px;
+                color: #FFFFFF;
+                font-size: 12px;
             }}
-            QWidget#SettingsView QCheckBox::indicator:unchecked:hover {{
-                border: 1px solid {self._theme.accent};
+            QWidget#SettingsView QLineEdit#SettingsSearch:focus {{
+                border-color: {self._theme.accent};
+                background: rgba(255, 255, 255, 0.08);
             }}
         """)
 
@@ -139,11 +212,11 @@ class SettingsView(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # --- Üst başlık: Geri butonu + "Ayarlar" -----------------------
+        # --- Üst başlık: Geri butonu + Vektör Başlık + Ayarlar Arama ---
         header = QWidget()
         header.setObjectName("SettingsHeader")
         h = QHBoxLayout(header)
-        h.setContentsMargins(24, 18, 24, 16)
+        h.setContentsMargins(24, 16, 24, 16)
         h.setSpacing(14)
 
         back_btn = QPushButton("←")
@@ -153,10 +226,35 @@ class SettingsView(QWidget):
         back_btn.clicked.connect(self.backRequested.emit)
         h.addWidget(back_btn)
 
-        title = QLabel("⚙  Ayarlar")
+        icon_lbl = QLabel()
+        icon_lbl.setFixedSize(26, 26)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        pm = icon_pixmap("settings", 20, self._theme.accent)
+        if pm is not None:
+            icon_lbl.setPixmap(pm)
+        h.addWidget(icon_lbl)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(1)
+        title = QLabel("Ayarlar")
         title.setObjectName("BrandTitle")
-        h.addWidget(title)
+        title_col.addWidget(title)
+        sub = QLabel("Görünüm, ses motoru, önbellek ve entegrasyon tercihlerini yönet")
+        sub.setObjectName("Muted")
+        sub.setStyleSheet("font-size: 11px;")
+        title_col.addWidget(sub)
+        h.addLayout(title_col)
+
         h.addStretch(1)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("SettingsSearch")
+        self.search_edit.setPlaceholderText("🔍  Ayarlarda ara… (örn: tema, vokal, crossfade)")
+        self.search_edit.setFixedWidth(280)
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        h.addWidget(self.search_edit)
+
         root.addWidget(header)
 
         # --- Gövde: sol kategori menüsü + sağ sayfa alanı -------------
@@ -168,18 +266,22 @@ class SettingsView(QWidget):
 
         nav = QWidget()
         nav.setObjectName("SettingsNav")
-        nav.setFixedWidth(200)
+        nav.setFixedWidth(210)
         nav_layout = QVBoxLayout(nav)
-        nav_layout.setContentsMargins(14, 16, 14, 14)
-        nav_layout.setSpacing(4)
+        nav_layout.setContentsMargins(14, 18, 14, 14)
+        nav_layout.setSpacing(6)
         self._nav_buttons: dict[str, QPushButton] = {}
-        for key, icon, label in self.CATEGORIES:
-            btn = QPushButton(f"{icon}  {label}")
+        self._nav_icons: dict[str, str] = {}
+        for key, ic_name, label in self.CATEGORIES:
+            btn = QPushButton(f"  {label}")
             btn.setObjectName("NavButton")
+            btn.setIcon(vicon(ic_name, 16, "#b7b2cf"))
+            btn.setIconSize(QSize(16, 16))
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _=False, k=key: self._select_category(k))
             nav_layout.addWidget(btn)
             self._nav_buttons[key] = btn
+            self._nav_icons[key] = ic_name
         nav_layout.addStretch(1)
         body_layout.addWidget(nav)
 
@@ -195,6 +297,7 @@ class SettingsView(QWidget):
             ("updates", self._build_updates_page),
         )
         for i, (key, builder) in enumerate(pages):
+            self._active_build_cat = key
             self.stack.addWidget(builder())
             self._page_index[key] = i
 
@@ -204,9 +307,7 @@ class SettingsView(QWidget):
         f = QHBoxLayout(footer)
         f.setContentsMargins(24, 14, 24, 16)
         f.setSpacing(10)
-        note = QLabel(
-            "Spotify değerlerini developer.spotify.com/dashboard adresinden "
-            "ücretsiz oluşturabilirsin.")
+        note = QLabel("Renk teması anında uygulanır; diğer ayarlar için Kaydet'e bas.")
         note.setObjectName("Muted")
         note.setWordWrap(True)
         f.addWidget(note, stretch=1)
@@ -229,17 +330,24 @@ class SettingsView(QWidget):
 
         self._select_category("general")
 
+    def _toggle(self, checked: bool = False) -> _ToggleSwitch:
+        sw = _ToggleSwitch(accent=self._theme.accent)
+        sw.setChecked(bool(checked))
+        return sw
+
     # ------------------------------------------------------------------
     # Küçük yardımcı yapı taşları (kart / satır / sayfa)
     # ------------------------------------------------------------------
     def _card(self, title: str) -> QWidget:
         card = QWidget()
         card.setObjectName("Card")
+        card.setMaximumWidth(820)
         lay = QVBoxLayout(card)
-        lay.setContentsMargins(18, 16, 18, 14)
-        lay.setSpacing(2)
+        lay.setContentsMargins(20, 18, 20, 16)
+        lay.setSpacing(4)
         lbl = QLabel(title)
         lbl.setObjectName("SectionHeader")
+        lbl.setStyleSheet("font-size: 11px; font-weight: bold; letter-spacing: 0.8px;")
         lay.addWidget(lbl)
         lay.addSpacing(6)
         return card
@@ -248,11 +356,14 @@ class SettingsView(QWidget):
         """Başlık + (opsiyonel) açıklama solda, kontrol (toggle/combo/vb.) sağda."""
         row = QWidget()
         row.setObjectName("SettingsRow")
+        row.setStyleSheet(
+            "QWidget#SettingsRow { border-bottom: 1px solid rgba(255, 255, 255, 0.045); border-radius: 6px; }"
+        )
         lay = QHBoxLayout(row)
-        lay.setContentsMargins(4, 8, 4, 8)
+        lay.setContentsMargins(8, 10, 8, 10)
         lay.setSpacing(16)
         text_box = QVBoxLayout()
-        text_box.setSpacing(2)
+        text_box.setSpacing(3)
         t = QLabel(title)
         t.setObjectName("SettingsRowTitle")
         text_box.addWidget(t)
@@ -260,9 +371,11 @@ class SettingsView(QWidget):
             d = QLabel(description)
             d.setObjectName("Muted")
             d.setWordWrap(True)
+            d.setStyleSheet("font-size: 11px;")
             text_box.addWidget(d)
         lay.addLayout(text_box, stretch=1)
         lay.addWidget(control, alignment=Qt.AlignVCenter)
+        self._searchable_rows.append((self._active_build_cat, (title + " " + description).lower(), row))
         return row
 
     def _hbox(self, *widgets: QWidget, spacing: int = 8) -> QWidget:
@@ -278,7 +391,7 @@ class SettingsView(QWidget):
         container = QWidget()
         container.setObjectName("SettingsPageBody")
         lay = QVBoxLayout(container)
-        lay.setContentsMargins(28, 22, 28, 22)
+        lay.setContentsMargins(32, 24, 32, 24)
         lay.setSpacing(16)
         for w in widgets:
             lay.addWidget(w)
@@ -287,10 +400,6 @@ class SettingsView(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        # QScrollArea'nın viewport'u varsayılan olarak beyaz (palet Base
-        # rengi) doldurur; QSS'te sadece "transparent" demek bazı Qt
-        # sürümlerinde yetmiyor, bu yüzden hem viewport'a hem içerideki
-        # widget'a temanın arka plan rengini açıkça veriyoruz.
         bg = self._theme.bg_main
         scroll.setStyleSheet(f"QScrollArea {{ background: {bg}; border: none; }}")
         scroll.setWidget(container)
@@ -300,10 +409,36 @@ class SettingsView(QWidget):
 
     def _select_category(self, key: str):
         for k, btn in self._nav_buttons.items():
-            btn.setProperty("active", "true" if k == key else "false")
+            active = (k == key)
+            btn.setProperty("active", "true" if active else "false")
+            ic_name = self._nav_icons.get(k)
+            if ic_name:
+                btn.setIcon(vicon(ic_name, 16, "#ffffff" if active else "#b7b2cf"))
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         self.stack.setCurrentIndex(self._page_index[key])
+
+    def _on_search_changed(self, text: str):
+        query = text.strip().lower()
+        first_match_cat = None
+        for cat_key, searchable_text, row_widget in self._searchable_rows:
+            if not query:
+                row_widget.setStyleSheet(
+                    "QWidget#SettingsRow { border-bottom: 1px solid rgba(255, 255, 255, 0.045); border-radius: 6px; }"
+                )
+            elif query in searchable_text:
+                if first_match_cat is None:
+                    first_match_cat = cat_key
+                row_widget.setStyleSheet(
+                    f"QWidget#SettingsRow {{ background: rgba(169, 128, 249, 0.14); "
+                    f"border-left: 3px solid {self._theme.accent}; border-radius: 8px; }}"
+                )
+            else:
+                row_widget.setStyleSheet(
+                    "QWidget#SettingsRow { border-bottom: 1px solid rgba(255, 255, 255, 0.045); border-radius: 6px; }"
+                )
+        if first_match_cat is not None:
+            self._select_category(first_match_cat)
 
     # ------------------------------------------------------------------
     # Sayfalar
@@ -320,7 +455,7 @@ class SettingsView(QWidget):
         theme_card.layout().addWidget(self._row(
             "Renk teması", self.theme_combo, "Seçim anında uygulanır."))
 
-        self.dynamic_check = QCheckBox()
+        self.dynamic_check = self._toggle()
         self.dynamic_check.setChecked(self.settings.get("dynamic_theme", True))
         theme_card.layout().addWidget(self._row(
             "Dinamik vurgu rengi", self.dynamic_check,
@@ -345,19 +480,19 @@ class SettingsView(QWidget):
             "Sayfa boyutu", self.page_size_spin,
             "Kütüphane listelerinde bir sayfada gösterilecek şarkı sayısı."))
 
-        self.restore_check = QCheckBox()
+        self.restore_check = self._toggle()
         self.restore_check.setChecked(self.settings.get("restore_session", True))
         general_card.layout().addWidget(self._row(
             "Son oturumu geri yükle", self.restore_check,
             "Açılışta kaldığın liste ve şarkıyı otomatik yükler."))
 
-        self.tray_check = QCheckBox()
+        self.tray_check = self._toggle()
         self.tray_check.setChecked(self.settings.get("minimize_to_tray", False))
         general_card.layout().addWidget(self._row(
             "Sistem tepsisine küçült", self.tray_check,
             "Kapatınca ya da küçültünce arka planda çalmaya devam eder."))
 
-        self.auto_update_check = QCheckBox()
+        self.auto_update_check = self._toggle()
         self.auto_update_check.setChecked(self.settings.get("auto_update_check", True))
         general_card.layout().addWidget(self._row(
             "Güncellemeleri otomatik denetle", self.auto_update_check,
@@ -368,13 +503,13 @@ class SettingsView(QWidget):
 
     def _build_playback_page(self) -> QWidget:
         audio_card = self._card("Ses")
-        self.normalize_check = QCheckBox()
+        self.normalize_check = self._toggle()
         self.normalize_check.setChecked(self.settings.get("audio_normalization", False))
         audio_card.layout().addWidget(self._row(
             "Ses seviyesini dengele", self.normalize_check,
             "Farklı şarkılar arasındaki ses seviyesi farkını otomatik dengeler (normvol + ReplayGain)."))
 
-        self.crossfade_check = QCheckBox()
+        self.crossfade_check = self._toggle()
         self.crossfade_check.setChecked(self.settings.get("crossfade_enabled", False))
         self.crossfade_spin = QSpinBox()
         self.crossfade_spin.setRange(1, 12)
@@ -384,20 +519,20 @@ class SettingsView(QWidget):
             "Crossfade", self._hbox(self.crossfade_check, self.crossfade_spin),
             "Şarkılar arası kesintisiz, yumuşak ses geçişi ve geçiş süresi (Equal-Power)."))
 
-        self.vocal_remover_check = QCheckBox()
+        self.vocal_remover_check = self._toggle()
         self.vocal_remover_check.setChecked(self.settings.get("vocal_remover_enabled", False))
         audio_card.layout().addWidget(self._row(
             "Vokal Ayırma / Enstrümantal Mod", self.vocal_remover_check,
             "Şarkıların merkez frekanslarındaki vokal sesini kısarak enstrümantal karaoke modu sağlar (Kısayol: V)."))
 
-        self.autoplay_check = QCheckBox()
+        self.autoplay_check = self._toggle()
         self.autoplay_check.setChecked(self.settings.get("autoplay_enabled", True))
         audio_card.layout().addWidget(self._row(
             "Sonsuz Çalma (Autoplay)", self.autoplay_check,
             "Çalma listesi bittiğinde benzer şarkıları otomatik bularak kesintisiz çalmaya devam eder."))
 
         controls_card = self._card("Denetimler")
-        self.media_keys_check = QCheckBox()
+        self.media_keys_check = self._toggle()
         self.media_keys_check.setChecked(self.settings.get("global_media_keys", False))
         controls_card.layout().addWidget(self._row(
             "Global medya tuşları", self.media_keys_check,
@@ -408,7 +543,7 @@ class SettingsView(QWidget):
             from mustiefly_qt.services.smtc import SMTC_AVAILABLE
         except Exception:
             SMTC_AVAILABLE = False
-        self.smtc_check = QCheckBox()
+        self.smtc_check = self._toggle()
         self.smtc_check.setChecked(self.settings.get("smtc_enabled", True))
         if not SMTC_AVAILABLE:
             self.smtc_check.setToolTip(
@@ -421,13 +556,13 @@ class SettingsView(QWidget):
             "Ses açılır penceresinden oynatmayı kontrol etmeni sağlar."))
 
         hud_card = self._card("Ekran Üstü Bildirim (HUD / Gaming Overlay)")
-        self.hud_check = QCheckBox()
+        self.hud_check = self._toggle()
         self.hud_check.setChecked(self.settings.get("hud_overlay_enabled", True))
         hud_card.layout().addWidget(self._row(
             "Ekran Üstü HUD'ı Etkinleştir", self.hud_check,
             "Şarkı değiştiğinde oyunlardan ve pencerelerden odak çalmayan zarif bir mini bildirim gösterir."))
 
-        self.hud_bg_only_check = QCheckBox()
+        self.hud_bg_only_check = self._toggle()
         self.hud_bg_only_check.setChecked(self.settings.get("hud_overlay_only_background", True))
         hud_card.layout().addWidget(self._row(
             "Yalnızca Arka Plandayken Göster", self.hud_bg_only_check,
@@ -455,7 +590,7 @@ class SettingsView(QWidget):
             "Bildirimin ekranda kalma süresi."))
 
         viz_card = self._card("Canlı Müzik Görselleştirici & Neon Spektrum")
-        self.visualizer_check = QCheckBox()
+        self.visualizer_check = self._toggle()
         self.visualizer_check.setChecked(self.settings.get("visualizer_enabled", True))
         viz_card.layout().addWidget(self._row(
             "Görselleştiriciyi Etkinleştir", self.visualizer_check,
@@ -524,7 +659,7 @@ class SettingsView(QWidget):
         cache_card.layout().addWidget(self.other_label)
 
         backup_card = self._card("Yedekleme")
-        self.backup_check = QCheckBox()
+        self.backup_check = self._toggle()
         self.backup_check.setChecked(self.settings.get("backup_enabled", True))
         backup_card.layout().addWidget(self._row(
             "Otomatik yedekleme", self.backup_check,
@@ -593,7 +728,7 @@ class SettingsView(QWidget):
         self.ytdlp_reset_btn.setVisible(bool(
             ytdlp_runtime.ACTIVE_VERSION or ytdlp_runtime.pending_version()))
 
-        self.auto_ytdlp_check = QCheckBox()
+        self.auto_ytdlp_check = self._toggle()
         self.auto_ytdlp_check.setChecked(self.settings.get("auto_ytdlp_update", True))
 
         ytdlp_card.layout().addWidget(self.ytdlp_label)
