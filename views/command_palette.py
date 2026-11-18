@@ -447,24 +447,14 @@ class CommandPaletteDialog(QDialog):
             ),
             PaletteItem(
                 kind="command",
-                title="Mini Oynatıcı (Picture-in-Picture)",
-                subtitle="Masaüstünde her zaman üstte duran kompakt çalar",
+                title="Masaüstü Şeffaf Widget Modu (Rainmeter)",
+                subtitle="Ana pencereyi gizler; masaüstünde süzülen cam widget'ı açar",
                 category="KOMUT",
                 icon_name="mini_player",
-                icon_color="#FFB020",
-                shortcut="Ctrl+M",
-                callback=self._cmd_toggle_mini_player,
-                keywords="mini oynatici player pip kompakt floating masaustu",
-            ),
-            PaletteItem(
-                kind="command",
-                title="Masaüstü Şeffaf Widget Modu (Rainmeter)",
-                subtitle="Masaüstü duvar kağıdında süzülen cam efektli widget + spektrum",
-                category="KOMUT",
-                icon_name="spectrum",
                 icon_color="#00D2FF",
+                shortcut="Ctrl+M",
                 callback=self._cmd_toggle_desktop_widget,
-                keywords="widget masaustu rainmeter seffaf desktop glass",
+                keywords="widget masaustu rainmeter seffaf desktop glass mini",
             ),
             PaletteItem(
                 kind="command",
@@ -874,10 +864,6 @@ class CommandPaletteDialog(QDialog):
     def _cmd_open_equalizer(self):
         if self.app_window and hasattr(self.app_window, "_toggle_equalizer_window"):
             self.app_window._toggle_equalizer_window()
-
-    def _cmd_toggle_mini_player(self):
-        if self.app_window and hasattr(self.app_window, "_toggle_mini_player"):
-            self.app_window._toggle_mini_player()
 
     def _cmd_toggle_desktop_widget(self):
         if self.app_window and hasattr(self.app_window, "_toggle_desktop_widget"):

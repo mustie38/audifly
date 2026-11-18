@@ -85,7 +85,7 @@ class TopBar(QFrame):
         quick_tools = (
             ("sliders", "Ses & Ekolayzer", self.equalizerRequested),
             ("lyrics", "Sözler Paneli", self.lyricsRequested),
-            ("mini_player", "Mini Oynatıcı", self.miniPlayerRequested),
+            ("mini_player", "Masaüstü Şeffaf Widget'ı", self.miniPlayerRequested),
             ("diagnostics", "Sorun Bildir / Tanılama", self.reportRequested),
             ("settings", "Ayarlar", self.settingsRequested),
         )

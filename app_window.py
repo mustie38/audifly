@@ -50,7 +50,6 @@ from mustiefly_qt.views.library_view import LibraryView
 from mustiefly_qt.views.library_search_dialog import LibrarySearchDialog
 from mustiefly_qt.views.listen_together_dialog import ListenTogetherDialog
 from mustiefly_qt.views.lyrics_window import LyricsWindow
-from mustiefly_qt.views.mini_player import MiniPlayer
 from mustiefly_qt.views.now_playing_panel import NowPlayingPanel
 from mustiefly_qt.views.player_bar import PlayerBar
 from mustiefly_qt.views.radio_view import RadioView
@@ -106,10 +105,9 @@ class MainWindow(QMainWindow):
         self.downloads.downloadFinished.connect(self._on_download_finished)
         self.downloads.downloadFailed.connect(self._on_download_failed)
 
-        # Discord RPC + Mini Player
+        # Discord RPC
         client_id = self.settings.get("discord_client_id", DISCORD_CLIENT_ID_DEFAULT)
         self.discord_rpc = DiscordRPCService(client_id, self.playback, self)
-        self.mini_player = MiniPlayer(self.playback, thumbnails=self.thumbnails)
 
         # Ekolayzer + Sözler + Karaoke + Masaüstü Widget pencereleri (tek örnek)
         self._eq_window: EqualizerWindow | None = None
@@ -236,19 +234,18 @@ class MainWindow(QMainWindow):
         self.sidebar.settingsRequested.connect(self._open_settings_dialog)
         self.sidebar.equalizerRequested.connect(self._toggle_equalizer_window)
         self.sidebar.lyricsRequested.connect(self._toggle_lyrics_window)
-        self.sidebar.miniPlayerRequested.connect(self._toggle_mini_player)
+        self.sidebar.miniPlayerRequested.connect(self._toggle_desktop_widget)
         self.sidebar.reportRequested.connect(self.open_diagnostics_dialog)
 
         self.top_bar.settingsRequested.connect(self._open_settings_dialog)
         self.top_bar.equalizerRequested.connect(self._toggle_equalizer_window)
         self.top_bar.lyricsRequested.connect(self._toggle_lyrics_window)
-        self.top_bar.miniPlayerRequested.connect(self._toggle_mini_player)
+        self.top_bar.miniPlayerRequested.connect(self._toggle_desktop_widget)
         self.top_bar.reportRequested.connect(self.open_diagnostics_dialog)
         self.top_bar.statsRequested.connect(self.show_stats_view)
         self.top_bar.wrappedRequested.connect(self.show_wrapped_view)
         self.top_bar.paletteRequested.connect(self.open_command_palette)
         self.settings_view.diagnosticsRequested.connect(self.open_diagnostics_dialog)
-        self.mini_player.closed.connect(self._on_mini_closed)
         self.library_view.addSongRequested.connect(self._open_search_dialog)
         self.store.statusMessage.connect(self._on_status_message)
         self.playback.statusMessage.connect(self._on_status_message)
@@ -506,21 +503,7 @@ class MainWindow(QMainWindow):
         self._really_quit = True
         self.close()
 
-    # --- Mini oynatıcı modu: mini açıkken ana pencere gizlenir ---
-    def _toggle_mini_player(self):
-        if self.mini_player.isVisible():
-            self.mini_player.close()
-        if self._desktop_widget is not None:
-            self._desktop_widget.close()  # closed sinyali ana pencereyi geri getirir
-            return
-        self.hide()
-        self.mini_player.show()
-
-    def _on_mini_closed(self):
-        if self.isHidden():
-            self.showNormal()
-            self.activateWindow()
-
+    # --- Masaüstü Şeffaf Widget Modu: açıkken ana pencere gizlenir ---
     def _toggle_desktop_widget(self):
         """Rainmeter tarzı şeffaf masaüstü müzik widget'ını açar/kapatır."""
         if self._desktop_widget is not None and self._desktop_widget.isVisible():
@@ -531,8 +514,15 @@ class MainWindow(QMainWindow):
             self._desktop_widget = DesktopWidget(
                 self.playback, self.thumbnails, self.settings, self.save_settings,
             )
+            self._desktop_widget.closed.connect(self._on_desktop_widget_closed)
+        self.hide()
         self._desktop_widget.show()
         self._desktop_widget.raise_()
+
+    def _on_desktop_widget_closed(self):
+        if self.isHidden() and not self._really_quit:
+            self.showNormal()
+            self.activateWindow()
 
     # --- "Şu An Çalıyor" panelini kapat/aç ---
     def _hide_now_playing_panel(self):
@@ -618,8 +608,6 @@ class MainWindow(QMainWindow):
         karaoke_action.setShortcut("F11")
         karaoke_action.triggered.connect(self._toggle_karaoke_view)
         self.addAction(karaoke_action)
-        mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
-        mini_player_action.triggered.connect(self._toggle_mini_player)
         widget_action = app_menu.addAction("🖥️ Masaüstü Şeffaf Widget'ı")
         widget_action.triggered.connect(self._toggle_desktop_widget)
         palette_action = app_menu.addAction("⚡ Spotlight & Komut Paleti…")
@@ -1404,9 +1392,9 @@ class MainWindow(QMainWindow):
                 APP_DISPLAY_NAME, "Uygulama tepsiye küçüldü; müzik çalmaya devam ediyor.",
                 QSystemTrayIcon.Information, 2000)
             return
+        self._really_quit = True
         self.listen.shutdown()
         self.discord_rpc.close()
-        self.mini_player.close()
         if self._desktop_widget is not None:
             self._desktop_widget.close()
         if self._eq_window is not None:
