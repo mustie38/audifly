@@ -245,37 +245,40 @@ class LibraryView(QWidget):
         card = QFrame()
         card.setObjectName("PlaylistCard")
         row = QHBoxLayout(card)
-        row.setContentsMargins(18, 16, 18, 16)
-        row.setSpacing(18)
+        row.setContentsMargins(20, 18, 20, 18)
+        row.setSpacing(22)
 
-        # Sol: kapak + değiştir butonu
-        cover_box = QVBoxLayout()
-        cover_box.setSpacing(6)
+        # Sol: kapak
         self.ph_cover = QLabel("🎵")
-        self.ph_cover.setFixedSize(110, 110)
+        self.ph_cover.setFixedSize(124, 124)
         self.ph_cover.setAlignment(Qt.AlignCenter)
-        self.ph_cover.setStyleSheet("background: #444; border-radius: 10px; font-size: 36px;")
-        cover_box.addWidget(self.ph_cover)
-        self.ph_cover_btn = QPushButton("🖼 Kapağı Değiştir")
-        self.ph_cover_btn.setObjectName("Chip")
-        self.ph_cover_btn.setCursor(Qt.PointingHandCursor)
-        self.ph_cover_btn.clicked.connect(self._change_cover)
-        cover_box.addWidget(self.ph_cover_btn, alignment=Qt.AlignHCenter)
-        row.addLayout(cover_box)
+        self.ph_cover.setStyleSheet("background: #1e2230; border-radius: 14px; font-size: 38px;")
+        row.addWidget(self.ph_cover)
 
-        # Orta: ad + meta
+        # Orta-Sağ: meta bilgileri ve hemen altında eylem butonları (orta boşluğu doldurur)
         info_box = QVBoxLayout()
-        info_box.setSpacing(4)
+        info_box.setSpacing(6)
+
+        # 1. Kategori Rozeti (Badge)
+        self.ph_type_badge = QLabel("📁 ÇALMA LİSTESİ")
+        self.ph_type_badge.setStyleSheet(
+            "font-size: 10px; font-weight: bold; color: #00D2FF; letter-spacing: 1px;"
+        )
+        info_box.addWidget(self.ph_type_badge)
+
+        # 2. Liste Başlığı + Düzenle butonu
         title_row = QHBoxLayout()
-        title_row.setSpacing(6)
+        title_row.setSpacing(8)
         self.ph_title = QLabel("")
         ph_font = QFont()
         ph_font.setPixelSize(24)
         ph_font.setBold(True)
         self.ph_title.setFont(ph_font)
+        self.ph_title.setStyleSheet("color: #FFFFFF;")
         title_row.addWidget(self.ph_title)
+
         self.ph_rename_btn = QPushButton("✏")
-        self.ph_rename_btn.setFixedWidth(30)
+        self.ph_rename_btn.setFixedSize(28, 28)
         self.ph_rename_btn.setToolTip("Listeyi yeniden adlandır")
         self.ph_rename_btn.setCursor(Qt.PointingHandCursor)
         self.ph_rename_btn.clicked.connect(self._rename_active_playlist)
@@ -283,54 +286,65 @@ class LibraryView(QWidget):
         title_row.addStretch(1)
         info_box.addLayout(title_row)
 
+        # 3. Şarkı Sayısı, Süre ve Oluşturucu
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(6)
         self.ph_meta = QLabel("")
         self.ph_meta.setObjectName("Muted")
-        info_box.addWidget(self.ph_meta)
+        self.ph_meta.setStyleSheet("font-size: 12px; color: #8F9CAE;")
+        meta_row.addWidget(self.ph_meta)
 
-        self.ph_creator = QLabel(f"♪ {APP_DISPLAY_NAME} tarafından oluşturuldu")
+        self.ph_creator = QLabel(f"• ♪ {APP_DISPLAY_NAME}")
         self.ph_creator.setObjectName("Muted")
-        info_box.addWidget(self.ph_creator)
-        info_box.addStretch(1)
-        row.addLayout(info_box, stretch=1)
+        self.ph_creator.setStyleSheet("font-size: 12px; color: #707E94;")
+        meta_row.addWidget(self.ph_creator)
+        meta_row.addStretch(1)
+        info_box.addLayout(meta_row)
 
-        # Sağ: eylem butonları
-        actions = QVBoxLayout()
-        actions.setSpacing(8)
-        play_row = QHBoxLayout()
-        play_row.setSpacing(8)
+        info_box.addSpacing(6)
+
+        # 4. Eylem Butonları Satırı (Hemen metnin altında, derli toplu ve dengeli)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
         self.ph_play_btn = QPushButton("▶  Oynat")
         self.ph_play_btn.setObjectName("Primary")
         self.ph_play_btn.setCursor(Qt.PointingHandCursor)
+        self.ph_play_btn.setFixedHeight(36)
         self.ph_play_btn.clicked.connect(self._play_active_from_start)
-        play_row.addWidget(self.ph_play_btn)
-        actions.addLayout(play_row)
+        btn_row.addWidget(self.ph_play_btn)
 
-        btn_row2 = QHBoxLayout()
-        btn_row2.setSpacing(8)
-        self.ph_cover_icon = QPushButton("🖼")
-        self.ph_cover_icon.setObjectName("RoundSmall")
-        self.ph_cover_icon.setToolTip("Kapağı değiştir")
+        self.ph_cover_icon = QPushButton("🖼 Kapak")
+        self.ph_cover_icon.setObjectName("Chip")
+        self.ph_cover_icon.setToolTip("Çalma listesi kapağını değiştir")
         self.ph_cover_icon.setCursor(Qt.PointingHandCursor)
+        self.ph_cover_icon.setFixedHeight(36)
         self.ph_cover_icon.clicked.connect(self._change_cover)
-        btn_row2.addWidget(self.ph_cover_icon)
+        btn_row.addWidget(self.ph_cover_icon)
 
-        self.ph_delete_btn = QPushButton("🗑")
-        self.ph_delete_btn.setObjectName("RoundSmall")
+        # Geriye dönük uyumluluk referansı
+        self.ph_cover_btn = self.ph_cover_icon
+
+        self.ph_download_btn = QPushButton("⬇ İndir")
+        self.ph_download_btn.setObjectName("Chip")
+        self.ph_download_btn.setToolTip("Tüm listeyi çevrimdışı dinlemek için indir")
+        self.ph_download_btn.setCursor(Qt.PointingHandCursor)
+        self.ph_download_btn.setFixedHeight(36)
+        self.ph_download_btn.clicked.connect(self._download_all)
+        btn_row.addWidget(self.ph_download_btn)
+
+        self.ph_delete_btn = QPushButton("🗑 Sil")
+        self.ph_delete_btn.setObjectName("Chip")
         self.ph_delete_btn.setToolTip("Listeyi boşalt / sil")
         self.ph_delete_btn.setCursor(Qt.PointingHandCursor)
+        self.ph_delete_btn.setFixedHeight(36)
         self.ph_delete_btn.clicked.connect(self._show_delete_menu)
-        btn_row2.addWidget(self.ph_delete_btn)
+        btn_row.addWidget(self.ph_delete_btn)
 
-        self.ph_download_btn = QPushButton("⬇")
-        self.ph_download_btn.setObjectName("RoundSmall")
-        self.ph_download_btn.setToolTip("Tümünü çevrimdışı indir")
-        self.ph_download_btn.setCursor(Qt.PointingHandCursor)
-        self.ph_download_btn.clicked.connect(self._download_all)
-        btn_row2.addWidget(self.ph_download_btn)
-        btn_row2.addStretch(1)
-        actions.addLayout(btn_row2)
-        row.addLayout(actions)
+        btn_row.addStretch(1)
+        info_box.addLayout(btn_row)
 
+        row.addLayout(info_box, stretch=1)
         return card
 
     # --- Sütun başlıkları ---
@@ -467,29 +481,41 @@ class LibraryView(QWidget):
         name = self.store.active_playlist
         songs = self.store.playlists.get(name, [])
         self.ph_title.setText(name)
+        if "Radyo" in name or "Radio" in name:
+            self.ph_type_badge.setText("📻 AKILLI ŞARKI RADYOSU")
+            self.ph_type_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #FF7A3D; letter-spacing: 1px;")
+        elif "Beğenilen" in name:
+            self.ph_type_badge.setText("💚 FAVORİ PARÇALAR")
+            self.ph_type_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #22C55E; letter-spacing: 1px;")
+        else:
+            self.ph_type_badge.setText("📁 ÇALMA LİSTESİ")
+            self.ph_type_badge.setStyleSheet("font-size: 10px; font-weight: bold; color: #00D2FF; letter-spacing: 1px;")
+
         dur = format_playlist_duration(songs)
         meta = f"{len(songs)} şarkı"
         if dur:
             meta += f"  •  {dur}"
         self.ph_meta.setText(meta)
-        # Hero gradient: liste adından türetilen renkle başlık kartının arka planı
+
+        # Hero gradient: koyulaştırılmış yumuşak degrade ve neon mor/lacivert arka plan geçişi
         base = cover_color_for(name)
         self.playlist_header.setStyleSheet(
             "#PlaylistCard {"
             f" background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-            f" stop:0 {shade_color(base, 0.65)}, stop:0.55 {shade_color(base, 0.32)},"
-            f" stop:1 {shade_color(base, 0.12)});"
+            f" stop:0 {shade_color(base, 0.22)}, stop:0.45 rgba(22, 25, 38, 0.95),"
+            f" stop:1 rgba(13, 16, 26, 0.98));"
+            " border: 1px solid rgba(255, 255, 255, 0.08);"
             " border-radius: 20px; }")
-        pm = playlist_cover_pixmap(self.store, self.thumbnails, name, songs, size=220)
+        pm = playlist_cover_pixmap(self.store, self.thumbnails, name, songs, size=240)
         if pm is not None and not pm.isNull():
             self.ph_cover.setPixmap(pm)
             self.ph_cover.setText("")
-            self.ph_cover.setStyleSheet("border-radius: 16px;")
+            self.ph_cover.setStyleSheet("border-radius: 14px;")
         else:
             self.ph_cover.setPixmap(QPixmap())
             self.ph_cover.setText("🎵")
             self.ph_cover.setStyleSheet(
-                f"background: {base}; border-radius: 16px; font-size: 36px;")
+                f"background: {shade_color(base, 0.35)}; border-radius: 14px; font-size: 38px;")
 
     def set_playing_state(self, playing: bool):
         """MainWindow playStateChanged bağlar; çalan satırın ekolayzer

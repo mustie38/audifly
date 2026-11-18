@@ -15,8 +15,8 @@ Dışa açık API (app_window.py tarafından kullanılıyor, isim/imza sabit tut
 from __future__ import annotations
 
 
-from PySide6.QtCore import (QEasingCurve, QPropertyAnimation, Qt, Signal)
-from PySide6.QtGui import QColor, QFont, QPixmap
+from PySide6.QtCore import (QEasingCurve, QPropertyAnimation, QRectF, Qt, Signal)
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QHBoxLayout,
                                QLabel, QMenu, QPushButton, QStackedLayout, QVBoxLayout,
                                QWidget, QFrame, QApplication, QInputDialog)
@@ -40,8 +40,8 @@ BAR_RADIUS = 18
 CONTENT_PADDING_H = 18
 CONTENT_PADDING_V = 12
 
-COVER_SIZE = 62
-COVER_RADIUS = 12
+COVER_SIZE = 54
+COVER_RADIUS = 10
 
 PLAY_BTN_SIZE = 46
 TRANSPORT_BTN_SIZE = 34
@@ -260,20 +260,16 @@ class PlayerBar(QWidget):
     # -- SOL BÖLÜM: kapak + başlık/sanatçı + beğen -----------------------
     def _build_now_playing(self) -> QHBoxLayout:
         layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
+        layout.setAlignment(Qt.AlignVCenter)
 
         self.cover_label = QLabel()
         self.cover_label.setFixedSize(COVER_SIZE, COVER_SIZE)
         self.cover_label.setAlignment(Qt.AlignCenter)
-        self._cover_opacity = QGraphicsOpacityEffect(self.cover_label)
-        self._cover_opacity.setOpacity(1.0)
-        self.cover_label.setGraphicsEffect(self._cover_opacity)
-        self._cover_fade = QPropertyAnimation(self._cover_opacity, b"opacity", self)
-        self._cover_fade.setDuration(220)
-        self._cover_fade.setStartValue(0.35)
-        self._cover_fade.setEndValue(1.0)
+        self.cover_label.setScaledContents(True)
         self._apply_cover_placeholder("?")
-        layout.addWidget(self.cover_label)
+        layout.addWidget(self.cover_label, alignment=Qt.AlignVCenter)
 
         self.now_box = _ClickableBox()
         self.now_box.setFixedWidth(NOW_INFO_WIDTH_FULL)
@@ -697,36 +693,32 @@ class PlayerBar(QWidget):
 
     @staticmethod
     def _square_cover(pm: QPixmap, size: int) -> QPixmap:
-        """Kaynak görsel kare olmasa bile (ör. 16:9 video kapağı) TAM KARE ve
-        tam `size`x`size` bir pixmap döndürür.
-
-        Önceki sürüm sadece `.scaled(size, size, KeepAspectRatioByExpanding)`
-        kullanıyordu; bu, en/boy oranı 1:1 olmayan kapaklarda label'ın
-        boyutundan büyük/dikdörtgen bir pixmap üretip PlayerBar'ın dışına
-        taşmasına (görsel bug) yol açıyordu. Burada önce genişleterek
-        ölçekleyip ardından ortadan tam kare kırpıyoruz, böylece sonuç her
-        zaman kesin size x size olur ve taşma imkânsız hale gelir.
+        """Kaynak görsel kare olmasa bile tam `size`x`size` ve yuvarlatılmış
+        köşeli bir pixmap üretir. Bar dışına asla taşmaz.
         """
         scaled = pm.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
         x = max(0, (scaled.width() - size) // 2)
         y = max(0, (scaled.height() - size) // 2)
-        return scaled.copy(x, y, size, size)
+        cropped = scaled.copy(x, y, size, size)
+
+        rounded = QPixmap(size, size)
+        rounded.fill(Qt.transparent)
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, size, size), COVER_RADIUS, COVER_RADIUS)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, cropped)
+        painter.end()
+        return rounded
 
     def _fade_in_cover(self):
-        self._cover_fade.stop()
-        if not self.isVisible():
-            self._cover_opacity.setOpacity(1.0)
-            return
-        self._cover_opacity.setOpacity(0.35)
-        self._cover_fade.start()
+        pass
 
     def hideEvent(self, event):  # noqa: N802
-        self._cover_fade.stop()
-        self._cover_opacity.setOpacity(1.0)
         super().hideEvent(event)
 
     def closeEvent(self, event):  # noqa: N802
-        self._cover_fade.stop()
         self.sleep_timer.cancel()
         super().closeEvent(event)
 

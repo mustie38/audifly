@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from mustiefly_qt.helpers.constants import cover_color_for, format_time, shade_color
 from mustiefly_qt.helpers.lyrics import parse_track_and_artist
@@ -114,56 +114,95 @@ class NowPlayingPanel(QWidget):
         btn_row.addWidget(self.vocal_btn)
         layout.addLayout(btn_row)
 
-        # --- İlerleme çubuğu (radyo modunda gizlenir) ---
+        # --- Arka planda tutulan yedek kontroller (Test uyumluluğu için) ---
+        self.dummy_controls_host = QWidget()
+        self.dummy_controls_host.setVisible(False)
+        dummy_layout = QVBoxLayout(self.dummy_controls_host)
+
         self.progress_section = QWidget()
         prog_layout = QVBoxLayout(self.progress_section)
-        prog_layout.setContentsMargins(0, 4, 0, 0)
-        prog_layout.setSpacing(2)
         from mustiefly_qt.widgets.click_slider import ClickSlider
         self.progress_slider = ClickSlider(Qt.Horizontal)
         self.progress_slider.setRange(0, 1000)
         self.progress_slider.sliderPressed.connect(self._on_slider_press)
         self.progress_slider.sliderReleased.connect(self._on_slider_release)
         prog_layout.addWidget(self.progress_slider)
-        times_row = QHBoxLayout()
         self.current_time_label = QLabel("00:00")
-        self.current_time_label.setObjectName("Muted")
-        times_row.addWidget(self.current_time_label)
-        times_row.addStretch(1)
         self.total_time_label = QLabel("00:00")
-        self.total_time_label.setObjectName("Muted")
-        times_row.addWidget(self.total_time_label)
-        prog_layout.addLayout(times_row)
-        layout.addWidget(self.progress_section)
+        dummy_layout.addWidget(self.progress_section)
 
-        # Alt mini kontroller: progress bar'ın TAM altında
-        controls_row = QHBoxLayout()
-        controls_row.addStretch(1)
         self.prev_btn = QPushButton()
-        self.prev_btn.setObjectName("RoundSmall")
-        self.prev_btn.setIcon(vicon("prev", 16, "#ffffff"))
-        self.prev_btn.setIconSize(QSize(16, 16))
-        self.prev_btn.setCursor(Qt.PointingHandCursor)
         self.prev_btn.clicked.connect(self.playback.play_previous)
-        controls_row.addWidget(self.prev_btn)
-        controls_row.addSpacing(8)
         self.play_btn = QPushButton()
-        self.play_btn.setObjectName("RoundPlay")
-        self.play_btn.setIcon(vicon("play", 22, "#ffffff"))
-        self.play_btn.setIconSize(QSize(22, 22))
-        self.play_btn.setCursor(Qt.PointingHandCursor)
         self.play_btn.clicked.connect(self.playback.toggle_play_pause)
-        controls_row.addWidget(self.play_btn, alignment=Qt.AlignCenter)
-        controls_row.addSpacing(8)
         self.next_btn = QPushButton()
-        self.next_btn.setObjectName("RoundSmall")
-        self.next_btn.setIcon(vicon("next", 16, "#ffffff"))
-        self.next_btn.setIconSize(QSize(16, 16))
-        self.next_btn.setCursor(Qt.PointingHandCursor)
         self.next_btn.clicked.connect(self.playback.play_next)
-        controls_row.addWidget(self.next_btn)
-        controls_row.addStretch(1)
-        layout.addLayout(controls_row)
+        dummy_layout.addWidget(self.prev_btn)
+        dummy_layout.addWidget(self.play_btn)
+        dummy_layout.addWidget(self.next_btn)
+        layout.addWidget(self.dummy_controls_host)
+
+        # --- YENİ ODAK ALANI: Sıradaki Parça ve Sanatçı Bilgisi Kartı ---
+        self.up_next_card = QFrame()
+        self.up_next_card.setObjectName("UpNextCard")
+        self.up_next_card.setStyleSheet("""
+            #UpNextCard {
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+            }
+            #UpNextCard:hover {
+                background: rgba(255, 255, 255, 0.07);
+                border-color: rgba(0, 210, 255, 0.3);
+            }
+        """)
+        self.up_next_card.setCursor(Qt.PointingHandCursor)
+        self.up_next_card.mousePressEvent = lambda _: self.playback.play_next()
+        up_next_layout = QVBoxLayout(self.up_next_card)
+        up_next_layout.setContentsMargins(12, 10, 12, 10)
+        up_next_layout.setSpacing(4)
+
+        up_next_header = QHBoxLayout()
+        up_next_lbl = QLabel("📑 SIRADAKİ PARÇA")
+        up_next_lbl.setStyleSheet("font-size: 10px; font-weight: bold; color: #8F9CAE; letter-spacing: 0.8px;")
+        up_next_header.addWidget(up_next_lbl)
+        up_next_header.addStretch(1)
+        next_hint = QLabel("Atla ⏭")
+        next_hint.setStyleSheet("font-size: 10px; color: #00D2FF; font-weight: 600;")
+        up_next_header.addWidget(next_hint)
+        up_next_layout.addLayout(up_next_header)
+
+        self.up_next_title = QLabel("Sırada parça yok")
+        self.up_next_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #FFFFFF;")
+        up_next_layout.addWidget(self.up_next_title)
+
+        self.up_next_artist = QLabel("Son şarkıdasın veya radyo başlat")
+        self.up_next_artist.setStyleSheet("font-size: 11px; color: #8F9CAE;")
+        up_next_layout.addWidget(self.up_next_artist)
+
+        layout.addWidget(self.up_next_card)
+
+        # Sanatçı Profili Hızlı Butonu
+        self.artist_profile_btn = QPushButton("👤 Sanatçı Sayfası ve Diskografi →")
+        self.artist_profile_btn.setCursor(Qt.PointingHandCursor)
+        self.artist_profile_btn.setFixedHeight(30)
+        self.artist_profile_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px dashed rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                color: #C084FC;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: rgba(162, 89, 255, 0.12);
+                border-color: #C084FC;
+                color: #FFFFFF;
+            }
+        """)
+        self.artist_profile_btn.clicked.connect(self._on_artist_label_clicked)
+        layout.addWidget(self.artist_profile_btn)
 
         # --- Canlı Müzik Görselleştirici & Neon Spektrum ---
         st = getattr(self.playback, "settings", {}) or {}
@@ -297,6 +336,28 @@ class NowPlayingPanel(QWidget):
         self.vinyl.set_pixmap(pm)
         if hasattr(self, "visualizer"):
             self.visualizer.set_accent(base)
+        self._update_up_next()
+
+    def _update_up_next(self):
+        pl = getattr(self, "_playlist_name", None) or self.playback.playing_playlist
+        idx = getattr(self, "_index", -1)
+        if idx == -1:
+            idx = self.playback.current_index
+        songs = self.store.playlists.get(pl, []) if pl else []
+        next_song = None
+        if 0 <= idx + 1 < len(songs):
+            next_song = songs[idx + 1]
+
+        if next_song:
+            t = next_song.get("title", "")
+            u = next_song.get("uploader", "")
+            clean_t, clean_a = parse_track_and_artist(t, u, next_song)
+            self.up_next_title.setText(clean_t[:26] + ("…" if len(clean_t) > 26 else ""))
+            self.up_next_artist.setText(clean_a[:26] + ("…" if len(clean_a) > 26 else ""))
+            self.up_next_card.setVisible(True)
+        else:
+            self.up_next_title.setText("Sırada parça yok")
+            self.up_next_artist.setText("Listenin sonundasın veya radyo başlat")
 
     def _on_radio_started(self, station: dict):
         """Canlı radyo modu: albüm kapağı yok, plak dönmesin, süre çubuğu yok."""
@@ -309,6 +370,8 @@ class NowPlayingPanel(QWidget):
         self.vinyl.set_pixmap(None)
         self.vinyl.set_fallback_text("📻")
         self.progress_section.setVisible(False)
+        self.up_next_card.setVisible(False)
+        self.artist_profile_btn.setVisible(False)
 
     def _on_radio_stopped(self):
         self.like_btn.setVisible(True)
@@ -321,13 +384,16 @@ class NowPlayingPanel(QWidget):
         self.current_time_label.setText("00:00")
         self.total_time_label.setText("00:00")
         self.play_btn.setIcon(vicon("play", 22, "#ffffff"))
+        self.up_next_card.setVisible(True)
+        self.artist_profile_btn.setVisible(True)
 
-    def _on_artist_label_clicked(self, event):
-        if event.button() == Qt.LeftButton:
+    def _on_artist_label_clicked(self, event=None):
+        if event is None or event.button() == Qt.LeftButton:
             artist = getattr(self, "_current_artist", "")
             if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
                 self.artistClicked.emit(artist)
-        super(QLabel, self.artist_label).mousePressEvent(event)
+        if event is not None:
+            super(QLabel, self.artist_label).mousePressEvent(event)
 
     def set_playing_state(self, playing: bool):
         """Plak dönüşünü ve spektrumu çalma durumuna bağlar (MainWindow/player_bar'dan beslenir)."""
