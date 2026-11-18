@@ -97,40 +97,50 @@ def test_prepare_media_filter_options():
     engine = PlaybackEngine(store, paths, settings)
 
     # 1. Her ikisi de kapalıyken
-    media = engine._prepare_media("dummy_url")
-    # VLC media add_option çağrılarını kontrol etmek için mock'layabiliriz veya vlc media
     assert engine.vocal_remover_enabled is False
 
     # 2. Sadece vokal ayırma açık
     settings["vocal_remover_enabled"] = True
     assert engine.vocal_remover_enabled is True
 
-    # 3. Gerçek media_new ile test
+    # 3. Gerçek media_new ile normalizasyon ve User-Agent testleri
     with patch.object(engine.vlc_instance, "media_new") as mock_new:
         mock_media = MagicMock()
         mock_new.return_value = mock_media
 
-        # Karaoke tek başına
-        settings["vocal_remover_enabled"] = True
-        settings["audio_normalization"] = False
+        # Normalizasyon açıkken normvol filtresi eklenmeli
+        settings["audio_normalization"] = True
         engine._prepare_media("https://cdn.example.com/stream.mp3", {"http_user_agent": "Mozilla/5.0"})
-        mock_media.add_option.assert_any_call(":audio-filter=karaoke")
+        mock_media.add_option.assert_any_call(":audio-filter=normvol")
         mock_media.add_option.assert_any_call(":http-user-agent=Mozilla/5.0")
 
-        # Karaoke + Normalizasyon bir arada
+        # Normalizasyon kapalıyken audio-filter eklenmemeli
         mock_media.reset_mock()
-        settings["audio_normalization"] = True
-        engine._prepare_media("https://cdn.example.com/stream.mp3")
-        mock_media.add_option.assert_any_call(":audio-filter=normvol:karaoke")
-
-        # İkisi de kapalı
-        mock_media.reset_mock()
-        settings["vocal_remover_enabled"] = False
         settings["audio_normalization"] = False
         engine._prepare_media("dummy")
-        # audio-filter eklenmemeli
         added_options = [c[0][0] for c in mock_media.add_option.call_args_list]
         assert not any(":audio-filter" in opt for opt in added_options)
+
+
+def test_playback_engine_vocal_remover_equalizer():
+    store = MagicMock()
+    paths = MagicMock()
+    settings = {"vocal_remover_enabled": False}
+
+    engine = PlaybackEngine(store, paths, settings)
+    with patch.object(engine.player, "set_equalizer") as mock_set_eq, \
+         patch.object(engine.player_b, "set_equalizer") as mock_set_eq_b:
+        # Vokal bastırma açıldığında ekolayzer atanmalı
+        engine.set_vocal_remover(True)
+        assert engine.vocal_remover_enabled is True
+        mock_set_eq.assert_called()
+        eq_arg = mock_set_eq.call_args[0][0]
+        assert eq_arg is not None
+
+        # Kapatıldığında ekolayzer temizlenmeli (user eq yokken None)
+        engine.set_vocal_remover(False)
+        assert engine.vocal_remover_enabled is False
+        mock_set_eq.assert_called_with(None)
 
 
 def test_playback_engine_vocal_remover_toggle_and_live_update():

@@ -251,25 +251,55 @@ class PlaybackEngine(QObject):
                 for i in range(self.eq_band_count):
                     eq.set_amp_at_index(float(bands[i] if i < len(bands) else 0.0), i)
                 self.equalizer = eq
-                # Crossfade sırasında ikinci player'a da geçiş yapabilmeli
-                self.player.set_equalizer(eq)
-                self.player_b.set_equalizer(eq)
             except Exception as e:
                 log.error("%s %s", "Kayıtlı ekolayzer ayarları uygulanamadı:", e)
+
+        self._apply_active_equalizer()
+
+    def _create_vocal_remover_equalizer(self):
+        """Vokal frekanslarını (250Hz - 4000Hz) -20dB'ye kadar bastıran enstrümantal karaoke ekolayzeri."""
+        if not hasattr(vlc, "AudioEqualizer") or not self.eq_band_count:
+            return None
+        try:
+            eq = vlc.AudioEqualizer()
+            eq.set_preamp(-1.0)
+            # 10 Bant: 31.25Hz, 62.5Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz
+            # Vokal formant ve temel seslerini (250Hz-4kHz) bastırırken basları ve tizleri güçlendirir.
+            bands = [3.0, 4.0, 1.0, -15.0, -20.0, -20.0, -18.0, -14.0, 2.0, 4.0]
+            for i in range(min(self.eq_band_count, len(bands))):
+                eq.set_amp_at_index(bands[i], i)
+            return eq
+        except Exception as e:
+            log.warning("Vokal bastırma ekolayzeri oluşturulamadı: %s", e)
+            return None
+
+    def _apply_active_equalizer(self):
+        """Aktif duruma göre (vokal modu veya kullanıcı ekolayzeri) player'lara ekolayzeri canlı bağlar."""
+        target_eq = None
+        if self.vocal_remover_enabled:
+            target_eq = self._create_vocal_remover_equalizer()
+        elif self.settings.get("equalizer_enabled") and self.equalizer is not None:
+            target_eq = self.equalizer
+
+        for p in (getattr(self, "player", None), getattr(self, "player_b", None)):
+            if p is not None:
+                try:
+                    p.set_equalizer(target_eq)
+                except Exception:
+                    pass
 
     def apply_equalizer(self, eq):
         """Ekolayzer penceresinden gelen eşitlerleyiciyi canlı uygular.
         Crossfade takaslarından bağımsız olarak HER İKİ player'a da uygulanır;
         aksi halde fade bitiminde ekolayzer 'kaybolur'."""
         self.equalizer = eq
-        try:
-            self.player.set_equalizer(eq)
-        except Exception as e:
-            log.error("%s %s", "Ekolayzer uygulanamadı:", e)
-        try:
-            self.player_b.set_equalizer(eq)
-        except Exception as e:
-            log.error("%s %s", "Ekolayzer (2. player) uygulanamadı:", e)
+        if not self.vocal_remover_enabled:
+            for p in (self.player, self.player_b):
+                if p is not None:
+                    try:
+                        p.set_equalizer(eq)
+                    except Exception as e:
+                        log.error("%s %s", "Ekolayzer uygulanamadı:", e)
 
     # --- Arama ---
     def search(self, query: str):
@@ -517,16 +547,8 @@ class PlaybackEngine(QObject):
             if ua and isinstance(url, str) and url.startswith(("http://", "https://")):
                 media.add_option(f":http-user-agent={ua}")
 
-        filters = []
         if self.settings.get("audio_normalization"):
-            filters.append("normvol")
-        if self.settings.get("vocal_remover_enabled"):
-            filters.append("karaoke")
-
-        if filters:
-            media.add_option(f":audio-filter={':'.join(filters)}")
-
-        if self.settings.get("audio_normalization"):
+            media.add_option(":audio-filter=normvol")
             media.add_option(":norm-buff-size=10")
             media.add_option(":norm-max-level=1.6")
             media.add_option(":audio-replay-gain-mode=track")
@@ -569,6 +591,7 @@ class PlaybackEngine(QObject):
         self.player.play()
         self.player.audio_set_volume(self._master_volume())
         self._apply_saved_rate()
+        self._apply_active_equalizer()
         self._session_pending = False
         # Başlamadıysa kendini toparlayan bekçi (bkz. _ensure_started)
         QTimer.singleShot(1200, lambda: self._ensure_started(generation, 0))
@@ -893,11 +916,7 @@ class PlaybackEngine(QObject):
                 old_media.release()
             except Exception:
                 pass
-        if self.equalizer is not None:
-            try:
-                self.player_b.set_equalizer(self.equalizer)
-            except Exception:
-                pass
+        self._apply_active_equalizer()
         self.player_b.audio_set_volume(0)
         self.player_b.play()
         self._apply_saved_rate_to(self.player_b)
@@ -1361,7 +1380,7 @@ class PlaybackEngine(QObject):
         return new_state
 
     def set_vocal_remover(self, enabled: bool):
-        """Vokal ayırma filtresini (:audio-filter=karaoke) açar veya kapatır; çalan şarkıda anında uygular."""
+        """Vokal ayırma / enstrümantal modunu açar veya kapatır; ekolayzeri anında günceller."""
         enabled = bool(enabled)
         if self.settings.get("vocal_remover_enabled") == enabled:
             return
@@ -1370,39 +1389,8 @@ class PlaybackEngine(QObject):
         msg = "🎙️ Vokal ayırma (Enstrümantal) açıldı" if enabled else "🎙️ Vokal ayırma kapatıldı (Orijinal ses)"
         self.statusMessage.emit(msg, "info")
 
-        # Eğer şu an çalan / duraklatılmış bir şarkı varsa, pozisyonu koruyarak filtreyi canlı güncelle
-        if self.player is not None and self._current_song_ref is not None:
-            url = self._current_url
-            if not url:
-                url = (self._current_song_ref.get("cached_file")
-                       or self._current_song_ref.get("webpage_url")
-                       or self._current_song_ref.get("url"))
-            if url and not self._closed and not self._session_pending and self.radio_playing is None:
-                try:
-                    state = self.player.get_state()
-                    if state in (vlc.State.Playing, vlc.State.Paused):
-                        cur_time = self.player.get_time()
-                        was_paused = self._user_paused or (state == vlc.State.Paused)
-
-                        old_media = self.player.get_media()
-                        media = self._prepare_media(url, self._current_song_ref)
-                        self.player.set_media(media)
-                        if old_media is not None:
-                            try:
-                                old_media.release()
-                            except Exception:
-                                pass
-
-                        self.player.play()
-                        if cur_time > 0:
-                            self.player.set_time(cur_time)
-                            QTimer.singleShot(80, lambda t=cur_time: self.player.set_time(t) if self.player else None)
-
-                        if was_paused:
-                            self.player.pause()
-                            self._user_paused = True
-                except Exception as e:
-                    log.warning("Vokal filtresi anlık uygulanamadı: %s", e)
+        # Canlı ekolayzeri anında uygula (kesinti/baştan yükleme olmadan gerçek zamanlı)
+        self._apply_active_equalizer()
 
     def seek(self, ms: int):
         if self._xfade_active:
