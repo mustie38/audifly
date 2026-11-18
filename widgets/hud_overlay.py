@@ -158,10 +158,15 @@ class HudOverlay(QWidget):
         self._anim = QPropertyAnimation(self, b"windowOpacity")
         self._anim.setDuration(240)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.finished.connect(self._on_anim_finished)
 
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self.dismiss)
+
+    def _on_anim_finished(self):
+        if self._is_dismissed:
+            self.hide()
 
     def _wire_signals(self):
         self.playback.songStarted.connect(self._on_song_started)
@@ -236,6 +241,7 @@ class HudOverlay(QWidget):
     def _update_cover(self, song: dict, clean_t: str):
         pm = self.thumbnails.pixmap_for(song, 50, rounded=True) if self.thumbnails else None
         if pm is not None and not pm.isNull():
+            self.cover_label.setText("")
             self.cover_label.setPixmap(pm)
             self.cover_label.setStyleSheet("border-radius: 10px; background: transparent;")
         else:
@@ -287,15 +293,6 @@ class HudOverlay(QWidget):
         self._anim.stop()
         self._anim.setStartValue(self.windowOpacity())
         self._anim.setEndValue(0.0)
-
-        def on_finished():
-            try:
-                self._anim.finished.disconnect(on_finished)
-            except Exception:
-                pass
-            self.hide()
-
-        self._anim.finished.connect(on_finished)
         self._anim.start()
 
     def enterEvent(self, event):  # noqa: N802
@@ -313,10 +310,14 @@ class HudOverlay(QWidget):
         """HUD'a tıklandığında ana pencereyi öne getir."""
         if event.button() == Qt.LeftButton:
             if self.main_window is not None:
-                self.main_window.show()
+                if self.main_window.isMinimized():
+                    self.main_window.showNormal()
+                else:
+                    self.main_window.show()
                 self.main_window.raise_()
                 self.main_window.activateWindow()
             self.clicked.emit()
+            self.dismiss()
             event.accept()
             return
         super().mousePressEvent(event)

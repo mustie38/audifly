@@ -441,39 +441,41 @@ class NeonAudioVisualizer(QWidget):
 
         painter.setPen(Qt.NoPen)
 
+        # Tek paylaşımlı neon bar gradyanı (kare başına N adet QLinearGradient ayırmamak için)
+        bar_grad = QLinearGradient(pad_x, baseline_y, w - pad_x, pad_top)
+        bar_grad.setColorAt(0.0, QColor(self._c1.red(), self._c1.green(), self._c1.blue(), 225))
+        bar_grad.setColorAt(0.65, QColor(self._c2.red(), self._c2.green(), self._c2.blue(), 250))
+        bar_grad.setColorAt(1.0, QColor(255, 255, 255, 240))
+        painter.setBrush(QBrush(bar_grad))
+
         for i in range(n):
-            ratio = i / max(1, n - 1)
-            lvl = self._levels[i]
-            pk = self._peaks[i]
-            bh = max(3.0, lvl * usable_h)
+            bh = max(3.0, self._levels[i] * usable_h)
             x = pad_x + i * step + (step - bar_w) * 0.5
-            y = baseline_y - bh
+            painter.drawRoundedRect(QRectF(x, baseline_y - bh, bar_w, bh), radius, radius)
 
-            # Ana bar gradyanı (aşağıdan yukarıya c1 -> c2 -> parlak uç)
-            col_bottom = self._color_at(ratio, 220)
-            col_top = self._color_at(min(1.0, ratio + 0.25), 255)
-            grad = QLinearGradient(x, baseline_y, x, y)
-            grad.setColorAt(0.0, col_bottom)
-            grad.setColorAt(0.75, col_top)
-            grad.setColorAt(1.0, QColor(255, 255, 255, 235))
-
-            painter.setBrush(QBrush(grad))
-            painter.drawRoundedRect(QRectF(x, y, bar_w, bh), radius, radius)
-
-            # Peak-Hold (Tepe çizgisi)
-            pk_y = max(2.0, baseline_y - pk * usable_h - 3.0)
-            peak_col = self._color_at(ratio, 245)
-            painter.setBrush(peak_col)
+        # Peak-Hold (Tepe çizgileri) — tek fırça ile toplu çizim
+        peak_grad = QLinearGradient(pad_x, 0, w - pad_x, 0)
+        peak_grad.setColorAt(0.0, self._c2)
+        peak_grad.setColorAt(0.5, QColor(255, 255, 255, 245))
+        peak_grad.setColorAt(1.0, self._c1)
+        painter.setBrush(QBrush(peak_grad))
+        for i in range(n):
+            x = pad_x + i * step + (step - bar_w) * 0.5
+            pk_y = max(2.0, baseline_y - self._peaks[i] * usable_h - 3.0)
             painter.drawRoundedRect(QRectF(x, pk_y, bar_w, 2.2), 1.0, 1.0)
 
-            # Alt ayna yansıması (Mirror reflection)
-            ref_bh = min(reflection_h, bh * 0.32)
-            if ref_bh > 1.0:
-                ref_grad = QLinearGradient(x, baseline_y + 2.0, x, baseline_y + 2.0 + ref_bh)
-                ref_grad.setColorAt(0.0, self._color_at(ratio, 75))
-                ref_grad.setColorAt(1.0, self._color_at(ratio, 0))
-                painter.setBrush(QBrush(ref_grad))
-                painter.drawRoundedRect(QRectF(x, baseline_y + 2.0, bar_w, ref_bh), radius, radius)
+        # Alt ayna yansıması (Mirror reflection) — tek dikey sönümlü gradyan
+        if reflection_h > 1.5:
+            ref_grad = QLinearGradient(0, baseline_y + 2.0, 0, baseline_y + 2.0 + reflection_h)
+            ref_grad.setColorAt(0.0, QColor(self._c1.red(), self._c1.green(), self._c1.blue(), 70))
+            ref_grad.setColorAt(1.0, QColor(self._c2.red(), self._c2.green(), self._c2.blue(), 0))
+            painter.setBrush(QBrush(ref_grad))
+            for i in range(n):
+                bh = max(3.0, self._levels[i] * usable_h)
+                ref_bh = min(reflection_h, bh * 0.32)
+                if ref_bh > 1.0:
+                    x = pad_x + i * step + (step - bar_w) * 0.5
+                    painter.drawRoundedRect(QRectF(x, baseline_y + 2.0, bar_w, ref_bh), radius, radius)
 
     def _draw_wave(self, painter: QPainter, w: float, h: float):
         """2. Mod: Çok Katmanlı Akışkan Neon Dalga (Liquid Ribbon)."""
@@ -555,22 +557,16 @@ class NeonAudioVisualizer(QWidget):
         painter.drawLine(QPointF(pad_x, center_y), QPointF(w - pad_x, center_y))
         painter.setPen(Qt.NoPen)
 
+        mirror_grad = QLinearGradient(pad_x, center_y - max_half_h, w - pad_x, center_y + max_half_h)
+        mirror_grad.setColorAt(0.0, QColor(self._c1.red(), self._c1.green(), self._c1.blue(), 240))
+        mirror_grad.setColorAt(0.5, QColor(255, 255, 255, 245))
+        mirror_grad.setColorAt(1.0, QColor(self._c2.red(), self._c2.green(), self._c2.blue(), 230))
+        painter.setBrush(QBrush(mirror_grad))
+
         for i in range(n):
-            ratio = i / max(1, n - 1)
             half_bh = max(2.0, self._levels[i] * max_half_h)
             x = pad_x + i * step + (step - bar_w) * 0.5
-            top_y = center_y - half_bh
-            total_bh = half_bh * 2.0
-
-            grad = QLinearGradient(x, top_y, x, top_y + total_bh)
-            c_edge = self._color_at(ratio, 240)
-            c_mid = QColor(255, 255, 255, 245)
-            grad.setColorAt(0.0, c_edge)
-            grad.setColorAt(0.5, c_mid)
-            grad.setColorAt(1.0, self._color_at(1.0 - ratio, 220))
-
-            painter.setBrush(QBrush(grad))
-            painter.drawRoundedRect(QRectF(x, top_y, bar_w, total_bh), radius, radius)
+            painter.drawRoundedRect(QRectF(x, center_y - half_bh, bar_w, half_bh * 2.0), radius, radius)
 
     def _draw_circular(self, painter: QPainter, w: float, h: float):
         """4. Mod: Dairesel Radyal Nabız & Frekans Halkası (Radial Pulse)."""

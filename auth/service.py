@@ -213,6 +213,9 @@ _SETTING_RULES = {
     "restore_session": (bool,),
     "smtc_enabled": (bool,),
     "crossfade_enabled": (bool,),
+    "vocal_remover_enabled": (bool,),
+    "visualizer_enabled": (bool,),
+    "autoplay_enabled": (bool,),
     "sleep_fade_enabled": (bool,),
     "dependency_notice_dismissed": (bool,),
     "auto_update_check": (bool,),
@@ -249,6 +252,12 @@ def validate_settings(settings: dict) -> dict:
     from mustiefly_qt.helpers.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
     if settings.get("language") not in SUPPORTED_LANGUAGES:
         settings["language"] = DEFAULT_LANGUAGE
+    if settings.get("visualizer_mode") not in ("bars", "wave", "mirror", "circular", "off"):
+        settings["visualizer_mode"] = "bars"
+    if settings.get("visualizer_palette") not in ("dynamic", "cyberpunk", "aurora", "fire", "galaxy"):
+        settings["visualizer_palette"] = "dynamic"
+    if settings.get("hud_overlay_position") not in ("top-right", "bottom-right", "top-center", "top-left"):
+        settings["hud_overlay_position"] = "top-right"
     return settings
 
 

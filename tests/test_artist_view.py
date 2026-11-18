@@ -281,7 +281,7 @@ def test_song_row_artist_navigation(qapp):
 
     assert uploader_lbl is not None
     # mousePressEvent doğrudan çağırılır
-    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(10, 10), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(10, 10), QPointF(10, 10), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     uploader_lbl.mousePressEvent(event)
     assert clicked_artist == "Tarkan"
 
@@ -317,7 +317,7 @@ def test_player_bar_artist_navigation(qapp):
     song = {"title": "Dudu", "uploader": "Tarkan", "webpage_url": "url1"}
     bar._set_current_song(song)
 
-    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(5, 5), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     bar.now_sub_label.mousePressEvent(event)
     assert clicked_artist == "Tarkan"
 

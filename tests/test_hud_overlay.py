@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent, QPixmap
 from PySide6.QtWidgets import QApplication
 
@@ -53,7 +53,8 @@ def test_hud_overlay_lifecycle_and_settings(qapp=None):
     # Tıklama sinyali
     clicked_events = []
     hud.clicked.connect(lambda: clicked_events.append(1))
-    press_event = QMouseEvent(QMouseEvent.MouseButtonPress, hud.rect().center(), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    center_pt = QPointF(hud.rect().center())
+    press_event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, center_pt, center_pt, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     hud.mousePressEvent(press_event)
     assert clicked_events == [1]
 

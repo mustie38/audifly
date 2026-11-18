@@ -125,6 +125,7 @@ def test_neon_audio_visualizer_modes_and_palettes(qapp, fake_playback):
     click = QMouseEvent(
         QMouseEvent.Type.MouseButtonPress,
         QPointF(20, 20),
+        QPointF(20, 20),
         Qt.LeftButton,
         Qt.LeftButton,
         Qt.NoModifier,

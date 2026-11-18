@@ -550,11 +550,11 @@ class KaraokeView(QWidget):
             event.accept()
             return
         if k in (Qt.Key_Right, Qt.Key_L):
-            self.playback.seek(self.playback.player.get_time() + 5000)
+            self.playback.seek(self._current_time_ms() + 5000)
             event.accept()
             return
         if k in (Qt.Key_Left, Qt.Key_J):
-            self.playback.seek(max(0, self.playback.player.get_time() - 5000))
+            self.playback.seek(max(0, self._current_time_ms() - 5000))
             event.accept()
             return
         if k == Qt.Key_N:
@@ -734,10 +734,19 @@ class KaraokeView(QWidget):
                 item.setForeground(QBrush(QColor(255, 255, 255, 110)))
                 self.synced_list.addItem(item)
             self.stack.setCurrentIndex(PAGE_SYNCED)
-            self._on_position(max(0, self.playback.player.get_time()), 0)
+            self._on_position(self._current_time_ms(), 0)
         else:
             self.plain_label.setText(result.plain or "")
             self.stack.setCurrentIndex(PAGE_PLAIN)
+
+    def _current_time_ms(self) -> int:
+        try:
+            player = getattr(self.playback, "player", None)
+            if player is not None:
+                return max(0, int(player.get_time() or 0))
+        except Exception:
+            pass
+        return 0
 
     # --- Konum & Canlı Karaoke Kaydırma ---
     def _on_position(self, current_ms: int, total_ms: int):

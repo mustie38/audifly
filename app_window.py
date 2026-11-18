@@ -539,9 +539,11 @@ class MainWindow(QMainWindow):
         elif key == Qt.Key_P:
             self.playback.play_previous()
         elif key == Qt.Key_Right:
-            self.playback.seek(self.playback.player.get_time() + 10000)
+            cur_t = max(0, int(self.playback.player.get_time() or 0)) if self.playback.player else 0
+            self.playback.seek(cur_t + 10000)
         elif key == Qt.Key_Left:
-            self.playback.seek(max(0, self.playback.player.get_time() - 10000))
+            cur_t = max(0, int(self.playback.player.get_time() or 0)) if self.playback.player else 0
+            self.playback.seek(max(0, cur_t - 10000))
         elif key == Qt.Key_Up:
             self.playback.change_volume(min(100, int(self.settings.get("_volume", 80)) + 5))
         elif key == Qt.Key_Down:

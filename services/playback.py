@@ -258,6 +258,9 @@ class PlaybackEngine(QObject):
 
     def _create_vocal_remover_equalizer(self):
         """Vokal frekanslarını (250Hz - 4000Hz) -20dB'ye kadar bastıran enstrümantal karaoke ekolayzeri."""
+        cached_eq = getattr(self, "_vocal_eq", None)
+        if cached_eq is not None:
+            return cached_eq
         if not hasattr(vlc, "AudioEqualizer") or not self.eq_band_count:
             return None
         try:
@@ -268,6 +271,7 @@ class PlaybackEngine(QObject):
             bands = [3.0, 4.0, 1.0, -15.0, -20.0, -20.0, -18.0, -14.0, 2.0, 4.0]
             for i in range(min(self.eq_band_count, len(bands))):
                 eq.set_amp_at_index(bands[i], i)
+            self._vocal_eq = eq
             return eq
         except Exception as e:
             log.warning("Vokal bastırma ekolayzeri oluşturulamadı: %s", e)

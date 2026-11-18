@@ -86,8 +86,10 @@ class ArtistDetailView(QWidget):
 
         self._artist_data: dict | None = None
         self._album_data: dict | None = None
+        self._artist_cache: dict[str, dict] = {}
+        self._album_cache: dict[str, dict] = {}
         self._token = 0
-        self._song_cover_labels: list[tuple[QLabel, str]] = []
+        self._song_cover_labels: list[tuple] = []
 
         self.artistDataReady.connect(self._apply_artist_data)
         self.albumDataReady.connect(self._apply_album_data)
@@ -396,6 +398,12 @@ class ArtistDetailView(QWidget):
         if library_songs:
             self._render_library_section(library_songs)
 
+        cache_key = f"{browse_id}|{clean_name.casefold()}"
+        cached = self._artist_cache.get(cache_key)
+        if cached is not None:
+            self._apply_artist_data(token, clean_name, cached)
+            return
+
         # Durum göstergesi: Yükleniyor
         self.loading_label = QLabel("⏳ Sanatçı bilgileri ve popüler parçalar yükleniyor…")
         self.loading_label.setStyleSheet("color: rgba(255, 255, 255, 0.65); font-size: 13px; padding: 10px 0;")
@@ -474,6 +482,10 @@ class ArtistDetailView(QWidget):
             self.sections_layout.addWidget(no_info)
             return
         self._artist_data = data
+        cache_key = f"{self._current_browse_id}|{artist_name.casefold()}"
+        self._artist_cache[cache_key] = data
+        while len(self._artist_cache) > 30:
+            self._artist_cache.pop(next(iter(self._artist_cache)))
 
         # Sanatçı kapak fotoğrafı
         thumbs = data.get("thumbnails", [])
@@ -482,7 +494,7 @@ class ArtistDetailView(QWidget):
             if photo_url:
                 self._avatar_url = photo_url
                 fake_song = {"thumbnail": photo_url, "webpage_url": photo_url}
-                pm = self.thumbnails.pixmap_for(fake_song, 130, rounded=True)
+                pm = self.thumbnails.pixmap_for(fake_song, 130, radius=65, rounded=True)
                 if pm is not None and not pm.isNull():
                     self.hero_avatar.setPixmap(pm)
                     self.hero_avatar.setText("")
@@ -598,8 +610,8 @@ class ArtistDetailView(QWidget):
         cover_lbl.setAlignment(Qt.AlignCenter)
         thumb_url = song.get("thumbnail")
         if self.thumbnails is not None and thumb_url:
-            self._song_cover_labels.append((cover_lbl, thumb_url))
-            pm = self.thumbnails.pixmap_for(song, 40, rounded=True)
+            self._song_cover_labels.append((cover_lbl, song, 40, 6))
+            pm = self.thumbnails.pixmap_for(song, 40, radius=6, rounded=True)
             if pm is not None and not pm.isNull():
                 cover_lbl.setPixmap(pm)
             else:
@@ -740,8 +752,8 @@ class ArtistDetailView(QWidget):
         if thumbs and self.thumbnails is not None:
             thumb_url = thumbs[-1].get("url")
             fake = {"thumbnail": thumb_url, "webpage_url": thumb_url}
-            self._song_cover_labels.append((cover, thumb_url))
-            pm = self.thumbnails.pixmap_for(fake, 120, rounded=True)
+            self._song_cover_labels.append((cover, fake, 120, 10))
+            pm = self.thumbnails.pixmap_for(fake, 120, radius=10, rounded=True)
             if pm is not None and not pm.isNull():
                 cover.setPixmap(pm)
             else:
@@ -837,7 +849,8 @@ class ArtistDetailView(QWidget):
         if thumbs and self.thumbnails is not None:
             thumb_url = thumbs[-1].get("url")
             fake = {"thumbnail": thumb_url, "webpage_url": thumb_url}
-            pm = self.thumbnails.pixmap_for(fake, 84, rounded=True)
+            self._song_cover_labels.append((avatar, fake, 84, 42))
+            pm = self.thumbnails.pixmap_for(fake, 84, radius=42, rounded=True)
             if pm is not None and not pm.isNull():
                 avatar.setPixmap(pm)
             else:
@@ -906,6 +919,11 @@ class ArtistDetailView(QWidget):
         )
 
         self._clear_sections()
+        cached = self._album_cache.get(browse_id)
+        if cached is not None:
+            self._apply_album_data(token, cached, artist_name)
+            return
+
         self.loading_label = QLabel("⏳ Albüm parçaları yükleniyor…")
         self.loading_label.setStyleSheet("color: rgba(255, 255, 255, 0.65); font-size: 13px; padding: 10px 0;")
         self.sections_layout.addWidget(self.loading_label)
@@ -937,6 +955,10 @@ class ArtistDetailView(QWidget):
             self.sections_layout.addWidget(no_info)
             return
         self._album_data = data
+        if self._current_browse_id:
+            self._album_cache[self._current_browse_id] = data
+            while len(self._album_cache) > 30:
+                self._album_cache.pop(next(iter(self._album_cache)))
 
         album_title = data.get("title", self.hero_title.text())
         self.hero_title.setText(album_title)
@@ -953,11 +975,13 @@ class ArtistDetailView(QWidget):
         if thumbs and self.thumbnails is not None:
             photo_url = thumbs[-1].get("url")
             if photo_url:
+                self._avatar_url = photo_url
                 fake_song = {"thumbnail": photo_url, "webpage_url": photo_url}
-                pm = self.thumbnails.pixmap_for(fake_song, 124, rounded=True)
+                pm = self.thumbnails.pixmap_for(fake_song, 124, radius=16, rounded=True)
                 if pm is not None and not pm.isNull():
                     self.hero_avatar.setPixmap(pm)
                     self.hero_avatar.setText("")
+                    self.hero_avatar.setStyleSheet("border-radius: 16px; background: transparent;")
 
         # Parça listesi
         tracklist_box = QWidget()
@@ -1020,22 +1044,28 @@ class ArtistDetailView(QWidget):
                 for item in self._artist_data.get("songs", {}).get("results", []):
                     vid = item.get("videoId")
                     if vid:
+                        thumbs = item.get("thumbnails") or []
                         all_songs.append({
                             "title": item.get("title", ""),
                             "uploader": self._current_artist,
                             "webpage_url": f"https://www.youtube.com/watch?v={vid}",
                             "duration": item.get("duration_seconds") or 0,
+                            "thumbnail": thumbs[-1].get("url") if thumbs else None,
                         })
         elif self._current_mode == "album" and self._album_data:
             artist_n = self._current_artist
+            album_thumbs = self._album_data.get("thumbnails") or []
+            album_thumb = album_thumbs[-1].get("url") if album_thumbs else None
             for t in self._album_data.get("tracks", []):
                 vid = t.get("videoId")
                 if vid:
+                    t_thumbs = t.get("thumbnails") or []
                     all_songs.append({
                         "title": t.get("title", ""),
                         "uploader": artist_n,
                         "webpage_url": f"https://www.youtube.com/watch?v={vid}",
                         "duration": t.get("duration_seconds") or 0,
+                        "thumbnail": t_thumbs[-1].get("url") if t_thumbs else album_thumb,
                     })
 
         if not all_songs:
@@ -1068,15 +1098,19 @@ class ArtistDetailView(QWidget):
             return
         album_title = self.hero_title.text()
         tracks = self._album_data.get("tracks", [])
+        album_thumbs = self._album_data.get("thumbnails") or []
+        album_thumb = album_thumbs[-1].get("url") if album_thumbs else None
         song_list = []
         for t in tracks:
             vid = t.get("videoId")
             if vid:
+                t_thumbs = t.get("thumbnails") or []
                 song_list.append({
                     "title": t.get("title", ""),
                     "uploader": self._current_artist,
                     "webpage_url": f"https://www.youtube.com/watch?v={vid}",
                     "duration": t.get("duration_seconds") or 0,
+                    "thumbnail": t_thumbs[-1].get("url") if t_thumbs else album_thumb,
                 })
         if song_list:
             target_name = f"Albüm: {album_title}"
@@ -1105,22 +1139,23 @@ class ArtistDetailView(QWidget):
         if getattr(self, "_avatar_url", None) == key and self.thumbnails is not None:
             fake_song = {"thumbnail": key, "webpage_url": key}
             is_artist = (self._current_mode == "artist")
-            pm = self.thumbnails.pixmap_for(fake_song, 130, rounded=is_artist)
+            rad_px = 65 if is_artist else 16
+            sz_px = 130 if is_artist else 124
+            pm = self.thumbnails.pixmap_for(fake_song, sz_px, radius=rad_px, rounded=True)
             if pm and not pm.isNull():
                 self.hero_avatar.setPixmap(pm)
                 self.hero_avatar.setText("")
-                rad = "65px" if is_artist else "16px"
-                self.hero_avatar.setStyleSheet(f"border-radius: {rad}; background: transparent;")
+                self.hero_avatar.setStyleSheet(f"border-radius: {rad_px}px; background: transparent;")
 
-        # 2) Parça & Albüm kapakları güncellemesi
-        for lbl, s_url in getattr(self, "_song_cover_labels", []):
+        # 2) Parça, Albüm ve Benzer Sanatçı kapakları güncellemesi
+        for entry in getattr(self, "_song_cover_labels", []):
             try:
-                if s_url == key and self.thumbnails is not None:
-                    fake = {"thumbnail": key, "webpage_url": key}
-                    pm = self.thumbnails.pixmap_for(fake, lbl.width(), rounded=True)
+                lbl, item_song, sz, rad = entry
+                if item_song.get("webpage_url") == key and self.thumbnails is not None:
+                    pm = self.thumbnails.pixmap_for(item_song, sz, radius=rad, rounded=True)
                     if pm and not pm.isNull():
                         lbl.setPixmap(pm)
                         lbl.setText("")
-                        lbl.setStyleSheet("border-radius: 6px; background: transparent;")
+                        lbl.setStyleSheet(f"border-radius: {rad}px; background: transparent;")
             except Exception:
                 pass
