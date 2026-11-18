@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
         # Discord RPC + Mini Player
         client_id = self.settings.get("discord_client_id", DISCORD_CLIENT_ID_DEFAULT)
         self.discord_rpc = DiscordRPCService(client_id, self.playback, self)
-        self.mini_player = MiniPlayer(self.playback)
+        self.mini_player = MiniPlayer(self.playback, thumbnails=self.thumbnails)
 
         # Ekolayzer + Sözler + Karaoke pencereleri (menüden açılır, tek örnek)
         self._eq_window: EqualizerWindow | None = None

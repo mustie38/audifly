@@ -76,7 +76,8 @@ def test_karaoke_view_initialization_and_sync(qapp, fake_playback, monkeypatch):
     view._sync_all()
     assert view.title_label.text() == "Saat 3"
     assert view.artist_label.text() == "Bengü"
-    assert view.play_btn.text() == "⏸"
+    assert view._is_playing_icon is True
+    assert not view.play_btn.icon().isNull()
 
     # Simulate synced lyrics result
     res = ly.LyricsResult(

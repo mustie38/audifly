@@ -13,7 +13,7 @@ import colorsys
 import os
 import threading
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush, QColor, QFont, QLinearGradient, QPainter, QPixmap, QRadialGradient,
 )
@@ -160,7 +160,9 @@ class KaraokeView(QWidget):
         top_layout.addWidget(app_title)
         top_layout.addStretch(1)
 
-        self.exit_btn = QPushButton("✕ Çıkış (Esc)")
+        self.exit_btn = QPushButton(" Çıkış (Esc)")
+        self.exit_btn.setIcon(vicon("close", 14, "#ffffff"))
+        self.exit_btn.setIconSize(QSize(14, 14))
         self.exit_btn.setCursor(Qt.PointingHandCursor)
         self.exit_btn.setStyleSheet("""
             QPushButton {
@@ -254,54 +256,67 @@ class KaraokeView(QWidget):
         slider_layout.addLayout(times_row)
         left_col.addWidget(slider_box)
 
-        # Oynatma Düğmeleri (Transport)
+        # Oynatma Düğmeleri (Transport — Elit Vektör İkonlar)
         controls_row = QHBoxLayout()
         controls_row.setSpacing(16)
         controls_row.setAlignment(Qt.AlignCenter)
 
-        self.shuffle_btn = QPushButton("🔀")
-        self.shuffle_btn.setFixedSize(38, 38)
+        self.shuffle_btn = QPushButton()
+        self.shuffle_btn.setFixedSize(40, 40)
         self.shuffle_btn.setCursor(Qt.PointingHandCursor)
+        self.shuffle_btn.setToolTip("Karışık Çal")
+        self.shuffle_btn.setIcon(vicon("shuffle", 17, "#ffffff"))
+        self.shuffle_btn.setIconSize(QSize(17, 17))
         self.shuffle_btn.setStyleSheet(self._btn_style(small=True))
-        self.shuffle_btn.clicked.connect(self.playback.toggle_shuffle)
+        self.shuffle_btn.clicked.connect(self._on_toggle_shuffle)
         controls_row.addWidget(self.shuffle_btn)
 
-        self.prev_btn = QPushButton("⏮")
-        self.prev_btn.setFixedSize(44, 44)
+        self.prev_btn = QPushButton()
+        self.prev_btn.setFixedSize(46, 46)
         self.prev_btn.setCursor(Qt.PointingHandCursor)
+        self.prev_btn.setToolTip("Önceki Şarkı")
+        self.prev_btn.setIcon(vicon("prev", 20, "#ffffff"))
+        self.prev_btn.setIconSize(QSize(20, 20))
         self.prev_btn.setStyleSheet(self._btn_style())
         self.prev_btn.clicked.connect(self.playback.play_previous)
         controls_row.addWidget(self.prev_btn)
 
-        self.play_btn = QPushButton("▶")
-        self.play_btn.setFixedSize(62, 62)
+        self.play_btn = QPushButton()
+        self.play_btn.setFixedSize(64, 64)
         self.play_btn.setCursor(Qt.PointingHandCursor)
+        self.play_btn.setToolTip("Oynat / Duraklat (Boşluk)")
+        self.play_btn.setIcon(vicon("play", 26, "#100e18"))
+        self.play_btn.setIconSize(QSize(26, 26))
         self.play_btn.setStyleSheet("""
             QPushButton {
                 background: #ffffff;
-                color: #100e18;
-                border-radius: 31px;
-                font-size: 22px;
-                font-weight: bold;
+                border: 2px solid rgba(255, 255, 255, 0.9);
+                border-radius: 32px;
             }
             QPushButton:hover {
-                background: #e6e6e6;
-                transform: scale(1.05);
+                background: #ece9f8;
+                border-color: #a980f9;
             }
         """)
         self.play_btn.clicked.connect(self.playback.toggle_play_pause)
         controls_row.addWidget(self.play_btn)
 
-        self.next_btn = QPushButton("⏭")
-        self.next_btn.setFixedSize(44, 44)
+        self.next_btn = QPushButton()
+        self.next_btn.setFixedSize(46, 46)
         self.next_btn.setCursor(Qt.PointingHandCursor)
+        self.next_btn.setToolTip("Sonraki Şarkı")
+        self.next_btn.setIcon(vicon("next", 20, "#ffffff"))
+        self.next_btn.setIconSize(QSize(20, 20))
         self.next_btn.setStyleSheet(self._btn_style())
         self.next_btn.clicked.connect(self.playback.play_next)
         controls_row.addWidget(self.next_btn)
 
-        self.like_btn = QPushButton("♡")
-        self.like_btn.setFixedSize(38, 38)
+        self.like_btn = QPushButton()
+        self.like_btn.setFixedSize(40, 40)
         self.like_btn.setCursor(Qt.PointingHandCursor)
+        self.like_btn.setToolTip("Beğen")
+        self.like_btn.setIcon(vicon("heart", 18, "#ffffff"))
+        self.like_btn.setIconSize(QSize(18, 18))
         self.like_btn.setStyleSheet(self._btn_style(small=True))
         self.like_btn.clicked.connect(self._toggle_like)
         controls_row.addWidget(self.like_btn)
@@ -312,7 +327,9 @@ class KaraokeView(QWidget):
         vocal_row = QHBoxLayout()
         vocal_row.setSpacing(10)
         vocal_row.setAlignment(Qt.AlignCenter)
-        self.vocal_btn = QPushButton("🎙️ Vokal: Açık")
+        self.vocal_btn = QPushButton(" Vokal: Açık")
+        self.vocal_btn.setIcon(vicon("mic", 15, "#ffffff"))
+        self.vocal_btn.setIconSize(QSize(15, 15))
         self.vocal_btn.setCursor(Qt.PointingHandCursor)
         self.vocal_btn.setFixedHeight(36)
         self.vocal_btn.setToolTip("Şarkının vokalini kıs / enstrümantal karaoke moduna geç (Kısayol: V)")
@@ -321,6 +338,8 @@ class KaraokeView(QWidget):
         vocal_row.addWidget(self.vocal_btn)
 
         self.viz_btn = QPushButton()
+        self.viz_btn.setIcon(vicon("spectrum", 15, "#ffffff"))
+        self.viz_btn.setIconSize(QSize(15, 15))
         self.viz_btn.setCursor(Qt.PointingHandCursor)
         self.viz_btn.setFixedHeight(36)
         self.viz_btn.setToolTip("Arka plan Neon Spektrum modunu değiştir (Kısayol: G)")
@@ -402,20 +421,22 @@ class KaraokeView(QWidget):
 
         root.addLayout(main_layout, stretch=1)
 
-    def _btn_style(self, small: bool = False) -> str:
-        size = 38 if small else 44
-        font_size = "16px" if small else "19px"
+    def _btn_style(self, small: bool = False, active_border: str = "rgba(255, 255, 255, 0.16)") -> str:
+        size = 40 if small else 46
         radius = size // 2
         return f"""
             QPushButton {{
-                background: rgba(255, 255, 255, 0.12);
+                background: rgba(255, 255, 255, 0.10);
                 color: #ffffff;
                 border-radius: {radius}px;
-                font-size: {font_size};
-                border: none;
+                border: 1px solid {active_border};
             }}
             QPushButton:hover {{
-                background: rgba(255, 255, 255, 0.24);
+                background: rgba(255, 255, 255, 0.22);
+                border-color: rgba(255, 255, 255, 0.35);
+            }}
+            QPushButton:pressed {{
+                background: rgba(255, 255, 255, 0.30);
             }}
         """
 
@@ -452,8 +473,10 @@ class KaraokeView(QWidget):
     def _update_viz_btn_ui(self):
         mode = self.visualizer.mode
         label = MODE_LABELS.get(mode, "📊 Neon Barlar")
-        self.viz_btn.setText(f"{label}")
+        clean_lbl = label.split(" ", 1)[1] if " " in label else label
+        self.viz_btn.setText(f" {clean_lbl}")
         active = mode != "off"
+        self.viz_btn.setIcon(vicon("spectrum", 15, "#00f0ff" if active else "#a8a3bf"))
         if active:
             self.viz_btn.setStyleSheet("""
                 QPushButton {
@@ -487,8 +510,9 @@ class KaraokeView(QWidget):
             """)
 
     def _update_vocal_ui(self, enabled: bool):
+        self.vocal_btn.setIcon(vicon("mic", 15, "#ffffff"))
         if enabled:
-            self.vocal_btn.setText("🎙️ Enstrümantal (Vokal Kısık)")
+            self.vocal_btn.setText(" Enstrümantal (Vokal Kısık)")
             self.vocal_btn.setStyleSheet("""
                 QPushButton {
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #ec4899);
@@ -504,7 +528,7 @@ class KaraokeView(QWidget):
                 }
             """)
         else:
-            self.vocal_btn.setText("🎙️ Vokal: Açık (Orijinal)")
+            self.vocal_btn.setText(" Vokal: Açık (Orijinal)")
             self.vocal_btn.setStyleSheet("""
                 QPushButton {
                     background: rgba(255, 255, 255, 0.10);
@@ -600,14 +624,9 @@ class KaraokeView(QWidget):
         clean_t, clean_a = parse_track_and_artist(song.get("title", ""), song.get("uploader", ""), song)
         self.title_label.setText(clean_t)
         self.artist_label.setText(clean_a)
-        self.like_btn.setText("♥" if song.get("liked") else "♡")
-        self.like_btn.setStyleSheet(
-            f"color: {'#ff5e7e' if song.get('liked') else '#ffffff'}; " + self._btn_style(small=True)
-        )
-        self.play_btn.setText("⏸" if self.playback.is_playing else "▶")
-        self.shuffle_btn.setStyleSheet(
-            f"color: {'#a980f9' if self.playback.shuffle_mode else '#ffffff'}; " + self._btn_style(small=True)
-        )
+        self._sync_like_icon(bool(song.get("liked")))
+        self._on_play_state(bool(self.playback.is_playing))
+        self._sync_shuffle_icon(bool(self.playback.shuffle_mode))
 
         # Kapak resmi ve renkler
         pm = self.thumbnails.pixmap_for(song, 360, rounded=False) if self.thumbnails else None
@@ -664,7 +683,24 @@ class KaraokeView(QWidget):
                             self.visualizer.set_accent(extracted)
 
     def _on_play_state(self, playing: bool):
-        self.play_btn.setText("⏸" if playing else "▶")
+        self._is_playing_icon = bool(playing)
+        self.play_btn.setIcon(vicon("pause" if playing else "play", 26, "#100e18"))
+
+    def _on_toggle_shuffle(self):
+        self.playback.toggle_shuffle()
+        self._sync_shuffle_icon(bool(getattr(self.playback, "shuffle_mode", False)))
+
+    def _sync_shuffle_icon(self, active: bool):
+        self.shuffle_btn.setIcon(vicon("shuffle", 17, "#a980f9" if active else "#ffffff"))
+        border = "rgba(169, 128, 249, 0.55)" if active else "rgba(255, 255, 255, 0.16)"
+        self.shuffle_btn.setStyleSheet(self._btn_style(small=True, active_border=border))
+
+    def _sync_like_icon(self, liked: bool):
+        self.like_btn.setIcon(
+            vicon("heart_filled" if liked else "heart", 18, "#ff5e7e" if liked else "#ffffff")
+        )
+        border = "rgba(255, 94, 126, 0.55)" if liked else "rgba(255, 255, 255, 0.16)"
+        self.like_btn.setStyleSheet(self._btn_style(small=True, active_border=border))
 
     def _toggle_like(self):
         pl = self.playback.playing_playlist
@@ -673,10 +709,7 @@ class KaraokeView(QWidget):
             self.playback.store.toggle_like(pl, idx)
             song = self.playback.current_song
             if song:
-                self.like_btn.setText("♥" if song.get("liked") else "♡")
-                self.like_btn.setStyleSheet(
-                    f"color: {'#ff5e7e' if song.get('liked') else '#ffffff'}; " + self._btn_style(small=True)
-                )
+                self._sync_like_icon(bool(song.get("liked")))
 
     # --- Söz Yönetimi ---
     def _show_status(self, icon: str, text: str):

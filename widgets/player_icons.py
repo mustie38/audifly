@@ -268,6 +268,52 @@ def _draw_mic(p: QPainter, color: str):
     p.drawLine(QPointF(8, 21), QPointF(16, 21))
 
 
+def _draw_radio(p: QPainter, color: str):
+    # Merkez yayın noktası + iki yöne yayılan sinyal halkaları
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(color))
+    p.drawEllipse(QPointF(12, 12), 2.2, 2.2)
+    pen = _stroke(color, 1.7)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # İç yaylar
+    p.drawArc(QRectF(6.5, 6.5, 11, 11), -45 * 16, 90 * 16)
+    p.drawArc(QRectF(6.5, 6.5, 11, 11), 135 * 16, 90 * 16)
+    # Dış yaylar
+    p.drawArc(QRectF(3.0, 3.0, 18, 18), -45 * 16, 90 * 16)
+    p.drawArc(QRectF(3.0, 3.0, 18, 18), 135 * 16, 90 * 16)
+
+
+def _draw_spectrum(p: QPainter, color: str):
+    # 4 yuvarlatılmış ses spektrum çubuğu
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(color))
+    bars = ((4.5, 11, 2.6, 8), (9.0, 5, 2.6, 14), (13.5, 8.5, 2.6, 10.5), (18.0, 6.5, 2.6, 12.5))
+    for x, y, w, h in bars:
+        p.drawRoundedRect(QRectF(x, y, w, h), 1.3, 1.3)
+
+
+def _draw_expand(p: QPainter, color: str):
+    pen = _stroke(color, 1.8)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # Sağ-üst ok
+    p.drawLine(QPointF(14, 4), QPointF(20, 4))
+    p.drawLine(QPointF(20, 4), QPointF(20, 10))
+    p.drawLine(QPointF(20, 4), QPointF(13.5, 10.5))
+    # Sol-alt ok
+    p.drawLine(QPointF(10, 20), QPointF(4, 20))
+    p.drawLine(QPointF(4, 20), QPointF(4, 14))
+    p.drawLine(QPointF(4, 20), QPointF(10.5, 13.5))
+
+
+def _draw_close(p: QPainter, color: str):
+    pen = _stroke(color, 1.9)
+    p.setPen(pen)
+    p.drawLine(QPointF(6.5, 6.5), QPointF(17.5, 17.5))
+    p.drawLine(QPointF(17.5, 6.5), QPointF(6.5, 17.5))
+
+
 _DRAWERS = {
     "play": _draw_play,
     "pause": _draw_pause,
@@ -280,6 +326,10 @@ _DRAWERS = {
     "lyrics": _draw_lyrics,
     "fullscreen": _draw_fullscreen,
     "mic": _draw_mic,
+    "radio": _draw_radio,
+    "spectrum": _draw_spectrum,
+    "expand": _draw_expand,
+    "close": _draw_close,
     "volume": _draw_volume,
     "volume_muted": _draw_volume_muted,
     "heart": lambda p, c: _draw_heart(p, c, False),

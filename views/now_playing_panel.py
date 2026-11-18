@@ -70,27 +70,42 @@ class NowPlayingPanel(QWidget):
         layout.addWidget(self.artist_label)
 
         btn_row = QHBoxLayout()
-        self.like_btn = QPushButton("♡ Beğen")
+        btn_row.setSpacing(6)
+        self.like_btn = QPushButton(" Beğen")
+        self.like_btn.setIcon(vicon("heart", 14, "#cfc9e6"))
+        self.like_btn.setIconSize(QSize(14, 14))
+        self.like_btn.setCursor(Qt.PointingHandCursor)
         self.like_btn.clicked.connect(self._toggle_like)
         btn_row.addWidget(self.like_btn)
 
-        lyrics_btn = QPushButton("🎤 Sözler")
+        lyrics_btn = QPushButton(" Sözler")
+        lyrics_btn.setIcon(vicon("lyrics", 14, "#cfc9e6"))
+        lyrics_btn.setIconSize(QSize(14, 14))
+        lyrics_btn.setCursor(Qt.PointingHandCursor)
         lyrics_btn.setToolTip("Sözler penceresini açar (Ayarlar > Sözler)")
         self.lyrics_btn = lyrics_btn
         btn_row.addWidget(lyrics_btn)
 
-        self.radio_btn = QPushButton("📻 Radyo")
+        self.radio_btn = QPushButton(" Radyo")
+        self.radio_btn.setIcon(vicon("radio", 14, "#cfc9e6"))
+        self.radio_btn.setIconSize(QSize(14, 14))
+        self.radio_btn.setCursor(Qt.PointingHandCursor)
         self.radio_btn.setToolTip("Bu şarkı için Şarkı Radyosu başlatır")
         self.radio_btn.clicked.connect(self._on_start_radio)
         btn_row.addWidget(self.radio_btn)
 
-        self.karaoke_btn = QPushButton("⛶")
+        self.karaoke_btn = QPushButton()
+        self.karaoke_btn.setIcon(vicon("fullscreen", 15, "#cfc9e6"))
+        self.karaoke_btn.setIconSize(QSize(15, 15))
+        self.karaoke_btn.setCursor(Qt.PointingHandCursor)
         self.karaoke_btn.setToolTip("Canlı Karaoke & Tam Ekran (F11)")
         self.karaoke_btn.setFixedWidth(36)
         self.karaoke_btn.clicked.connect(self.karaokeRequested.emit)
         btn_row.addWidget(self.karaoke_btn)
 
-        self.vocal_btn = QPushButton("🎙️")
+        self.vocal_btn = QPushButton()
+        self.vocal_btn.setIcon(vicon("mic", 15, "#cfc9e6"))
+        self.vocal_btn.setIconSize(QSize(15, 15))
         self.vocal_btn.setToolTip("Vokal Ayırma / Enstrümantal Mod (V)")
         self.vocal_btn.setFixedWidth(36)
         self.vocal_btn.setCursor(Qt.PointingHandCursor)
@@ -267,7 +282,7 @@ class NowPlayingPanel(QWidget):
             source = "🌐 Çevrimiçi"
         self.artist_label.setText(f"{clean_artist} • {playlist_name} • {source}")
         self.like_btn.setVisible(True)
-        self.like_btn.setText("♥ Beğenildi" if song.get("liked") else "♡ Beğen")
+        self._apply_like_state(bool(song.get("liked")))
         self.progress_section.setVisible(True)
         self.progress_slider.setValue(0)
         self.current_time_label.setText("00:00")
@@ -360,12 +375,16 @@ class NowPlayingPanel(QWidget):
         self.store.toggle_like(pl, idx)
         self._sync_like_button()
 
+    def _apply_like_state(self, liked: bool):
+        self.like_btn.setText(" Beğenildi" if liked else " Beğen")
+        self.like_btn.setIcon(vicon("heart_filled" if liked else "heart", 14, "#ff5e7e" if liked else "#cfc9e6"))
+
     def _sync_like_button(self):
         pl = self.playback.playing_playlist
         songs = self.store.playlists.get(pl, []) if pl else []
         idx = self.playback.current_index
         if pl and 0 <= idx < len(songs):
-            self.like_btn.setText("♥ Beğenildi" if songs[idx].get("liked") else "♡ Beğen")
+            self._apply_like_state(bool(songs[idx].get("liked")))
 
     def _on_thumbnail_ready(self, key: str):
         """Kapak indiğinde yalnızca o an çalan şarkıysa plak kapağını güncelle."""
@@ -378,6 +397,7 @@ class NowPlayingPanel(QWidget):
                 self.vinyl.set_pixmap(pm)
 
     def _sync_vocal_button(self, enabled: bool):
+        self.vocal_btn.setIcon(vicon("mic", 15, "#ffffff" if enabled else "#cfc9e6"))
         if enabled:
             self.vocal_btn.setToolTip("🎙️ Enstrümantal Mod (Vokal Kısık) — Kapatmak için tıkla (V)")
             self.vocal_btn.setStyleSheet("""

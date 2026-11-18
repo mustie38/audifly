@@ -86,6 +86,8 @@ def artist_view_fixture(qapp):
     thumbnails.pixmap_for.return_value = None
 
     view = ArtistDetailView(store, playback, thumbnails)
+    view._fetch_artist_remote = lambda *a, **kw: None
+    view._fetch_album_remote = lambda *a, **kw: None
     return view, store, playback
 
 

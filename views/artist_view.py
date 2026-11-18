@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import threading
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QPushButton,
@@ -24,6 +24,7 @@ from mustiefly_qt.helpers.lyrics import parse_track_and_artist
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
+from mustiefly_qt.widgets.player_icons import icon as vicon
 
 log = get_logger(__name__)
 
@@ -251,7 +252,9 @@ class ArtistDetailView(QWidget):
         actions_row = QHBoxLayout()
         actions_row.setSpacing(12)
 
-        self.play_all_btn = QPushButton("▶ Tümünü Çal")
+        self.play_all_btn = QPushButton(" Tümünü Çal")
+        self.play_all_btn.setIcon(vicon("play", 15, "#ffffff"))
+        self.play_all_btn.setIconSize(QSize(15, 15))
         self.play_all_btn.setObjectName("Primary")
         self.play_all_btn.setCursor(Qt.PointingHandCursor)
         self.play_all_btn.setFixedHeight(38)
@@ -272,7 +275,9 @@ class ArtistDetailView(QWidget):
         self.play_all_btn.clicked.connect(self._on_play_all)
         actions_row.addWidget(self.play_all_btn)
 
-        self.shuffle_btn = QPushButton("🔀 Karışık Çal")
+        self.shuffle_btn = QPushButton(" Karışık Çal")
+        self.shuffle_btn.setIcon(vicon("shuffle", 15, "#ffffff"))
+        self.shuffle_btn.setIconSize(QSize(15, 15))
         self.shuffle_btn.setCursor(Qt.PointingHandCursor)
         self.shuffle_btn.setFixedHeight(38)
         self.shuffle_btn.setStyleSheet("""
@@ -292,7 +297,9 @@ class ArtistDetailView(QWidget):
         self.shuffle_btn.clicked.connect(self._on_shuffle_all)
         actions_row.addWidget(self.shuffle_btn)
 
-        self.radio_btn = QPushButton("📻 Sanatçı Radyosu")
+        self.radio_btn = QPushButton(" Sanatçı Radyosu")
+        self.radio_btn.setIcon(vicon("radio", 15, "#ffffff"))
+        self.radio_btn.setIconSize(QSize(15, 15))
         self.radio_btn.setCursor(Qt.PointingHandCursor)
         self.radio_btn.setFixedHeight(38)
         self.radio_btn.setStyleSheet("""
@@ -312,7 +319,9 @@ class ArtistDetailView(QWidget):
         self.radio_btn.clicked.connect(self._on_start_radio)
         actions_row.addWidget(self.radio_btn)
 
-        self.add_album_btn = QPushButton("+ Çalma Listesi Yap")
+        self.add_album_btn = QPushButton(" Çalma Listesi Yap")
+        self.add_album_btn.setIcon(vicon("plus", 14, "#ffffff"))
+        self.add_album_btn.setIconSize(QSize(14, 14))
         self.add_album_btn.setCursor(Qt.PointingHandCursor)
         self.add_album_btn.setFixedHeight(38)
         self.add_album_btn.setVisible(False)
@@ -411,47 +420,56 @@ class ArtistDetailView(QWidget):
 
         # 2) Arka plan iş parçacığı: YouTube Music verilerini çek
         def worker():
-            data = None
-            try:
-                import ytmusicapi
-                ytm = ytmusicapi.YTMusic()
-                b_id = browse_id
-                if not b_id:
-                    res = ytm.search(clean_name, filter="artists")
-                    if res:
-                        b_id = res[0].get("browseId") or ""
-                if b_id:
-                    data = ytm.get_artist(b_id)
-                if not data or not data.get("songs", {}).get("results"):
-                    # Popüler şarkıları doğrudan ara
-                    search_songs = ytm.search(clean_name, filter="songs")
-                    if search_songs:
-                        if not data:
-                            data = {"name": clean_name}
-                        data.setdefault("songs", {})["results"] = search_songs[:15]
-                else:
-                    # Daha fazla popüler şarkı ekle
-                    existing = data.get("songs", {}).get("results", [])
-                    if len(existing) < 10:
-                        try:
-                            extra_songs = ytm.search(clean_name, filter="songs")
-                            seen_ids = {s.get("videoId") for s in existing if s.get("videoId")}
-                            for s in extra_songs:
-                                vid = s.get("videoId")
-                                if vid and vid not in seen_ids:
-                                    existing.append(s)
-                                    seen_ids.add(vid)
-                                if len(existing) >= 15:
-                                    break
-                        except Exception:
-                            pass
-            except Exception as e:
-                log.warning("Sanatçı verisi alınamadı (%s): %s", clean_name, e)
-
+            data = self._fetch_artist_remote(clean_name, browse_id)
             if token == self._token:
                 self.artistDataReady.emit(token, clean_name, data)
 
         threading.Thread(target=worker, daemon=True, name="ArtistWorker").start()
+
+    @classmethod
+    def _get_ytm(cls):
+        ytm = getattr(cls, "_shared_ytm", None)
+        if ytm is None:
+            import ytmusicapi
+            ytm = ytmusicapi.YTMusic()
+            cls._shared_ytm = ytm
+        return ytm
+
+    def _fetch_artist_remote(self, clean_name: str, browse_id: str) -> dict | None:
+        data = None
+        try:
+            ytm = self._get_ytm()
+            b_id = browse_id
+            if not b_id:
+                res = ytm.search(clean_name, filter="artists")
+                if res:
+                    b_id = res[0].get("browseId") or ""
+            if b_id:
+                data = ytm.get_artist(b_id)
+            if not data or not data.get("songs", {}).get("results"):
+                search_songs = ytm.search(clean_name, filter="songs")
+                if search_songs:
+                    if not data:
+                        data = {"name": clean_name}
+                    data.setdefault("songs", {})["results"] = search_songs[:15]
+            else:
+                existing = data.get("songs", {}).get("results", [])
+                if len(existing) < 10:
+                    try:
+                        extra_songs = ytm.search(clean_name, filter="songs")
+                        seen_ids = {s.get("videoId") for s in existing if s.get("videoId")}
+                        for s in extra_songs:
+                            vid = s.get("videoId")
+                            if vid and vid not in seen_ids:
+                                existing.append(s)
+                                seen_ids.add(vid)
+                            if len(existing) >= 15:
+                                break
+                    except Exception:
+                        pass
+        except Exception as e:
+            log.warning("Sanatçı verisi alınamadı (%s): %s", clean_name, e)
+        return data
 
     def _find_library_songs(self, artist_name: str) -> list[dict]:
         """Tüm çalma listelerini tarayıp bu sanatçıya ait parçaları bulur."""
@@ -647,7 +665,9 @@ class ArtistDetailView(QWidget):
             layout.addWidget(dur_lbl)
 
         # Oynat butonu
-        play_btn = QPushButton("▶")
+        play_btn = QPushButton()
+        play_btn.setIcon(vicon("play", 13, "#ffffff"))
+        play_btn.setIconSize(QSize(13, 13))
         play_btn.setFixedSize(28, 28)
         play_btn.setCursor(Qt.PointingHandCursor)
         play_btn.setStyleSheet("""
@@ -929,18 +949,18 @@ class ArtistDetailView(QWidget):
         self.sections_layout.addWidget(self.loading_label)
 
         def worker():
-            data = None
-            try:
-                import ytmusicapi
-                ytm = ytmusicapi.YTMusic()
-                data = ytm.get_album(browse_id)
-            except Exception as e:
-                log.warning("Albüm verisi alınamadı (%s): %s", browse_id, e)
-
+            data = self._fetch_album_remote(browse_id)
             if token == self._token:
                 self.albumDataReady.emit(token, data, artist_name)
 
         threading.Thread(target=worker, daemon=True, name="AlbumWorker").start()
+
+    def _fetch_album_remote(self, browse_id: str) -> dict | None:
+        try:
+            return self._get_ytm().get_album(browse_id)
+        except Exception as e:
+            log.warning("Albüm verisi alınamadı (%s): %s", browse_id, e)
+            return None
 
     def _apply_album_data(self, token: int, data: dict | None, artist_name: str):
         if token != self._token or self._current_mode != "album":
