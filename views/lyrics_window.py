@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel, QListWidg
                                QVBoxLayout, QWidget)
 
 from mustiefly_qt.helpers import lyrics as ly
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services.playback import PlaybackEngine
 
 PAGE_STATUS, PAGE_PLAIN, PAGE_SYNCED = 0, 1, 2
@@ -34,6 +35,7 @@ class LyricsWindow(QWidget):
         self.playback = playback
         self.setWindowTitle("🎤 Sözler")
         self.resize(420, 560)
+        apply_dark_titlebar(self, dark=(getattr(playback, "settings", {}).get("theme") != "light"))
         if parent is not None:
             p = parent.geometry()
             self.move(p.x() + (p.width() - self.width()) // 2,

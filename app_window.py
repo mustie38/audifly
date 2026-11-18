@@ -22,6 +22,7 @@ from mustiefly_qt.helpers.constants import (
 )
 from mustiefly_qt.helpers.backup import export_library_dialog, import_library_dialog
 from mustiefly_qt.helpers.dynamic_theme import dominant_accent_color
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.helpers.local_files import pick_and_add_local_files
 from mustiefly_qt.services.discord_rpc import DiscordRPCService
 from mustiefly_qt.services.listen_together import ListenTogether
@@ -242,6 +243,9 @@ class MainWindow(QMainWindow):
         self.top_bar.lyricsRequested.connect(self._toggle_lyrics_window)
         self.top_bar.miniPlayerRequested.connect(self._toggle_mini_player)
         self.top_bar.reportRequested.connect(self.open_diagnostics_dialog)
+        self.top_bar.statsRequested.connect(self.show_stats_view)
+        self.top_bar.wrappedRequested.connect(self.show_wrapped_view)
+        self.top_bar.paletteRequested.connect(self.open_command_palette)
         self.settings_view.diagnosticsRequested.connect(self.open_diagnostics_dialog)
         self.mini_player.closed.connect(self._on_mini_closed)
         self.library_view.addSongRequested.connect(self._open_search_dialog)
@@ -318,6 +322,7 @@ class MainWindow(QMainWindow):
         # Dinamik tema: çalan şarkının kapağından vurgu rengi
         base_theme = THEMES.get(settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
         self._current_accent = base_theme.accent
+        apply_dark_titlebar(self, dark=(settings.get("theme") != "light"))
         # Tüm uygulamanın QSS'ini yeniden kurmak pahalıdır: şarkı değişimini
         # bloklamasın diye ertelenir ve art arda tetiklenmeler tek işe iner.
         self._accent_timer = QTimer(self)
@@ -906,6 +911,7 @@ class MainWindow(QMainWindow):
         base = THEMES.get(self.settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
         t = replace(base, accent=color, accent_dark=shade_color(color, 0.18))
         QApplication.instance().setStyleSheet(build_qss(t))
+        apply_dark_titlebar(self, dark=(self.settings.get("theme") != "light"))
         if hasattr(self, "player_bar"):
             self.player_bar.waveform_strip.set_accent(color)
             self.player_bar.set_accent(color)  # YENİ: time_slider / volume_slider

@@ -28,6 +28,9 @@ class TopBar(QFrame):
     lyricsRequested = Signal()
     miniPlayerRequested = Signal()
     reportRequested = Signal()
+    statsRequested = Signal()
+    wrappedRequested = Signal()
+    paletteRequested = Signal()
 
     def __init__(self, username: str = "", parent=None):
         super().__init__(parent)
@@ -41,12 +44,26 @@ class TopBar(QFrame):
         # --- Küresel arama / Komut Paleti ---
         self.search_edit = QLineEdit()
         self.search_edit.setObjectName("TopSearch")
-        self.search_edit.setPlaceholderText("⚡  Ara veya komut çalıştır… (Ctrl + K)")
+        self.search_edit.setPlaceholderText("⚡  Ara veya komut çalıştır…")
         self.search_edit.setToolTip("Spotlight & Hızlı Komut Paleti (Ctrl + K)")
         self.search_edit.setFixedWidth(360)
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.returnPressed.connect(self._emit_search)
         row.addWidget(self.search_edit)
+
+        self.kbd_badge = QPushButton("Ctrl + K")
+        self.kbd_badge.setCursor(Qt.PointingHandCursor)
+        self.kbd_badge.setToolTip("Spotlight & Komut Paletini Aç")
+        self.kbd_badge.setFixedHeight(28)
+        self.kbd_badge.setStyleSheet(
+            "QPushButton { background: rgba(255, 255, 255, 0.06); "
+            "border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 7px; "
+            "color: #9EA3B8; font-size: 10px; font-weight: bold; padding: 0 9px; }"
+            "QPushButton:hover { background: rgba(0, 210, 255, 0.14); color: #00D2FF; "
+            "border-color: rgba(0, 210, 255, 0.4); }"
+        )
+        self.kbd_badge.clicked.connect(self.paletteRequested.emit)
+        row.addWidget(self.kbd_badge)
 
         row.addStretch(1)
 
@@ -104,12 +121,12 @@ class TopBar(QFrame):
         self.panel_btn.setVisible(False)
         row.addWidget(self.panel_btn)
 
-        # --- Avatar ---
-        self.avatar = QLabel((username[:1] or "M").upper())
+        # --- Tıklanabilir Profil Avatarı ---
+        self.avatar = QPushButton((username[:1] or "M").upper())
         self.avatar.setObjectName("Avatar")
-        self.avatar.setAlignment(Qt.AlignCenter)
         self.avatar.setFixedSize(34, 34)
-        self.avatar.setToolTip(username)
+        self.avatar.setCursor(Qt.PointingHandCursor)
+        self.avatar.setToolTip(f"{username or 'Kullanıcı'} — Profil & Hızlı Menü")
         avatar_font = QFont()
         avatar_font.setBold(True)
         self.avatar.setFont(avatar_font)
@@ -118,7 +135,25 @@ class TopBar(QFrame):
         avatar_shadow.setOffset(0, 3)
         avatar_shadow.setColor(QColor(0, 0, 0, 100))
         self.avatar.setGraphicsEffect(avatar_shadow)
+        self.avatar.clicked.connect(self._show_profile_menu)
         row.addWidget(self.avatar)
+
+    def _show_profile_menu(self):
+        menu = QMenu(self)
+        stats_act = menu.addAction("📊  Dinleme İstatistikleri")
+        wrapped_act = menu.addAction("🎁  Müzik Özeti (Wrapped)")
+        palette_act = menu.addAction("⚡  Spotlight & Komut Paleti (Ctrl+K)")
+        menu.addSeparator()
+        settings_act = menu.addAction("⚙  Ayarlar")
+        chosen = menu.exec(self.avatar.mapToGlobal(self.avatar.rect().bottomRight()))
+        if chosen == stats_act:
+            self.statsRequested.emit()
+        elif chosen == wrapped_act:
+            self.wrappedRequested.emit()
+        elif chosen == palette_act:
+            self.paletteRequested.emit()
+        elif chosen == settings_act:
+            self.settingsRequested.emit()
 
     def _emit_search(self):
         query = self.search_edit.text().strip()

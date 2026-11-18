@@ -8,17 +8,18 @@ gerçek kütüphane verisinden (play_count/last_played) hesaplanır.
 from __future__ import annotations
 
 from PIL import Image
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPixmap
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from mustiefly_qt.helpers.constants import cover_color_for
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.thumbnails import crop_to_square, pil_to_qimage
+from mustiefly_qt.widgets.player_icons import icon as vicon
 from mustiefly_qt.widgets.song_row import SongRow
 from mustiefly_qt.helpers.logging_setup import get_logger
 
@@ -78,6 +79,25 @@ class QuickAccessCard(QWidget):
             cover.setStyleSheet(f"background: {bg}; border-radius: 14px; color: white;")
         cover.setCursor(Qt.PointingHandCursor)
         cover.mousePressEvent = lambda event: self.clicked.emit()
+
+        self._hover_play = QPushButton(cover)
+        self._hover_play.setFixedSize(38, 38)
+        self._hover_play.move(150 - 46, 150 - 46)
+        self._hover_play.setIcon(vicon("play", 16, "#ffffff"))
+        self._hover_play.setIconSize(QSize(16, 16))
+        self._hover_play.setCursor(Qt.PointingHandCursor)
+        self._hover_play.setStyleSheet(
+            "QPushButton { background: #a980f9; border: none; border-radius: 19px; }"
+            "QPushButton:hover { background: #b995ff; }"
+        )
+        sh = QGraphicsDropShadowEffect(self._hover_play)
+        sh.setBlurRadius(14)
+        sh.setOffset(0, 3)
+        sh.setColor(QColor(0, 0, 0, 150))
+        self._hover_play.setGraphicsEffect(sh)
+        self._hover_play.clicked.connect(self.clicked.emit)
+        self._hover_play.hide()
+
         layout.addWidget(cover)
 
         title_label = QLabel(title)
@@ -92,6 +112,15 @@ class QuickAccessCard(QWidget):
         sub_label.setObjectName("Muted")
         sub_label.setFixedWidth(150)
         layout.addWidget(sub_label)
+
+    def enterEvent(self, event):  # noqa: N802
+        self._hover_play.show()
+        self._hover_play.raise_()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):  # noqa: N802
+        self._hover_play.hide()
+        super().leaveEvent(event)
 
 
 class _HorizontalScrollArea(QScrollArea):

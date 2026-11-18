@@ -4,10 +4,11 @@ Karta tıklayınca o liste açılır (mockup'taki 'Tüm Çalma Listeleri' ekran�
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPixmap
 from PySide6.QtWidgets import (
-    QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+    QScrollArea, QVBoxLayout, QWidget,
 )
 
 from mustiefly_qt.helpers.constants import cover_color_for
@@ -15,6 +16,7 @@ from mustiefly_qt.helpers.covers import playlist_cover_pixmap
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
+from mustiefly_qt.widgets.player_icons import icon as vicon
 
 COLUMNS = 4
 COVER_SIZE = 150
@@ -48,6 +50,24 @@ class PlaylistCard(QWidget):
             cover.setText("🎵")
             cover.setStyleSheet(
                 f"background: {cover_color_for(name)}; border-radius: 10px; color: white;")
+        self._hover_play = QPushButton(cover)
+        self._hover_play.setFixedSize(36, 36)
+        self._hover_play.move(COVER_SIZE - 44, (COVER_SIZE - 30) - 44)
+        self._hover_play.setIcon(vicon("play", 15, "#ffffff"))
+        self._hover_play.setIconSize(QSize(15, 15))
+        self._hover_play.setCursor(Qt.PointingHandCursor)
+        self._hover_play.setStyleSheet(
+            "QPushButton { background: #a980f9; border: none; border-radius: 18px; }"
+            "QPushButton:hover { background: #b995ff; }"
+        )
+        sh = QGraphicsDropShadowEffect(self._hover_play)
+        sh.setBlurRadius(14)
+        sh.setOffset(0, 3)
+        sh.setColor(QColor(0, 0, 0, 150))
+        self._hover_play.setGraphicsEffect(sh)
+        self._hover_play.clicked.connect(lambda: self.clicked.emit(self.name))
+        self._hover_play.hide()
+
         layout.addWidget(cover)
 
         name_label = QLabel(name[:20] + ("…" if len(name) > 20 else ""))
@@ -61,6 +81,15 @@ class PlaylistCard(QWidget):
         count_label.setObjectName("Muted")
         layout.addWidget(count_label)
         layout.addStretch(1)
+
+    def enterEvent(self, event):  # noqa: N802
+        self._hover_play.show()
+        self._hover_play.raise_()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):  # noqa: N802
+        self._hover_play.hide()
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):

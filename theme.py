@@ -429,13 +429,16 @@ def build_qss(t: Theme) -> str:
     QListWidget::item:selected {{ background: transparent; }}
 
     QScrollArea {{ border: none; background: transparent; }}
-    QScrollBar:vertical {{ background: transparent; width: 8px; }}
-    QScrollBar::handle:vertical {{ background: {t.bg_row_hover}; border-radius: 4px; min-height: 24px; }}
-    QScrollBar::handle:vertical:hover {{ background: {t.text_dim}; }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
-    QScrollBar:horizontal {{ background: transparent; height: 8px; }}
-    QScrollBar::handle:horizontal {{ background: {t.bg_row_hover}; border-radius: 4px; min-width: 24px; }}
-    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
+    QScrollBar:vertical {{ background: transparent; width: 6px; margin: 2px 0; }}
+    QScrollBar::handle:vertical {{ background: rgba(255, 255, 255, 0.16); border-radius: 3px; min-height: 28px; }}
+    QScrollBar::handle:vertical:hover {{ background: {t.accent}; }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; border: none; background: none; }}
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+    QScrollBar:horizontal {{ background: transparent; height: 6px; margin: 0 2px; }}
+    QScrollBar::handle:horizontal {{ background: rgba(255, 255, 255, 0.16); border-radius: 3px; min-width: 28px; }}
+    QScrollBar::handle:horizontal:hover {{ background: {t.accent}; }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; border: none; background: none; }}
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: transparent; }}
 
     QSlider::groove:horizontal {{ 
         background: {t.bg_row_hover}; height: 6px; border-radius: 3px; 

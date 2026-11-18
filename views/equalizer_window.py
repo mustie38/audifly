@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 import vlc
 from mustiefly_qt.helpers.logging_setup import get_logger
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 
 
 
@@ -32,7 +33,26 @@ class EqualizerWindow(QWidget):
         self.settings = settings
         self.save_fn = save_fn
         self.setWindowTitle("🎚 Ses & Ekolayzer")
-        self.resize(580, 420)
+        self.resize(600, 430)
+        apply_dark_titlebar(self, dark=(settings.get("theme") != "light"))
+        self.setStyleSheet("""
+            #EqualizerWindow QSlider::groove:vertical {
+                background: rgba(255, 255, 255, 0.08);
+                width: 6px;
+                border-radius: 3px;
+            }
+            #EqualizerWindow QSlider::handle:vertical {
+                background: #a980f9;
+                height: 14px;
+                width: 14px;
+                margin: 0 -4px;
+                border-radius: 7px;
+            }
+            #EqualizerWindow QSlider::add-page:vertical {
+                background: qlineargradient(x1:0, y1:1, x2:0, y2:0, stop:0 #a980f9, stop:1 #00D2FF);
+                border-radius: 3px;
+            }
+        """)
         if parent is not None:
             p = parent.geometry()
             self.move(p.x() + (p.width() - self.width()) // 2,
