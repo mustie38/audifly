@@ -16,6 +16,7 @@ from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
 from mustiefly_qt.views.home_view import QListWidgetHost, StatCard
+from mustiefly_qt.widgets.player_icons import icon_pixmap
 from mustiefly_qt.widgets.song_row import SongRow
 
 
@@ -43,16 +44,25 @@ class StatsView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 10)
 
-        title = QLabel("📊 İstatistikler")
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        st_icon = QLabel()
+        st_pm = icon_pixmap("chart", 22, "#FBBF24")
+        if st_pm is not None:
+            st_icon.setPixmap(st_pm)
+        header_row.addWidget(st_icon)
+        title = QLabel("İstatistikler")
         title_font = QFont()
         title_font.setPixelSize(22)
         title_font.setBold(True)
         title.setFont(title_font)
-        root.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch(1)
         self.period_combo = QComboBox()
         for label, days in PERIODS:
             self.period_combo.addItem(label, days)
-        root.addWidget(self.period_combo, alignment=Qt.AlignLeft)
+        header_row.addWidget(self.period_combo)
+        root.addLayout(header_row)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -70,13 +80,12 @@ class StatsView(QWidget):
         # --- Kartlar ---
         cards_row = QHBoxLayout()
         cards_row.setSpacing(12)
-        self.card_songs = StatCard("🎵", "0", "Toplam Şarkı")
-        self.card_plays = StatCard("▶", "0", "Toplam Çalma")
-        self.card_time = StatCard("⏱", "0 sa", "Toplam Dinleme")
-        self.card_liked = StatCard("❤️", "0", "Beğenilenler")
+        self.card_songs = StatCard("disc", "0", "Toplam Şarkı", "#00D2FF")
+        self.card_plays = StatCard("play", "0", "Toplam Çalma", "#a980f9")
+        self.card_time = StatCard("clock", "0 sa", "Toplam Dinleme", "#FBBF24")
+        self.card_liked = StatCard("heart_filled", "0", "Beğenilenler", "#FF6B8A")
         for card in (self.card_songs, self.card_plays, self.card_time, self.card_liked):
-            cards_row.addWidget(card)
-        cards_row.addStretch(1)
+            cards_row.addWidget(card, stretch=1)
         self.content_layout.addLayout(cards_row)
 
         # --- Geçmişe dayalı (seçili döneme göre) ---

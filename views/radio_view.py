@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton,
     QVBoxLayout, QWidget,
@@ -19,6 +19,7 @@ from mustiefly_qt.helpers.constants import cover_color_for
 from mustiefly_qt.helpers.radio import RADIO_GENRE_CHIPS, fetch_radio_stations
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.playback import PlaybackEngine
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 
 
 class _StationRow(QWidget):
@@ -37,12 +38,15 @@ class _StationRow(QWidget):
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(10)
 
-        icon = QLabel("📻")
+        icon = QLabel()
         icon.setFixedSize(38, 38)
         icon.setAlignment(Qt.AlignCenter)
         icon.setStyleSheet(
             f"background: {cover_color_for(station.get('name', '?'))};"
-            "border-radius: 6px; font-size: 17px;")
+            "border-radius: 10px;")
+        pm = icon_pixmap("radio", 18, "#ffffff")
+        if pm is not None:
+            icon.setPixmap(pm)
         layout.addWidget(icon)
 
         text = QWidget()
@@ -66,13 +70,24 @@ class _StationRow(QWidget):
         text_layout.addWidget(m_label)
         layout.addWidget(text, stretch=1)
 
-        fav_btn = QPushButton("⭐" if is_fav else "☆")
-        fav_btn.setFixedWidth(28)
+        fav_btn = QPushButton()
+        fav_btn.setFixedSize(30, 30)
+        fav_btn.setIcon(vicon("star", 15, "#FBBF24" if is_fav else "#9EA3B8"))
+        fav_btn.setIconSize(QSize(15, 15))
+        fav_btn.setCursor(Qt.PointingHandCursor)
+        fav_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; border-radius: 15px; }"
+            "QPushButton:hover { background: rgba(255, 255, 255, 0.08); }"
+        )
         fav_btn.clicked.connect(lambda: self.favoriteToggled.emit(self.station))
         layout.addWidget(fav_btn)
 
-        play_btn = QPushButton("▶")
+        play_btn = QPushButton()
         play_btn.setObjectName("Primary")
+        play_btn.setFixedSize(32, 32)
+        play_btn.setIcon(vicon("play", 14, "#ffffff"))
+        play_btn.setIconSize(QSize(14, 14))
+        play_btn.setCursor(Qt.PointingHandCursor)
         play_btn.clicked.connect(lambda: self.playRequested.emit(self.station))
         layout.addWidget(play_btn)
 
@@ -105,9 +120,18 @@ class RadioView(QWidget):
         layout.setContentsMargins(24, 20, 24, 10)
         layout.setSpacing(8)
 
-        title = QLabel("📻 Radyo")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        r_icon = QLabel()
+        r_pm = icon_pixmap("radio", 22, "#00D2FF")
+        if r_pm is not None:
+            r_icon.setPixmap(r_pm)
+        title_row.addWidget(r_icon)
+        title = QLabel("Canlı Radyo")
         title.setStyleSheet("font-size: 22px; font-weight: bold;")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         self.now_label = QLabel("Gerçek, canlı yayın yapan internet radyo kanalları")
         self.now_label.setObjectName("Muted")
@@ -119,8 +143,10 @@ class RadioView(QWidget):
         self.search_edit.returnPressed.connect(
             lambda: self.search_async(query=self.search_edit.text()))
         search_row.addWidget(self.search_edit, stretch=1)
-        search_btn = QPushButton("🔍 Ara")
+        search_btn = QPushButton(" Ara")
         search_btn.setObjectName("Primary")
+        search_btn.setIcon(vicon("search", 14, "#ffffff"))
+        search_btn.setIconSize(QSize(14, 14))
         search_btn.clicked.connect(lambda: self.search_async(query=self.search_edit.text()))
         search_row.addWidget(search_btn)
         layout.addLayout(search_row)

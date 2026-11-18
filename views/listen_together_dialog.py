@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget, QPushButton, QTextBrowser, QVBoxLayout, QWidget,
 )
 
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services.listen_together import (
     DEFAULT_SERVER_URL, EMOJIS, ListenTogether, build_invite, generate_room_code,
 )
@@ -24,6 +25,7 @@ class ListenTogetherDialog(QDialog):
         self.settings = settings
         self._save_settings = save_settings
         self.setWindowTitle("👥 Birlikte Dinle")
+        apply_dark_titlebar(self)
         self.setMinimumWidth(460)
 
         root = QVBoxLayout(self)

@@ -1,7 +1,7 @@
 """Mix'ler sayfası: Sana Özel, Günlük Mix ve davranıştan türeyen "Tarzı" mix'leri."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
                                QVBoxLayout, QWidget)
@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton, QScroll
 from mustiefly_qt.services import mixes
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 
 ICONS = {"sana_ozel": "✨", "gunluk_mix": "📅"}
 
@@ -29,12 +30,21 @@ class MixesView(QWidget):
         self.store, self.playback = store, playback
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 10)
-        title = QLabel("✨ Senin İçin Mix'ler")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        m_icon = QLabel()
+        m_pm = icon_pixmap("sparkle", 22, "#C084FC")
+        if m_pm is not None:
+            m_icon.setPixmap(m_pm)
+        title_row.addWidget(m_icon)
+        title = QLabel("Senin İçin Mix'ler")
         f = QFont()
         f.setPixelSize(22)
         f.setBold(True)
         title.setFont(f)
-        root.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        root.addLayout(title_row)
         note = QLabel("Kütüphanendeki şarkılardan, dinleme geçmişine göre cihazında hesaplanır; "
                       "hiçbir veri dışarı gönderilmez.")
         note.setObjectName("Muted")
@@ -70,8 +80,21 @@ class MixesView(QWidget):
 
     def _card(self, mix: mixes.Mix) -> QWidget:
         card = QFrame()
-        card.setObjectName("Card")
+        card.setObjectName("MixCard")
+        card.setStyleSheet("""
+            #MixCard {
+                background: rgba(255, 255, 255, 0.035);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+            }
+            #MixCard:hover {
+                background: rgba(255, 255, 255, 0.06);
+                border-color: rgba(169, 128, 249, 0.4);
+            }
+        """)
         v = QVBoxLayout(card)
+        v.setContentsMargins(18, 16, 18, 16)
+        v.setSpacing(6)
         head = QLabel(f"{ICONS.get(mix.id, '🎧')}  {mix.title}")
         hf = QFont()
         hf.setPixelSize(17)
@@ -85,8 +108,11 @@ class MixesView(QWidget):
         names = ", ".join(dict.fromkeys(mixes.artist_of(t[2]) for t in mix.refs[:12]))
         v.addWidget(QLabel(f"{len(mix.refs)} şarkı · {names[:90]}"))
         row = QHBoxLayout()
-        play = QPushButton("▶ Çal")
+        play = QPushButton(" Çal")
         play.setObjectName("Primary")
+        play.setIcon(vicon("play", 14, "#ffffff"))
+        play.setIconSize(QSize(14, 14))
+        play.setCursor(Qt.PointingHandCursor)
         play.clicked.connect(lambda _=False, mid=mix.id: self.play_mix(mid))
         open_btn = QPushButton("Listeyi Aç")
         open_btn.clicked.connect(lambda _=False, mid=mix.id: self.openRequested.emit(mid))

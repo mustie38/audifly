@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
                                QHBoxLayout, QLineEdit, QListWidget, QMessageBox, QPushButton,
                                QSpinBox, QVBoxLayout)
 
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services import smart_lists
 
 SORT_LABELS = (("En çok dinlenen önce", "most_played"), ("En az dinlenen önce", "least_played"),
@@ -17,6 +18,7 @@ class RuleEditor(QDialog):
     def __init__(self, rule: dict | None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Kural Listesi")
+        apply_dark_titlebar(self)
         rule = rule or smart_lists.sanitize_rule({"name": "Yeni liste"})
         form = QFormLayout(self)
         self.name = QLineEdit(rule["name"])
@@ -78,6 +80,7 @@ class SmartRulesDialog(QDialog):
         super().__init__(parent)
         self.settings, self.save_fn = settings, save_fn
         self.setWindowTitle("Kural Listeleri")
+        apply_dark_titlebar(self)
         self.resize(420, 360)
         root = QVBoxLayout(self)
         self.list = QListWidget()

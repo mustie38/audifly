@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QVBoxLayout,
 )
 
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services.bulk_search import BulkSearchWorker
 from mustiefly_qt.services.playlist_store import PlaylistStore, _clean_song
 
@@ -22,6 +23,7 @@ class BulkAddDialog(QDialog):
         super().__init__(parent)
         self.store = store
         self.setWindowTitle("Toplu Şarkı Ekle")
+        apply_dark_titlebar(self)
         self.resize(580, 560)
         self._worker: BulkSearchWorker | None = None
         self._running = False

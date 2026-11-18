@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from mustiefly_qt.helpers.constants import format_time
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.thumbnails import ThumbnailService
@@ -30,6 +31,7 @@ class LibrarySearchDialog(QDialog):
         self.playback = playback
         self.thumbnails = thumbnails
         self.setWindowTitle("🔎 Kütüphanede Ara")
+        apply_dark_titlebar(self)
         self.resize(620, 520)
 
         layout = QVBoxLayout(self)

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 from mustiefly_qt.services.playlist_store import PlaylistStore
 
 
@@ -22,6 +23,7 @@ class DuplicateFinderDialog(QDialog):
         self.duplicates = store.find_duplicate_groups()
 
         self.setWindowTitle("🧹 Yinelenen Şarkılar")
+        apply_dark_titlebar(self)
         self.resize(560, 480)
 
         root = QVBoxLayout(self)

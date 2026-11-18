@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from mustiefly_qt.helpers.constants import cover_color_for, format_time
 from mustiefly_qt.services.download_manager import (
     CANCELLED, DONE, DownloadManager, FAILED, QUEUED, DOWNLOADING)
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 
 STATE_LABELS = {
     QUEUED: "Sırada…",
@@ -34,7 +35,13 @@ class DownloadsView(QWidget):
         layout.setSpacing(10)
 
         header = QHBoxLayout()
-        title = QLabel("⬇ İndirmeler")
+        header.setSpacing(10)
+        d_icon = QLabel()
+        d_pm = icon_pixmap("download", 22, "#4ADE80")
+        if d_pm is not None:
+            d_icon.setPixmap(d_pm)
+        header.addWidget(d_icon)
+        title = QLabel("İndirmeler")
         title.setStyleSheet("font-size: 22px; font-weight: bold;")
         header.addWidget(title)
         header.addStretch(1)
@@ -43,7 +50,10 @@ class DownloadsView(QWidget):
         self.count_label.setObjectName("Muted")
         header.addWidget(self.count_label)
 
-        clear_btn = QPushButton("🧹 Bitenleri Temizle")
+        clear_btn = QPushButton(" Bitenleri Temizle")
+        clear_btn.setObjectName("Chip")
+        clear_btn.setIcon(vicon("archive", 14, "#cfc9e6"))
+        clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.clicked.connect(self._clear_finished)
         header.addWidget(clear_btn)
         layout.addLayout(header)

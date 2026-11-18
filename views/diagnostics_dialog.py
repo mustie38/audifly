@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME, APP_VERSION
 from mustiefly_qt.helpers.diagnostics import collect_diagnostics
+from mustiefly_qt.helpers.win_theme import apply_dark_titlebar
 
 ISSUES_URL = "https://github.com/mustie38/audifly/issues/new"
 
@@ -31,6 +32,7 @@ class DiagnosticsDialog(QDialog):
         self.recent_errors = list(recent_errors or [])
 
         self.setWindowTitle(f"🩺 Sorun Bildir / Tanılama Raporu — {APP_DISPLAY_NAME}")
+        apply_dark_titlebar(self)
         self.resize(660, 540)
 
         root = QVBoxLayout(self)

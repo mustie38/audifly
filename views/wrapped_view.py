@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLab
 from mustiefly_qt.helpers.constants import APP_DISPLAY_NAME
 from mustiefly_qt.services import wrapped as wr
 from mustiefly_qt.views.stats_view import format_listen_time
+from mustiefly_qt.widgets.player_icons import icon_pixmap
 
 CARD_W, CARD_H = 540, 780
 # Paylaşılan görsel tema bağımsız olsun diye kart renkleri sabittir.
@@ -76,8 +77,17 @@ class WrappedView(QWidget):
         self.card: WrappedCard | None = None
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 10)
-        title = _label("🎁 Wrapped", 22, True)
-        root.addWidget(title)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        w_icon = QLabel()
+        w_pm = icon_pixmap("gift", 22, "#F43F5E")
+        if w_pm is not None:
+            w_icon.setPixmap(w_pm)
+        title_row.addWidget(w_icon)
+        title = _label("Wrapped", 22, True)
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        root.addLayout(title_row)
         row = QHBoxLayout()
         self.period_combo = QComboBox()
         self.period_combo.currentIndexChanged.connect(self._render)
