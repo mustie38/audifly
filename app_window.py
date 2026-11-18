@@ -288,6 +288,7 @@ class MainWindow(QMainWindow):
         self.home_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
         self.stats_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
         self.now_playing_panel.startRadioRequested.connect(self.song_radio.start_radio_for_song)
+        self.explore_view.startRadioRequested.connect(self.song_radio.start_radio_for_song)
         self.song_radio.radioStarted.connect(lambda pl, _: self.show_playlist_view(pl))
         self.song_radio.autoplayTriggered.connect(lambda pl, _: self.show_playlist_view(pl))
 

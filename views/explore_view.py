@@ -18,18 +18,20 @@ import threading
 import webbrowser
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QPushButton, QScrollArea, QStackedLayout,
-    QVBoxLayout, QWidget,
+    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QPushButton,
+    QScrollArea, QStackedLayout, QVBoxLayout, QWidget,
 )
 
-from mustiefly_qt.helpers.constants import cover_color_for, format_time
+from mustiefly_qt.helpers.constants import cover_color_for, format_time, shade_color
 from mustiefly_qt.helpers.discovery import CATEGORY_DEFS, DiscoveryService
 from mustiefly_qt.helpers.logging_setup import get_logger
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.thumbnails import ThumbnailService
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 
 
 log = get_logger(__name__)
@@ -57,14 +59,15 @@ class _Skeleton(QWidget):
         self.setStyleSheet("background: rgba(255,255,255,18); border-radius: 14px;")
 
 
-class TrackCard(QWidget):
-    """Bir şarkı için yatay vitrindeki kart: thumbnail + hover'da play/+ ."""
+class TrackCard(QFrame):
+    """Bir şarkı için yatay vitrindeki kart: cam efektli çerçeve + hover'da play/+ ."""
 
     playRequested = Signal(dict)
     addRequested = Signal(dict)
+    artistClicked = Signal(str)
 
-    CARD_W = 148
-    THUMB_H = 148
+    CARD_W = 160
+    THUMB_H = 144
 
     def __init__(self, track: dict, thumbnails: ThumbnailService | None,
                  rank: int | None = None, parent=None):
@@ -74,48 +77,66 @@ class TrackCard(QWidget):
         self.setObjectName("DiscoveryCard")
         self.setFixedWidth(self.CARD_W)
         self.setCursor(Qt.PointingHandCursor)
+        self.setStyleSheet("""
+            #DiscoveryCard {
+                background: rgba(255, 255, 255, 0.032);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 16px;
+            }
+            #DiscoveryCard:hover {
+                background: rgba(255, 255, 255, 0.065);
+                border: 1px solid rgba(169, 128, 249, 0.42);
+            }
+        """)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(4, 4, 4, 6)
+        outer.setContentsMargins(8, 8, 8, 10)
         outer.setSpacing(6)
 
         self._thumb_frame = QWidget()
-        self._thumb_frame.setFixedSize(self.CARD_W - 8, self.THUMB_H)
+        self._thumb_frame.setFixedSize(self.CARD_W - 16, self.THUMB_H)
         stack = QStackedLayout(self._thumb_frame)
         stack.setStackingMode(QStackedLayout.StackAll)
         stack.setContentsMargins(0, 0, 0, 0)
 
         self.thumb = QLabel("🎵")
         self.thumb.setAlignment(Qt.AlignCenter)
-        self.thumb.setFixedSize(self.CARD_W - 8, self.THUMB_H)
+        self.thumb.setFixedSize(self.CARD_W - 16, self.THUMB_H)
         self.thumb.setStyleSheet(
             f"background: {cover_color_for(track.get('title', '?'))};"
-            "border-radius: 14px; font-size: 32px;")
+            "border-radius: 12px; font-size: 32px;")
         stack.addWidget(self.thumb)
 
         self._overlay = QWidget()
         self._overlay.setAttribute(Qt.WA_StyledBackground, True)
-        self._overlay.setStyleSheet("background: transparent; border-radius: 14px;")
+        self._overlay.setStyleSheet("background: transparent; border-radius: 12px;")
         ov_layout = QVBoxLayout(self._overlay)
         ov_layout.setContentsMargins(6, 6, 6, 6)
         top_row = QHBoxLayout()
         top_row.addStretch(1)
-        self.add_btn = QPushButton("+")
-        self.add_btn.setFixedSize(24, 24)
+        self.add_btn = QPushButton()
+        self.add_btn.setFixedSize(26, 26)
+        self.add_btn.setIcon(vicon("plus", 13, "#ffffff"))
+        self.add_btn.setIconSize(QSize(13, 13))
         self.add_btn.setToolTip("Kütüphaneye ekle")
         self.add_btn.setStyleSheet(
-            "QPushButton { background: rgba(10,10,16,190); color: white;"
-            " border-radius: 12px; font-weight: bold; border: none; }"
-            "QPushButton:hover { background: rgba(10,10,16,230); }")
+            "QPushButton { background: rgba(10,10,16,200); "
+            " border-radius: 13px; border: 1px solid rgba(255,255,255,0.18); }"
+            "QPushButton:hover { background: #a980f9; border-color: #a980f9; }")
         self.add_btn.clicked.connect(lambda: self.addRequested.emit(self.track))
         top_row.addWidget(self.add_btn)
         ov_layout.addLayout(top_row)
         ov_layout.addStretch(1)
         bottom_row = QHBoxLayout()
         bottom_row.addStretch(1)
-        self.play_btn = QPushButton("▶")
+        self.play_btn = QPushButton()
         self.play_btn.setObjectName("Primary")
-        self.play_btn.setFixedSize(36, 36)
+        self.play_btn.setFixedSize(38, 38)
+        self.play_btn.setIcon(vicon("play", 16, "#ffffff"))
+        self.play_btn.setIconSize(QSize(16, 16))
+        self.play_btn.setStyleSheet(
+            "QPushButton { background: #a980f9; border-radius: 19px; border: none; }"
+            "QPushButton:hover { background: #b995ff; }")
         self.play_btn.clicked.connect(lambda: self.playRequested.emit(self.track))
         bottom_row.addWidget(self.play_btn, alignment=Qt.AlignCenter)
         bottom_row.addStretch(1)
@@ -125,10 +146,11 @@ class TrackCard(QWidget):
         self._set_overlay_visible(False)
 
         if rank is not None:
-            self.rank_label = QLabel(str(rank), self._thumb_frame)
+            self.rank_label = QLabel(f"#{rank}", self._thumb_frame)
             self.rank_label.setStyleSheet(
-                "background: rgba(10,10,16,190); color: white; font-weight: bold;"
-                " border-radius: 10px; padding: 2px 8px;")
+                "background: rgba(10,10,16,210); color: #00D2FF; font-weight: bold;"
+                " font-size: 11px; border: 1px solid rgba(0,210,255,0.35);"
+                " border-radius: 9px; padding: 2px 7px;")
             self.rank_label.move(6, 6)
             self.rank_label.show()
             self.rank_label.raise_()
@@ -136,20 +158,28 @@ class TrackCard(QWidget):
         outer.addWidget(self._thumb_frame)
 
         title = track.get("title", "?")
-        t_label = QLabel(title[:28] + ("…" if len(title) > 28 else ""))
+        t_label = QLabel(title[:26] + ("…" if len(title) > 26 else ""))
         t_label.setWordWrap(True)
-        t_label.setStyleSheet("font-weight: 600;")
+        t_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #FFFFFF;")
         outer.addWidget(t_label)
 
-        meta = track.get("uploader") or "Bilinmeyen Sanatçı"
+        artist_name = track.get("uploader") or "Bilinmeyen Sanatçı"
+        meta = artist_name[:22] + ("…" if len(artist_name) > 22 else "")
         if track.get("duration"):
             meta += f" • {format_time(track['duration'] * 1000)}"
-        m_label = QLabel(meta[:32] + ("…" if len(meta) > 32 else ""))
+        m_label = QLabel(meta)
         m_label.setObjectName("Muted")
+        m_label.setStyleSheet("font-size: 11px; color: #8F9CAE;")
+        if artist_name not in ("Bilinmeyen Sanatçı", "?"):
+            m_label.setCursor(Qt.PointingHandCursor)
+            m_label.setToolTip(f"👤 {artist_name} profiline git")
+            m_label.mousePressEvent = lambda e, a=artist_name: (
+                self.artistClicked.emit(a) if e.button() == Qt.LeftButton else None
+            )
         outer.addWidget(m_label)
 
         if thumbnails is not None:
-            pm = thumbnails.pixmap_for(track, self.THUMB_H, radius=14)
+            pm = thumbnails.pixmap_for(track, self.THUMB_H, radius=12)
             if pm is not None:
                 self.set_pixmap(pm)
 
@@ -230,10 +260,13 @@ class ArtistCard(QWidget):
         super().mousePressEvent(event)
 
 
-class HeroCard(QWidget):
-    """Ekranın en üstündeki 'BUGÜNÜN KEŞFİ' öne çıkan alanı."""
+class HeroCard(QFrame):
+    """Ekranın en üstündeki 'BUGÜNÜN KEŞFİ' öne çıkan cam efektli alanı."""
 
     playRequested = Signal(dict)
+    addRequested = Signal(dict)
+    radioRequested = Signal(dict)
+    artistClicked = Signal(str)
 
     def __init__(self, thumbnails: ThumbnailService | None, parent=None):
         super().__init__(parent)
@@ -241,45 +274,101 @@ class HeroCard(QWidget):
         self.track: dict | None = None
         self.setObjectName("HeroCard")
         self.setMinimumHeight(220)
+        self.setStyleSheet(
+            "#HeroCard { "
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            "stop:0 rgba(169, 128, 249, 0.20), stop:0.5 rgba(20, 24, 38, 0.95), "
+            "stop:1 rgba(13, 16, 26, 0.98)); "
+            "border: 1px solid rgba(255, 255, 255, 0.09); "
+            "border-radius: 20px; }"
+        )
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(22)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(24)
 
         self.art = QLabel("🎧")
-        self.art.setFixedSize(180, 180)
+        self.art.setFixedSize(176, 176)
         self.art.setAlignment(Qt.AlignCenter)
         self.art.setStyleSheet(
-            "background: rgba(255,255,255,22); border-radius: 16px; font-size: 50px;")
+            "background: rgba(255,255,255,0.06); border-radius: 16px; font-size: 50px;")
+        art_shadow = QGraphicsDropShadowEffect(self.art)
+        art_shadow.setBlurRadius(24)
+        art_shadow.setOffset(0, 6)
+        art_shadow.setColor(QColor(0, 0, 0, 150))
+        self.art.setGraphicsEffect(art_shadow)
         layout.addWidget(self.art)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(6)
+
+        badge_row = QHBoxLayout()
+        badge_row.setSpacing(6)
+        sp_icon = QLabel()
+        sp_pm = icon_pixmap("sparkle", 14, "#00D2FF")
+        if sp_pm is not None:
+            sp_icon.setPixmap(sp_pm)
+        badge_row.addWidget(sp_icon)
         tag = QLabel("BUGÜNÜN KEŞFİ")
-        tag.setObjectName("Muted")
-        tag.setStyleSheet("font-weight: 700; letter-spacing: 1px;")
-        text_col.addWidget(tag)
+        tag.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #00D2FF; letter-spacing: 1px;"
+        )
+        badge_row.addWidget(tag)
+        badge_row.addStretch(1)
+        text_col.addLayout(badge_row)
 
         self.title_label = QLabel("Yükleniyor…")
-        self.title_label.setStyleSheet("font-size: 23px; font-weight: bold;")
+        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
         self.title_label.setWordWrap(True)
         text_col.addWidget(self.title_label)
 
         self.artist_label = QLabel("")
         self.artist_label.setObjectName("Muted")
+        self.artist_label.setStyleSheet("font-size: 13px; color: #C084FC; font-weight: 500;")
+        self.artist_label.setCursor(Qt.PointingHandCursor)
+        self.artist_label.setToolTip("Sanatçı profiline git")
+        self.artist_label.mousePressEvent = self._on_artist_click
         text_col.addWidget(self.artist_label)
 
         self.desc_label = QLabel("Keşfet verileri hazırlanıyor…")
         self.desc_label.setObjectName("Muted")
+        self.desc_label.setStyleSheet("font-size: 12px; color: #8F9CAE;")
         self.desc_label.setWordWrap(True)
         text_col.addWidget(self.desc_label)
         text_col.addStretch(1)
 
-        self.play_btn = QPushButton("▶ Şimdi Dinle")
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        self.play_btn = QPushButton(" Şimdi Dinle")
         self.play_btn.setObjectName("Primary")
-        self.play_btn.setFixedWidth(170)
+        self.play_btn.setIcon(vicon("play", 15, "#ffffff"))
+        self.play_btn.setIconSize(QSize(15, 15))
+        self.play_btn.setFixedHeight(38)
+        self.play_btn.setCursor(Qt.PointingHandCursor)
         self.play_btn.clicked.connect(self._on_play)
-        text_col.addWidget(self.play_btn)
+        btn_row.addWidget(self.play_btn)
+
+        self.add_btn = QPushButton(" Listeye Ekle")
+        self.add_btn.setObjectName("Chip")
+        self.add_btn.setIcon(vicon("plus", 14, "#cfc9e6"))
+        self.add_btn.setIconSize(QSize(14, 14))
+        self.add_btn.setFixedHeight(38)
+        self.add_btn.setCursor(Qt.PointingHandCursor)
+        self.add_btn.clicked.connect(self._on_add)
+        btn_row.addWidget(self.add_btn)
+
+        self.radio_btn = QPushButton(" Radyo Başlat")
+        self.radio_btn.setObjectName("Chip")
+        self.radio_btn.setIcon(vicon("radio", 14, "#cfc9e6"))
+        self.radio_btn.setIconSize(QSize(14, 14))
+        self.radio_btn.setFixedHeight(38)
+        self.radio_btn.setCursor(Qt.PointingHandCursor)
+        self.radio_btn.clicked.connect(self._on_radio)
+        btn_row.addWidget(self.radio_btn)
+
+        btn_row.addStretch(1)
+        text_col.addLayout(btn_row)
 
         layout.addLayout(text_col, stretch=1)
 
@@ -290,12 +379,26 @@ class HeroCard(QWidget):
             self.artist_label.setText("")
             self.desc_label.setText("İnternet bağlantını kontrol et ya da \"Yenile\"ye bas.")
             return
-        self.title_label.setText(track.get("title", "?"))
-        self.artist_label.setText(track.get("uploader") or "Bilinmeyen Sanatçı")
-        self.desc_label.setText("Keşfet bölümlerinden rastgele seçildi.")
+        title = track.get("title", "?")
+        artist = track.get("uploader") or "Bilinmeyen Sanatçı"
+        self.title_label.setText(title)
+        self.artist_label.setText(artist)
+        dur = format_time((track.get("duration") or 0) * 1000) if track.get("duration") else ""
+        self.desc_label.setText(
+            f"Günün öne çıkan seçimi{(' • ' + dur) if dur else ''} — Hemen dinle veya radyosunu başlat."
+        )
+        base = cover_color_for(title)
+        self.setStyleSheet(
+            "#HeroCard { "
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            f"stop:0 {shade_color(base, 0.28)}, stop:0.5 rgba(20, 24, 38, 0.95), "
+            f"stop:1 rgba(13, 16, 26, 0.98)); "
+            "border: 1px solid rgba(255, 255, 255, 0.09); "
+            "border-radius: 20px; }"
+        )
         self.art.setText("🎧")
         if self.thumbnails is not None:
-            pm = self.thumbnails.pixmap_for(track, 180, radius=16)
+            pm = self.thumbnails.pixmap_for(track, 176, radius=16)
             if pm is not None:
                 self.art.setPixmap(pm)
                 self.art.setText("")
@@ -303,6 +406,20 @@ class HeroCard(QWidget):
     def _on_play(self):
         if self.track:
             self.playRequested.emit(self.track)
+
+    def _on_add(self):
+        if self.track:
+            self.addRequested.emit(self.track)
+
+    def _on_radio(self):
+        if self.track:
+            self.radioRequested.emit(self.track)
+
+    def _on_artist_click(self, event):
+        if event.button() == Qt.LeftButton and self.track:
+            artist = self.track.get("uploader")
+            if artist and artist not in ("Bilinmeyen Sanatçı", "?"):
+                self.artistClicked.emit(artist)
 
 
 class DiscoverySection(QWidget):
@@ -312,6 +429,7 @@ class DiscoverySection(QWidget):
     playRequested = Signal(dict)
     addRequested = Signal(dict)
     artistClicked = Signal(dict)
+    trackArtistClicked = Signal(str)
 
     def __init__(self, cat_def: dict, thumbnails: ThumbnailService | None, parent=None):
         super().__init__(parent)
@@ -423,6 +541,7 @@ class DiscoverySection(QWidget):
                 card = TrackCard(track, self.thumbnails, rank=(i + 1) if rank_enabled else None)
                 card.playRequested.connect(self.playRequested.emit)
                 card.addRequested.connect(self.addRequested.emit)
+                card.artistClicked.connect(self.trackArtistClicked.emit)
                 self.row_layout.addWidget(card)
                 t_key = track.get("webpage_url")
                 if t_key:
@@ -438,6 +557,7 @@ class ExploreView(QWidget):
     heroUpdated = Signal(dict)
     refreshFinished = Signal(bool, str)
     artistRequested = Signal(str)
+    startRadioRequested = Signal(dict)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails: ThumbnailService | None = None, paths=None,
@@ -460,20 +580,57 @@ class ExploreView(QWidget):
         root.setSpacing(10)
 
         header = QHBoxLayout()
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        ex_icon = QLabel()
+        ex_pm = icon_pixmap("compass", 24, "#00D2FF")
+        if ex_pm is not None:
+            ex_icon.setPixmap(ex_pm)
+        title_row.addWidget(ex_icon)
         title_box = QVBoxLayout()
-        title = QLabel("🧭 Keşfet")
+        title_box.setSpacing(1)
+        title = QLabel("Keşfet")
         title.setStyleSheet("font-size: 22px; font-weight: bold;")
         title_box.addWidget(title)
         self.status_label = QLabel("Hazırlanıyor…")
         self.status_label.setObjectName("Muted")
         title_box.addWidget(self.status_label)
-        header.addLayout(title_box, stretch=1)
+        title_row.addLayout(title_box)
+        header.addLayout(title_row, stretch=1)
 
-        self.refresh_btn = QPushButton("🔄 Yenile")
+        self.refresh_btn = QPushButton(" Yenile")
         self.refresh_btn.setObjectName("Primary")
+        self.refresh_btn.setIcon(vicon("radio", 14, "#ffffff"))
+        self.refresh_btn.setIconSize(QSize(14, 14))
+        self.refresh_btn.setCursor(Qt.PointingHandCursor)
         self.refresh_btn.clicked.connect(lambda: self.start_refresh(force=True))
         header.addWidget(self.refresh_btn, alignment=Qt.AlignTop)
         root.addLayout(header)
+
+        # --- Mood & Tür Hızlı Filtre Kapsülleri ---
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+        self._filter_buttons: dict[str, QPushButton] = {}
+        self._active_filter = "all"
+        filter_defs = (
+            ("all", "✨ Tümü"),
+            ("trending", "🔥 Trendler"),
+            ("rap", "🎤 Türkçe & Global Rap"),
+            ("pop", "🎵 Pop & Nostalji"),
+            ("mood", "🌙 Gece & Chill"),
+            ("artists", "👤 Sanatçılar"),
+        )
+        for fkey, flabel in filter_defs:
+            fbtn = QPushButton(flabel)
+            fbtn.setObjectName("Chip")
+            fbtn.setCursor(Qt.PointingHandCursor)
+            fbtn.setFixedHeight(30)
+            fbtn.clicked.connect(lambda _=False, k=fkey: self._apply_filter(k))
+            filter_row.addWidget(fbtn)
+            self._filter_buttons[fkey] = fbtn
+        filter_row.addStretch(1)
+        root.addLayout(filter_row)
+        self._sync_filter_pills()
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -490,6 +647,9 @@ class ExploreView(QWidget):
 
         self.hero = HeroCard(self.thumbnails)
         self.hero.playRequested.connect(self._add_and_play)
+        self.hero.addRequested.connect(self._add_to_library)
+        self.hero.radioRequested.connect(self.startRadioRequested.emit)
+        self.hero.artistClicked.connect(self.artistRequested.emit)
         self.content_layout.addWidget(self.hero)
 
         # Tüm bölüm widget'ları baştan (skeleton halinde) kurulur — böylece
@@ -500,6 +660,7 @@ class ExploreView(QWidget):
             section.playRequested.connect(self._add_and_play)
             section.addRequested.connect(self._add_to_library)
             section.artistClicked.connect(self._on_artist_clicked)
+            section.trackArtistClicked.connect(self.artistRequested.emit)
             self.content_layout.addWidget(section)
             self._sections[cat["id"]] = section
         self.content_layout.addStretch(1)
@@ -576,6 +737,46 @@ class ExploreView(QWidget):
         widget = self._sections.get(section.get("id"))
         if widget is not None:
             widget.set_data(section)
+            if self._active_filter != "all":
+                self._apply_filter(self._active_filter)
+
+    def _sync_filter_pills(self):
+        for k, btn in self._filter_buttons.items():
+            active = (k == self._active_filter)
+            if active:
+                btn.setStyleSheet(
+                    "QPushButton { background: rgba(169, 128, 249, 0.24); "
+                    "border: 1px solid #a980f9; color: #FFFFFF; font-weight: 600; "
+                    "border-radius: 15px; padding: 0 14px; font-size: 12px; }"
+                )
+            else:
+                btn.setStyleSheet(
+                    "QPushButton { background: rgba(255, 255, 255, 0.05); "
+                    "border: 1px solid rgba(255, 255, 255, 0.09); color: #b7b2cf; "
+                    "border-radius: 15px; padding: 0 14px; font-size: 12px; }"
+                    "QPushButton:hover { background: rgba(255, 255, 255, 0.10); color: #FFFFFF; }"
+                )
+
+    def _apply_filter(self, filter_key: str):
+        self._active_filter = filter_key
+        self._sync_filter_pills()
+        self.hero.setVisible(filter_key == "all")
+        filter_groups = {
+            "trending": {"tr_trending", "global_top", "new_releases"},
+            "rap": {"tr_rap_week", "tr_rap_month", "global_rap"},
+            "pop": {"tr_pop", "tr_year", "throwback"},
+        }
+        for sec_id, sec_widget in self._sections.items():
+            if filter_key == "all":
+                sec_widget.setVisible(bool(sec_widget.items) or sec_widget.cat_def is not None)
+                continue
+            if filter_key == "artists":
+                visible = sec_widget._is_artist
+            elif filter_key == "mood":
+                visible = sec_id.startswith("mood_")
+            else:
+                visible = sec_id in filter_groups.get(filter_key, set())
+            sec_widget.setVisible(visible and bool(sec_widget.items))
 
     def _on_refresh_finished(self, success: bool, message: str):
         self._refreshing = False
