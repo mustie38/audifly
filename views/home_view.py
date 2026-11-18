@@ -7,64 +7,103 @@ gerçek kütüphane verisinden (play_count/last_played) hesaplanır.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from PIL import Image
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPixmap
 from PySide6.QtWidgets import (
-    QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QListWidget,
+    QListWidgetItem, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from mustiefly_qt.helpers.constants import cover_color_for
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.services.thumbnails import crop_to_square, pil_to_qimage
-from mustiefly_qt.widgets.player_icons import icon as vicon
+from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
 from mustiefly_qt.widgets.song_row import SongRow
 from mustiefly_qt.helpers.logging_setup import get_logger
 
 
 
 log = get_logger(__name__)
-class StatCard(QWidget):
-    def __init__(self, icon: str, value: str, label: str, parent=None):
+class StatCard(QFrame):
+    def __init__(self, icon_kind: str, value: str, label: str, accent: str = "#a980f9", parent=None):
         super().__init__(parent)
-        # Sol kenarda 4px vurgu çizgisi olan kart (tema accent rengiyle)
-        self.setObjectName("StatCard")
-        self.setFixedSize(150, 112)
+        self.setObjectName("HomeStatCard")
+        self.setMinimumWidth(140)
+        self.setFixedHeight(96)
+        self.setStyleSheet(f"""
+            #HomeStatCard {{
+                background: rgba(255, 255, 255, 0.032);
+                border: 1px solid rgba(255, 255, 255, 0.07);
+                border-left: 3px solid {accent};
+                border-radius: 14px;
+            }}
+            #HomeStatCard:hover {{
+                background: rgba(255, 255, 255, 0.055);
+                border-color: rgba(255, 255, 255, 0.14);
+                border-left: 3px solid {accent};
+            }}
+        """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 12, 10)
-        icon_label = QLabel(icon)
-        icon_font = QFont()
-        icon_font.setPixelSize(18)
-        icon_label.setFont(icon_font)
-        layout.addWidget(icon_label)
-        self.value_label = QLabel(value)
-        value_font = QFont()
-        value_font.setPixelSize(19)
-        value_font.setBold(True)
-        self.value_label.setFont(value_font)
-        layout.addWidget(self.value_label)
+        layout.setContentsMargins(16, 12, 14, 12)
+        layout.setSpacing(4)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+        icon_label = QLabel()
+        icon_label.setFixedSize(20, 20)
+        pm = icon_pixmap(icon_kind, 16, accent)
+        if pm is not None and not pm.isNull():
+            icon_label.setPixmap(pm)
+        else:
+            icon_label.setText(icon_kind)
+        top_row.addWidget(icon_label)
+
         text_label = QLabel(label)
         text_label.setObjectName("Muted")
-        layout.addWidget(text_label)
+        text_label.setStyleSheet("font-size: 11px; font-weight: 600;")
+        top_row.addWidget(text_label, stretch=1)
+        layout.addLayout(top_row)
+
+        self.value_label = QLabel(value)
+        value_font = QFont()
+        value_font.setPixelSize(22)
+        value_font.setBold(True)
+        self.value_label.setFont(value_font)
+        self.value_label.setStyleSheet("color: #FFFFFF;")
+        layout.addWidget(self.value_label)
 
     def set_data(self, value: str):
         self.value_label.setText(value)
 
 
-class QuickAccessCard(QWidget):
+class QuickAccessCard(QFrame):
     clicked = Signal()
 
     def __init__(self, title: str, subtitle: str, emoji: str = "🎵",
                  accent_bg: str | None = None, pixmap=None, parent=None):
         super().__init__(parent)
+        self.setObjectName("QuickAccessCard")
+        self.setFixedWidth(166)
+        self.setStyleSheet("""
+            #QuickAccessCard {
+                background: rgba(255, 255, 255, 0.032);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 16px;
+            }
+            #QuickAccessCard:hover {
+                background: rgba(255, 255, 255, 0.065);
+                border: 1px solid rgba(169, 128, 249, 0.42);
+            }
+        """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 8, 8, 10)
         layout.setSpacing(6)
 
         cover = QLabel()
-        cover.setFixedSize(150, 150)
+        cover.setFixedSize(150, 146)
         cover.setAlignment(Qt.AlignCenter)
         cover_font = QFont()
         cover_font.setPixelSize(46)
@@ -72,17 +111,17 @@ class QuickAccessCard(QWidget):
         if pixmap is not None and not pixmap.isNull():
             cover.setPixmap(pixmap)
             cover.setScaledContents(True)
-            cover.setStyleSheet("border-radius: 14px;")
+            cover.setStyleSheet("border-radius: 12px;")
         else:
             bg = accent_bg or cover_color_for(title)
             cover.setText(emoji)
-            cover.setStyleSheet(f"background: {bg}; border-radius: 14px; color: white;")
+            cover.setStyleSheet(f"background: {bg}; border-radius: 12px; color: white;")
         cover.setCursor(Qt.PointingHandCursor)
         cover.mousePressEvent = lambda event: self.clicked.emit()
 
         self._hover_play = QPushButton(cover)
         self._hover_play.setFixedSize(38, 38)
-        self._hover_play.move(150 - 46, 150 - 46)
+        self._hover_play.move(150 - 46, 146 - 46)
         self._hover_play.setIcon(vicon("play", 16, "#ffffff"))
         self._hover_play.setIconSize(QSize(16, 16))
         self._hover_play.setCursor(Qt.PointingHandCursor)
@@ -100,16 +139,18 @@ class QuickAccessCard(QWidget):
 
         layout.addWidget(cover)
 
-        title_label = QLabel(title)
+        title_label = QLabel(title[:20] + ("…" if len(title) > 20 else ""))
         title_font = QFont()
         title_font.setBold(True)
         title_label.setFont(title_font)
+        title_label.setStyleSheet("color: #FFFFFF; font-size: 13px;")
         title_label.setFixedWidth(150)
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
         sub_label = QLabel(subtitle)
         sub_label.setObjectName("Muted")
+        sub_label.setStyleSheet("font-size: 11px; color: #8F9CAE;")
         sub_label.setFixedWidth(150)
         layout.addWidget(sub_label)
 
@@ -169,35 +210,75 @@ class HomeView(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll)
 
-        header_row = QHBoxLayout()
+        # --- Karşılama Hero Banner ---
+        hero_card = QFrame()
+        hero_card.setObjectName("HomeHeroCard")
+        hero_card.setStyleSheet("""
+            #HomeHeroCard {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(169, 128, 249, 0.18),
+                    stop:0.5 rgba(20, 24, 38, 0.94),
+                    stop:1 rgba(13, 16, 26, 0.98));
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 18px;
+            }
+        """)
+        header_row = QHBoxLayout(hero_card)
+        header_row.setContentsMargins(22, 18, 22, 18)
+        header_row.setSpacing(16)
+
         title_box = QVBoxLayout()
-        welcome = QLabel(f"Tekrar hoş geldin, {username} 👋")
+        title_box.setSpacing(4)
+        hour = datetime.now().hour
+        if 5 <= hour < 12:
+            greet = "Günaydın"
+        elif 12 <= hour < 18:
+            greet = "İyi günler"
+        elif 18 <= hour < 23:
+            greet = "İyi akşamlar"
+        else:
+            greet = "Gece modu"
+        welcome = QLabel(f"{greet}, {self.username}")
         welcome_font = QFont()
-        welcome_font.setPixelSize(22)
+        welcome_font.setPixelSize(23)
         welcome_font.setBold(True)
         welcome.setFont(welcome_font)
+        welcome.setStyleSheet("color: #FFFFFF;")
         title_box.addWidget(welcome)
-        subtitle = QLabel("Müziğin ritmiyle günü güzelleştir.")
+        subtitle = QLabel("Müziğin ritmiyle günü güzelleştir — kaldığın yerden devam et.")
         subtitle.setObjectName("Muted")
+        subtitle.setStyleSheet("font-size: 12px; color: #8F9CAE;")
         title_box.addWidget(subtitle)
         header_row.addLayout(title_box, stretch=1)
 
-        shuffle_btn = QPushButton("▶ Karışık Çal")
-        shuffle_btn.setObjectName("Primary")
-        shuffle_btn.clicked.connect(self.playShuffledRequested.emit)
-        header_row.addWidget(shuffle_btn, alignment=Qt.AlignTop)
-        self.content_layout.addLayout(header_row)
+        liked_btn = QPushButton(" Favoriler")
+        liked_btn.setObjectName("Chip")
+        liked_btn.setIcon(vicon("heart_filled", 14, "#FF6B8A"))
+        liked_btn.setIconSize(QSize(14, 14))
+        liked_btn.setFixedHeight(36)
+        liked_btn.setCursor(Qt.PointingHandCursor)
+        liked_btn.clicked.connect(self.openLikedRequested.emit)
+        header_row.addWidget(liked_btn, alignment=Qt.AlignVCenter)
 
-        # --- İstatistik kartları ---
+        shuffle_btn = QPushButton(" Karışık Çal")
+        shuffle_btn.setObjectName("Primary")
+        shuffle_btn.setIcon(vicon("shuffle", 14, "#ffffff"))
+        shuffle_btn.setIconSize(QSize(14, 14))
+        shuffle_btn.setFixedHeight(36)
+        shuffle_btn.setCursor(Qt.PointingHandCursor)
+        shuffle_btn.clicked.connect(self.playShuffledRequested.emit)
+        header_row.addWidget(shuffle_btn, alignment=Qt.AlignVCenter)
+        self.content_layout.addWidget(hero_card)
+
+        # --- İstatistik kartları (tam genişliğe dengeli dağılır) ---
         cards_row = QHBoxLayout()
         cards_row.setSpacing(12)
-        self.card_songs = StatCard("🎵", "0", "Toplam Şarkı")
-        self.card_playlists = StatCard("📀", "0", "Playlist")
-        self.card_time = StatCard("⏱", "0 sa", "Dinleme Süresi")
-        self.card_liked = StatCard("❤️", "0", "Favori Şarkılar")
+        self.card_songs = StatCard("disc", "0", "Toplam Şarkı", "#00D2FF")
+        self.card_playlists = StatCard("folder", "0", "Çalma Listesi", "#a980f9")
+        self.card_time = StatCard("clock", "0 sa", "Dinleme Süresi", "#FBBF24")
+        self.card_liked = StatCard("heart_filled", "0", "Favori Şarkılar", "#FF6B8A")
         for card in (self.card_songs, self.card_playlists, self.card_time, self.card_liked):
-            cards_row.addWidget(card)
-        cards_row.addStretch(1)
+            cards_row.addWidget(card, stretch=1)
         self.content_layout.addLayout(cards_row)
 
         # --- Hızlı Erişim ---
@@ -222,7 +303,7 @@ class HomeView(QWidget):
         self.quick_scroll.setWidgetResizable(True)
         self.quick_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.quick_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.quick_scroll.setFixedHeight(215)
+        self.quick_scroll.setFixedHeight(236)
         self.quick_scroll.setFrameShape(QScrollArea.NoFrame)
         # Yukarıdaki ana scroll area'da olduğu gibi: bu ayar yapılmazsa
         # viewport, kart kapaklarının altındaki başlık/alt yazı şeridinde
