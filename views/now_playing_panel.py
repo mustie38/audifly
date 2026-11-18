@@ -201,7 +201,7 @@ class NowPlayingPanel(QWidget):
                 color: #FFFFFF;
             }
         """)
-        self.artist_profile_btn.clicked.connect(self._on_artist_label_clicked)
+        self.artist_profile_btn.clicked.connect(self._emit_artist_clicked)
         layout.addWidget(self.artist_profile_btn)
 
         # --- Canlı Müzik Görselleştirici & Neon Spektrum ---
@@ -387,12 +387,15 @@ class NowPlayingPanel(QWidget):
         self.up_next_card.setVisible(True)
         self.artist_profile_btn.setVisible(True)
 
+    def _emit_artist_clicked(self):
+        artist = getattr(self, "_current_artist", "")
+        if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
+            self.artistClicked.emit(artist)
+
     def _on_artist_label_clicked(self, event=None):
-        if event is None or event.button() == Qt.LeftButton:
-            artist = getattr(self, "_current_artist", "")
-            if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
-                self.artistClicked.emit(artist)
-        if event is not None:
+        if event is None or isinstance(event, bool) or event.button() == Qt.LeftButton:
+            self._emit_artist_clicked()
+        if event is not None and not isinstance(event, bool):
             super(QLabel, self.artist_label).mousePressEvent(event)
 
     def set_playing_state(self, playing: bool):

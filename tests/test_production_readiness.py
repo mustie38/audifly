@@ -386,6 +386,11 @@ def test_player_bar_and_now_playing_sync_like_and_recover_from_play_error(librar
         library_store.toggle_like("Varsayılan", 0)
         assert bar.like_btn._active
         assert "Beğenildi" in panel.like_btn.text()
+
+        clicked_artists = []
+        panel.artistClicked.connect(clicked_artists.append)
+        panel.artist_profile_btn.click()
+        assert clicked_artists == ["Sanatçı"]
     finally:
         bar.close()
         panel.close()
