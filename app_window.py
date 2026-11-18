@@ -230,11 +230,18 @@ class MainWindow(QMainWindow):
         # --- Sinyal bağlantıları ---
         self.sidebar.navSelected.connect(self._on_nav_selected)
         self.sidebar.playlistSelected.connect(self.show_playlist_view)
+        self.sidebar.menuRequested.connect(self._show_main_menu)
         self.sidebar.settingsRequested.connect(self._open_settings_dialog)
         self.sidebar.equalizerRequested.connect(self._toggle_equalizer_window)
         self.sidebar.lyricsRequested.connect(self._toggle_lyrics_window)
         self.sidebar.miniPlayerRequested.connect(self._toggle_mini_player)
         self.sidebar.reportRequested.connect(self.open_diagnostics_dialog)
+
+        self.top_bar.settingsRequested.connect(self._open_settings_dialog)
+        self.top_bar.equalizerRequested.connect(self._toggle_equalizer_window)
+        self.top_bar.lyricsRequested.connect(self._toggle_lyrics_window)
+        self.top_bar.miniPlayerRequested.connect(self._toggle_mini_player)
+        self.top_bar.reportRequested.connect(self.open_diagnostics_dialog)
         self.settings_view.diagnosticsRequested.connect(self.open_diagnostics_dialog)
         self.mini_player.closed.connect(self._on_mini_closed)
         self.library_view.addSongRequested.connect(self._open_search_dialog)
@@ -572,26 +579,36 @@ class MainWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
 
-    # --- Menü ---
+    # --- Menü (Hamburger / Açılır Menü — klasik Windows menü çubuğu gizlenir) ---
+    def _show_main_menu(self):
+        if hasattr(self, "_main_popup_menu") and hasattr(self.sidebar, "menu_btn"):
+            pos = self.sidebar.menu_btn.mapToGlobal(self.sidebar.menu_btn.rect().bottomLeft())
+            self._main_popup_menu.exec(pos)
+
     def _build_menu(self):
         menu_bar: QMenuBar = self.menuBar()
+        menu_bar.setVisible(False)
 
-        app_menu = menu_bar.addMenu(APP_DISPLAY_NAME)
+        self._main_popup_menu = QMenu(self)
+
+        app_menu = self._main_popup_menu.addMenu(APP_DISPLAY_NAME)
         karaoke_action = app_menu.addAction("🎤 Canlı Karaoke / Tam Ekran")
         karaoke_action.setShortcut("F11")
         karaoke_action.triggered.connect(self._toggle_karaoke_view)
+        self.addAction(karaoke_action)
         mini_player_action = app_menu.addAction("🎵 Mini Oynatıcıyı Aç")
         mini_player_action.triggered.connect(self._toggle_mini_player)
         palette_action = app_menu.addAction("⚡ Spotlight & Komut Paleti…")
         palette_action.setShortcut("Ctrl+K")
         palette_action.triggered.connect(self.open_command_palette)
+        self.addAction(palette_action)
         settings_action = app_menu.addAction("⚙ Ayarlar")
         settings_action.triggered.connect(self._open_settings_dialog)
         app_menu.addSeparator()
         exit_action = app_menu.addAction("Çıkış")
         exit_action.triggered.connect(self._quit_app)   # tepsiye küçült açıkken de gerçekten kapatır
 
-        tools_menu = menu_bar.addMenu("Araçlar")
+        tools_menu = self._main_popup_menu.addMenu("Araçlar")
 
         listen_action = tools_menu.addAction("👥 Birlikte Dinle…")
         listen_action.triggered.connect(self._open_listen_together)
@@ -643,7 +660,7 @@ class MainWindow(QMainWindow):
         undo_action.triggered.connect(self._perform_undo)
         self._undo_menu_action = undo_action
 
-        eq_menu_item = menu_bar.addMenu("Ses")
+        eq_menu_item = self._main_popup_menu.addMenu("Ses")
         equalizer_action = eq_menu_item.addAction("🎚 Ekolayzer…")
         equalizer_action.triggered.connect(self._toggle_equalizer_window)
 
@@ -661,7 +678,7 @@ class MainWindow(QMainWindow):
         lyrics_action = eq_menu_item.addAction("🎤 Sözler Paneli…")
         lyrics_action.triggered.connect(self._toggle_lyrics_window)
 
-        help_menu = menu_bar.addMenu("Yardım")
+        help_menu = self._main_popup_menu.addMenu("Yardım")
         report_action = help_menu.addAction("🩺 Sorun Bildir / Tanılama Raporu…")
         report_action.triggered.connect(self.open_diagnostics_dialog)
         logs_action = help_menu.addAction("📁 Kayıt Klasörünü Aç")

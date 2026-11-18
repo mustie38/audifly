@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 
-from PySide6.QtCore import Qt, QTimer, QPoint, Signal
+from PySide6.QtCore import Qt, QTimer, QPoint, QSize, Signal
 from PySide6.QtGui import QColor, QDrag, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QMenu, QPushButton, QStackedLayout, QWidget,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from mustiefly_qt.helpers.constants import format_time, offline_path_for
 from mustiefly_qt.helpers.lyrics import parse_track_and_artist
+from mustiefly_qt.widgets.player_icons import icon as vicon
 
 SONG_MIME = "application/x-mustiefly-song"
 
@@ -173,10 +174,17 @@ class SongRow(QWidget):
                 )
             layout.addWidget(uploader_label)
 
-        self.like_btn = QPushButton("♥" if song.get("liked") else "♡")
-        self.like_btn.setFixedWidth(28)
+        liked = bool(song.get("liked"))
+        self.like_btn = QPushButton()
+        self.like_btn.setFixedSize(28, 28)
+        self.like_btn.setIcon(vicon("heart_filled" if liked else "heart", 14, "#FF6B8A" if liked else "#9EA3B8"))
+        self.like_btn.setIconSize(QSize(14, 14))
+        self.like_btn.setToolTip("Beğen" if not liked else "Beğeniyi kaldır")
+        self.like_btn.setCursor(Qt.PointingHandCursor)
         self.like_btn.setStyleSheet(
-            f"color: {'#FF7A3D' if song.get('liked') else 'palette(midlight)'};")
+            "QPushButton { background: transparent; border: none; border-radius: 14px; }"
+            "QPushButton:hover { background: rgba(255, 255, 255, 0.08); }"
+        )
         self.like_btn.clicked.connect(lambda: self.likeToggled.emit(self.index))
         layout.addWidget(self.like_btn)
 
@@ -186,8 +194,16 @@ class SongRow(QWidget):
         duration_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(duration_label)
 
-        more_btn = QPushButton("⋮")
-        more_btn.setFixedWidth(24)
+        more_btn = QPushButton()
+        more_btn.setFixedSize(28, 28)
+        more_btn.setIcon(vicon("more", 15, "#9EA3B8"))
+        more_btn.setIconSize(QSize(15, 15))
+        more_btn.setToolTip("Şarkı seçenekleri")
+        more_btn.setCursor(Qt.PointingHandCursor)
+        more_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; border-radius: 14px; }"
+            "QPushButton:hover { background: rgba(255, 255, 255, 0.08); }"
+        )
         more_btn.clicked.connect(self._open_menu)
         layout.addWidget(more_btn)
 

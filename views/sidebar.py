@@ -115,6 +115,7 @@ class _PlaylistRow(QWidget):
 class SidebarWidget(QWidget):
     navSelected = Signal(str)          # "home" | "explore" | "library" | "liked" | ...
     playlistSelected = Signal(str)
+    menuRequested = Signal()
     settingsRequested = Signal()
     equalizerRequested = Signal()
     lyricsRequested = Signal()
@@ -175,6 +176,21 @@ class SidebarWidget(QWidget):
         brand_tag.setStyleSheet("font-size: 10px;")
         brand_box.addWidget(brand_tag)
         brand_row.addLayout(brand_box, stretch=1)
+
+        self.menu_btn = QPushButton("☰")
+        self.menu_btn.setObjectName("IconSquare")
+        self.menu_btn.setFixedSize(32, 32)
+        self.menu_btn.setToolTip("Ana Menü (Audifly, Araçlar, Ses, Yardım)")
+        self.menu_btn.setCursor(Qt.PointingHandCursor)
+        self.menu_btn.setStyleSheet(
+            "QPushButton#IconSquare { font-size: 15px; color: #cfc9e6; "
+            "background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); "
+            "border-radius: 10px; }"
+            "QPushButton#IconSquare:hover { background: rgba(255,255,255,0.12); color: #ffffff; }"
+        )
+        self.menu_btn.clicked.connect(self.menuRequested.emit)
+        brand_row.addWidget(self.menu_btn)
+
         top.addLayout(brand_row)
         top.addSpacing(14)
 
@@ -294,35 +310,6 @@ class SidebarWidget(QWidget):
 
         scroll.setWidget(top_content)
         layout.addWidget(scroll, stretch=1)
-
-        # --- Alt ikon satırı (araçlar) — her zaman tam görünür, sabit ---
-        footer = QWidget()
-        footer.setObjectName("SidebarFooter")
-        footer.setStyleSheet(
-            "QWidget#SidebarFooter { border-top: 1px solid rgba(255,255,255,0.08); }")
-        footer_layout = QVBoxLayout(footer)
-        footer_layout.setContentsMargins(14, 10, 14, 10)
-        tools_row = QHBoxLayout()
-        tools_row.setSpacing(8)
-        tools = (
-            ("settings", "Ayarlar", self.settingsRequested),
-            ("sliders", "Ses & Ekolayzer", self.equalizerRequested),
-            ("lyrics", "Sözler Paneli", self.lyricsRequested),
-            ("mini_player", "Mini Oynatıcı", self.miniPlayerRequested),
-            ("diagnostics", "Sorun Bildir / Tanılama", self.reportRequested),
-        )
-        for ic_kind, tooltip, sig in tools:
-            btn = QPushButton()
-            btn.setObjectName("SidebarToolBtn")
-            btn.setIcon(vicon(ic_kind, 16, "#cfc9e6"))
-            btn.setIconSize(QSize(16, 16))
-            btn.setToolTip(tooltip)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(sig.emit)
-            tools_row.addWidget(btn)
-        tools_row.addStretch(1)
-        footer_layout.addLayout(tools_row)
-        layout.addWidget(footer)
 
         self.store.playlistsChanged.connect(self._on_structure_changed)
         self.store.activePlaylistChanged.connect(lambda _: self.refresh())

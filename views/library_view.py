@@ -351,11 +351,12 @@ class LibraryView(QWidget):
     def _build_columns_row(self) -> QWidget:
         row = QWidget()
         cols = QHBoxLayout(row)
-        cols.setContentsMargins(12, 0, 12, 0)
+        cols.setContentsMargins(16, 0, 26, 0)
         cols.setSpacing(12)
 
         self.sort_pill = QPushButton("# SIRALA")
         self.sort_pill.setObjectName("SortPill")
+        self.sort_pill.setFixedWidth(76)
         self.sort_pill.setCursor(Qt.PointingHandCursor)
         self.sort_pill.setToolTip("Sıralama modunu değiştirir")
         self.sort_pill.clicked.connect(self._cycle_sort)
@@ -367,6 +368,7 @@ class LibraryView(QWidget):
         self.col_title_btn.setObjectName("ColHeader")
         self.col_title_btn.setCursor(Qt.PointingHandCursor)
         self.col_title_btn.setToolTip("Başlığa göre sırala (A-Z)")
+        self.col_title_btn.setStyleSheet("text-align: left; padding-left: 2px;")
         self.col_title_btn.clicked.connect(
             lambda: self.sort_combo.setCurrentIndex(self.sort_combo.findData("name")))
         cols.addWidget(self.col_title_btn)
@@ -376,16 +378,26 @@ class LibraryView(QWidget):
         self.col_artist_btn.setObjectName("ColHeader")
         self.col_artist_btn.setCursor(Qt.PointingHandCursor)
         self.col_artist_btn.setToolTip("Sanatçıya göre sırala (A-Z)")
+        self.col_artist_btn.setFixedWidth(180)
+        self.col_artist_btn.setStyleSheet("text-align: left; padding-left: 0px;")
         self.col_artist_btn.clicked.connect(
             lambda: self.sort_combo.setCurrentIndex(self.sort_combo.findData("uploader")))
-        self.col_artist_btn.setFixedWidth(170)
         cols.addWidget(self.col_artist_btn)
+
+        # like_btn (28) + spacing (12) + duration (46) + spacing (12) + more_btn (28) = 126
+        like_spacer = QWidget()
+        like_spacer.setFixedWidth(28)
+        cols.addWidget(like_spacer)
 
         dur_h = QLabel("⏱")
         dur_h.setObjectName("SectionHeader")
-        dur_h.setFixedWidth(96)
+        dur_h.setFixedWidth(46)
         dur_h.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         cols.addWidget(dur_h)
+
+        more_spacer = QWidget()
+        more_spacer.setFixedWidth(28)
+        cols.addWidget(more_spacer)
         return row
 
     SORT_LABELS = {"default": "# SIRALA", "name": "# İSİM", "uploader": "# SANATÇI",

@@ -23,6 +23,11 @@ class TopBar(QFrame):
     localFilesRequested = Signal()         # bilgisayardan mp3/flac/... ekle
     notificationsClicked = Signal()
     panelToggleClicked = Signal()          # "Şu An Çalıyor" panelini geri açar
+    settingsRequested = Signal()
+    equalizerRequested = Signal()
+    lyricsRequested = Signal()
+    miniPlayerRequested = Signal()
+    reportRequested = Signal()
 
     def __init__(self, username: str = "", parent=None):
         super().__init__(parent)
@@ -58,6 +63,24 @@ class TopBar(QFrame):
         add_shadow.setColor(QColor(0, 0, 0, 90))
         self.add_btn.setGraphicsEffect(add_shadow)
         row.addWidget(self.add_btn)
+
+        # --- Hızlı Araçlar (Eskiden sol alt menüdeydi; üst bara taşındı) ---
+        quick_tools = (
+            ("sliders", "Ses & Ekolayzer", self.equalizerRequested),
+            ("lyrics", "Sözler Paneli", self.lyricsRequested),
+            ("mini_player", "Mini Oynatıcı", self.miniPlayerRequested),
+            ("diagnostics", "Sorun Bildir / Tanılama", self.reportRequested),
+            ("settings", "Ayarlar", self.settingsRequested),
+        )
+        for ic_kind, tooltip, sig in quick_tools:
+            t_btn = QPushButton()
+            t_btn.setObjectName("IconSquare")
+            t_btn.setIcon(vicon(ic_kind, 16, "#cfc9e6"))
+            t_btn.setIconSize(QSize(16, 16))
+            t_btn.setToolTip(tooltip)
+            t_btn.setCursor(Qt.PointingHandCursor)
+            t_btn.clicked.connect(sig.emit)
+            row.addWidget(t_btn)
 
         # --- Bildirim zili (yt-dlp güncellemesi vb.) ---
         self.bell_btn = QPushButton()
