@@ -49,6 +49,7 @@ except Exception:
 
 
 CACHE_FILENAME = "discovery_cache.json"
+CACHE_VERSION = 2
 
 MONTHS_TR = [
     "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -249,7 +250,10 @@ class DiscoveryService:
             return None
         try:
             with open(self._cache_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if isinstance(data, dict) and data.get("version") != CACHE_VERSION:
+                return None
+            return data
         except Exception as e:
             log.error("%s %s", "Keşfet önbelleği okunamadı:", e)
             return None
@@ -324,6 +328,7 @@ class DiscoveryService:
                 log.error("%s %s", "Öne çıkan (hero) içerik oluşturulamadı:", e)
 
         new_cache = {
+            "version": CACHE_VERSION,
             "last_updated": now,
             "region": "TR",
             "hero": hero,
@@ -479,9 +484,54 @@ class DiscoveryService:
         tracks = self._fetch_from_youtube_trending(region, limit=limit * 2)
         return self._dedupe_and_clean(tracks)[:limit], "youtube_search"
 
+    def _fetch_from_ytmusic_songs(self, query: str, limit: int = 12) -> list[dict]:
+        """YouTube Music 'songs' filtresi ile yalnızca doğrulanmış gerçek
+        müzik parçalarını çeker (podcast, 1 saatlik mix, tepki videosu,
+        Shorts gibi alakasız sonuçları otomatik dışlar)."""
+        if not YTMUSICAPI_AVAILABLE or not query:
+            return []
+        try:
+            yt_music = YTMusic()
+            items = yt_music.search(query, filter="songs", limit=limit * 2) or []
+        except Exception as e:
+            log.error("%s %s", f"YTMusic şarkı araması başarısız ('{query}'):", e)
+            return []
+
+        tracks: list[dict] = []
+        for item in items:
+            vid = item.get("videoId")
+            if not vid:
+                continue
+            thumbs = item.get("thumbnails") or []
+            thumb = thumbs[-1].get("url") if thumbs else None
+            artists = ", ".join(
+                a.get("name", "") for a in (item.get("artists") or [])
+                if isinstance(a, dict) and a.get("name")
+            ) or "Bilinmeyen Sanatçı"
+            clean_title, clean_artist = parse_track_and_artist(
+                item.get("title", "Bilinmeyen Şarkı"), artists, item,
+            )
+            dur = item.get("duration_seconds") or 0
+            tracks.append({
+                "title": clean_title,
+                "webpage_url": f"https://www.youtube.com/watch?v={vid}",
+                "duration": dur,
+                "uploader": clean_artist,
+                "thumbnail": thumb,
+                "liked": False,
+                "added_date": datetime.now().isoformat(),
+            })
+        return tracks
+
     def fetch_search_based_category(self, query: str, limit: int = 12) -> list[dict]:
         if not query:
             return []
+        # Öncelik: YTMusic songs araması (gerçek şarkılar, spam/mix/podcast yok)
+        ytm_tracks = self._dedupe_and_clean(self._fetch_from_ytmusic_songs(query, limit=limit))
+        if ytm_tracks:
+            return ytm_tracks[:limit]
+
+        # Yedek: yt-dlp arama + sıkı süre/başlık filtresi
         ydl_opts = yt_dlp_base_opts(quiet=True, extract_flat=True, noplaylist=True)
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -494,10 +544,36 @@ class DiscoveryService:
         return self._dedupe_and_clean(tracks)[:limit]
 
     def _fetch_artist_discovery(self, query: str, limit: int = 10) -> list[dict]:
-        """Arama sonuçlarından benzersiz kanal/sanatçı kartları üretir
-        (gerçek AI analizi gerektirmeden mantıksal bir gruplama)."""
+        """Öncelikle YTMusic 'artists' filtresiyle gerçek sanatçı profilleri
+        çeker; çalışmazsa yt-dlp kanal keşfine düşer."""
         if not query:
             return []
+        if YTMUSICAPI_AVAILABLE:
+            try:
+                yt_music = YTMusic()
+                items = yt_music.search(query, filter="artists", limit=limit * 2) or []
+                artists = []
+                seen = set()
+                for item in items:
+                    name = item.get("artist")
+                    if not name or name in seen:
+                        continue
+                    thumbs = item.get("thumbnails") or []
+                    thumb = thumbs[-1].get("url") if thumbs else None
+                    if not thumb:
+                        continue
+                    seen.add(name)
+                    artists.append({
+                        "name": name,
+                        "thumbnail": thumb,
+                        "subtitle": "Popüler Sanatçı",
+                        "browse_id": item.get("browseId", ""),
+                    })
+                    if len(artists) >= limit:
+                        return artists
+            except Exception as e:
+                log.error("%s %s", f"YTMusic sanatçı araması başarısız ('{query}'):", e)
+
         ydl_opts = yt_dlp_base_opts(quiet=True, extract_flat=True, noplaylist=True)
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -643,6 +719,23 @@ class DiscoveryService:
         uploader = (track.get("uploader") or "").lower().replace(" - topic", "").strip()
         return f"{title}::{uploader}"
 
+    _BAD_TITLE_MARKERS = (
+        "1 saat", "2 saat", "3 saat", "1 hour", "2 hours", "full album",
+        "nonstop", "compilation", "derleme", "reaction", "tepki",
+        "podcast", "röportaj", "interview", "#shorts", "tiktok",
+        "slowed", "reverb", "speed up", "sped up", "nightcore",
+        "8d audio", "karaoke", "canlı yayın", "live stream",
+        "top 10", "top 20", "top 50", "en iyi 10", "en iyi 20", "best of",
+    )
+
+    def _is_valid_music_track(self, track: dict) -> bool:
+        """Shorts, uzun mix/podcast ve spam başlıkları eler."""
+        dur = track.get("duration") or 0
+        if dur > 0 and (dur < 75 or dur > 540):
+            return False
+        title_l = (track.get("title") or "").lower()
+        return not any(marker in title_l for marker in self._BAD_TITLE_MARKERS)
+
     def _dedupe_and_clean(self, tracks: list[dict]) -> list[dict]:
         cleaned = []
         seen_urls = set()
@@ -652,6 +745,8 @@ class DiscoveryService:
                 continue  # boş title / bozuk URL
             if not t.get("thumbnail"):
                 continue  # thumbnail olmayanlar filtrelenir
+            if not self._is_valid_music_track(t):
+                continue  # alakasız mix/podcast/shorts/spam
             url = t["webpage_url"]
             if url in seen_urls:
                 continue  # duplicate

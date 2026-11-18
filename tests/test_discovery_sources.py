@@ -62,3 +62,36 @@ def test_view_source_text_and_legacy_cache(library_store):
     text = DiscoverySection.source_text({"source": {"label": "YouTube Music Charts"}, "updated_at": 0})
     assert text == "Kaynak: YouTube Music Charts"
     assert "bilinmiyor" in DiscoverySection.source_text({})
+
+
+def test_discovery_filters_non_songs_and_bad_durations(svc):
+    bad_tracks = [
+        {"title": "Short Clip", "webpage_url": "https://youtu.be/s1", "thumbnail": "http://img/1.jpg", "duration": 25},
+        {"title": "2025 Mix 1 Saat", "webpage_url": "https://youtu.be/s2", "thumbnail": "http://img/2.jpg", "duration": 3600},
+        {"title": "Podcast Bölümü", "webpage_url": "https://youtu.be/s3", "thumbnail": "http://img/3.jpg", "duration": 200},
+        {"title": "Şarkı (Slowed + Reverb)", "webpage_url": "https://youtu.be/s4", "thumbnail": "http://img/4.jpg", "duration": 210},
+        {"title": "Gerçek Şarkı", "webpage_url": "https://youtu.be/ok1", "thumbnail": "http://img/ok.jpg", "duration": 195},
+    ]
+    cleaned = svc._dedupe_and_clean(bad_tracks)
+    assert len(cleaned) == 1
+    assert cleaned[0]["title"] == "Gerçek Şarkı"
+
+
+def test_fetch_search_prefers_ytmusic_songs(svc, monkeypatch):
+    class FakeYT:
+        def search(self, query, filter=None, limit=10):
+            assert filter == "songs"
+            return [{
+                "videoId": "vid123",
+                "title": "Dönence",
+                "artists": [{"name": "Barış Manço"}],
+                "duration_seconds": 210,
+                "thumbnails": [{"url": "https://i.ytimg.com/vid123.jpg"}],
+            }]
+
+    monkeypatch.setattr(dc, "YTMUSICAPI_AVAILABLE", True)
+    monkeypatch.setattr(dc, "YTMusic", lambda: FakeYT(), raising=False)
+    tracks = svc.fetch_search_based_category("barış manço", limit=5)
+    assert len(tracks) == 1
+    assert tracks[0]["title"] == "Dönence"
+    assert tracks[0]["uploader"] == "Barış Manço"
