@@ -31,6 +31,7 @@ class TopBar(QFrame):
     statsRequested = Signal()
     wrappedRequested = Signal()
     paletteRequested = Signal()
+    connectRequested = Signal()
 
     def __init__(self, username: str = "", parent=None):
         super().__init__(parent)
@@ -86,6 +87,7 @@ class TopBar(QFrame):
         quick_tools = (
             ("sliders", "Ses & Ekolayzer", self.equalizerRequested),
             ("lyrics", "Sözler Paneli", self.lyricsRequested),
+            ("phone", "Audifly Connect (Telefon Kumandası)", self.connectRequested),
             ("mini_player", "Masaüstü Şeffaf Widget'ı", self.miniPlayerRequested),
             ("diagnostics", "Sorun Bildir / Tanılama", self.reportRequested),
             ("settings", "Ayarlar", self.settingsRequested),

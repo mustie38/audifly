@@ -449,6 +449,96 @@ class CommandPaletteDialog(QDialog):
             ),
             PaletteItem(
                 kind="command",
+                title="Audifly Connect — Telefonla Web Kumanda (QR)",
+                subtitle="QR kod okut; telefondan müziği, sesi ve listeleri yönet",
+                category="KOMUT",
+                icon_name="phone",
+                icon_color="#5CE1A6",
+                shortcut="",
+                callback=self._cmd_open_connect,
+                keywords="connect telefon mobil kumanda remote qr wifi web",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Kütüphane Parlatıcı — Başlık & Etiket Temizle",
+                subtitle="(Official Video), [4K], - Topic, VEVO gibi kirli ekleri tek tıkla temizle",
+                category="KOMUT",
+                icon_name="sparkle",
+                icon_color="#FFD166",
+                shortcut="",
+                callback=self._cmd_open_polisher,
+                keywords="parlatici temizle baslik etiket metadata official video topic vevo duzenle",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Şarkı Sözü Kartı Oluştur (PNG Paylaş)",
+                subtitle="Çalan şarkının kapağı ve sözlerinden paylaşılabilir estetik PNG kart üret",
+                category="KOMUT",
+                icon_name="lyrics",
+                icon_color="#FF85A1",
+                shortcut="",
+                callback=self._cmd_open_lyric_card,
+                keywords="soz karti lyric card png paylas story gorsel alinti",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Ses Modu: Slowed (0.84x + Sıcak Bas)",
+                subtitle="Çalan şarkıyı anında Slowed moduna al",
+                category="SES MODU",
+                icon_name="sliders",
+                icon_color="#B388FF",
+                shortcut="",
+                callback=lambda: self._cmd_sound_mode("slowed"),
+                keywords="slowed yavaslat reverb ses modu speed",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Ses Modu: Speed Up (1.18x + Enerjik)",
+                subtitle="Çalan şarkıyı anında Speed Up moduna al",
+                category="SES MODU",
+                icon_name="bolt",
+                icon_color="#00E5FF",
+                shortcut="",
+                callback=lambda: self._cmd_sound_mode("speed_up"),
+                keywords="speed up hizlandir sped up ses modu",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Ses Modu: Nightcore (1.25x + Parlak Tiz)",
+                subtitle="Yüksek tempolu Nightcore ses profili",
+                category="SES MODU",
+                icon_name="sparkle",
+                icon_color="#FF6B8A",
+                shortcut="",
+                callback=lambda: self._cmd_sound_mode("nightcore"),
+                keywords="nightcore anime hizli ses modu",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Ses Modu: Bass Boost (Derin Bas)",
+                subtitle="Orijinal hızda güçlü alt frekans ve derin bas",
+                category="SES MODU",
+                icon_name="sliders",
+                icon_color="#FF9F1C",
+                shortcut="",
+                callback=lambda: self._cmd_sound_mode("bass_boost"),
+                keywords="bass boost bas guclendir ses modu",
+            ),
+            PaletteItem(
+                kind="command",
+                title="Ses Modu: Gece Modu / Normal",
+                subtitle="Gece dostu kısık bas (veya Normal moda dön)",
+                category="SES MODU",
+                icon_name="sliders",
+                icon_color="#80ED99",
+                shortcut="",
+                callback=lambda: self._cmd_sound_mode(
+                    "normal" if self.playback.settings.get("sound_mode") == "night_mode" else "night_mode"
+                ),
+                keywords="gece modu night mode normal ses modu sifirla",
+            ),
+            PaletteItem(
+                kind="command",
                 title="Masaüstü Şeffaf Widget Modu (Rainmeter)",
                 subtitle="Ana pencereyi gizler; masaüstünde süzülen cam widget'ı açar",
                 category="KOMUT",
@@ -878,6 +968,26 @@ class CommandPaletteDialog(QDialog):
     def _cmd_toggle_desktop_widget(self):
         if self.app_window and hasattr(self.app_window, "_toggle_desktop_widget"):
             self.app_window._toggle_desktop_widget()
+
+    def _cmd_open_connect(self):
+        if self.app_window and hasattr(self.app_window, "open_connect_dialog"):
+            self.app_window.open_connect_dialog()
+
+    def _cmd_open_polisher(self):
+        if self.app_window and hasattr(self.app_window, "open_library_polisher"):
+            self.app_window.open_library_polisher()
+
+    def _cmd_open_lyric_card(self):
+        if self.app_window and hasattr(self.app_window, "open_lyric_card_dialog"):
+            self.app_window.open_lyric_card_dialog()
+
+    def _cmd_sound_mode(self, mode_key: str):
+        from mustiefly_qt.services.sound_modes import apply_sound_mode
+        mode = apply_sound_mode(self.playback, mode_key)
+        if self.app_window and hasattr(self.app_window, "save_settings"):
+            self.app_window.save_settings()
+        if self.app_window and hasattr(self.app_window, "show_success_message"):
+            self.app_window.show_success_message(f"{mode.icon} Ses Modu: {mode.label} ({mode.rate:.2f}x)")
 
     def _cmd_toggle_hud(self):
         if self.app_window and hasattr(self.app_window, "hud_overlay"):

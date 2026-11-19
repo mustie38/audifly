@@ -16,10 +16,13 @@ from PySide6.QtWidgets import (
 )
 
 from mustiefly_qt.helpers.constants import cover_color_for
+from mustiefly_qt.helpers.logging_setup import get_logger
 from mustiefly_qt.helpers.radio import RADIO_GENRE_CHIPS, fetch_radio_stations
 from mustiefly_qt.services.playlist_store import PlaylistStore
 from mustiefly_qt.services.playback import PlaybackEngine
 from mustiefly_qt.widgets.player_icons import icon as vicon, icon_pixmap
+
+log = get_logger(__name__)
 
 
 class _StationRow(QWidget):

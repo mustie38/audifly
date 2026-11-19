@@ -101,6 +101,7 @@ class PlaybackEngine(QObject):
     radioStarted = Signal(dict)                        # radyo istasyonu çalmaya başladı
     radioStopped = Signal()
     vocalRemoverChanged = Signal(bool)                 # Vokal ayırma / enstrümantal durumu (True=vokal kısık)
+    soundModeChanged = Signal(str)                     # Aktif ses efekt modu (normal/slowed/speed_up/nightcore/bass_boost/night_mode)
     # YouTube çıkarımı bozuk görünüyor (yt-dlp güncellemesi gerekebilir) — hata metni
     extractionFailed = Signal(str)
     # Crossfade iç sinyalleri: worker thread'den GUI'ye güvenli geçiş
@@ -307,6 +308,23 @@ class PlaybackEngine(QObject):
                         p.set_equalizer(eq)
                     except Exception as e:
                         log.error("%s %s", "Ekolayzer uygulanamadı:", e)
+
+    def apply_equalizer_bands(self, bands: list[float], enabled: bool = True):
+        """10-bant float listesini VLC AudioEqualizer'a çevirip canlı uygular."""
+        self.settings["equalizer_bands"] = [float(b) for b in bands]
+        self.settings["equalizer_enabled"] = bool(enabled)
+        if not enabled:
+            self.equalizer = None
+            self._apply_active_equalizer()
+            return
+        try:
+            eq = vlc.AudioEqualizer()
+            for i, amp in enumerate(bands[:self.eq_band_count]):
+                eq.set_amp_at_index(float(amp), i)
+            self.equalizer = eq
+        except Exception as e:
+            log.warning("Ekolayzer bantları uygulanamadı: %s", e)
+        self._apply_active_equalizer()
 
     # --- Arama ---
     def search(self, query: str):

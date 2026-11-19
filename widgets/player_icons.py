@@ -585,6 +585,13 @@ def _draw_bolt(p: QPainter, color: str):
     p.drawPath(path)
 
 
+def _draw_phone(p: QPainter, color: str):
+    p.setPen(_stroke(color, 1.8))
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(QRectF(6.5, 2.5, 11.0, 19.0), 2.5, 2.5)
+    p.drawLine(QPointF(10.5, 18.2), QPointF(13.5, 18.2))
+
+
 _DRAWERS = {
     "play": _draw_play,
     "pause": _draw_pause,
@@ -629,4 +636,5 @@ _DRAWERS = {
     "heart_filled": lambda p, c: _draw_heart(p, c, True),
     "more": _draw_more,
     "plus": _draw_plus,
+    "phone": _draw_phone,
 }

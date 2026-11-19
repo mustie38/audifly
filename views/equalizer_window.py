@@ -93,6 +93,25 @@ class EqualizerWindow(QWidget):
         preset_layout.addWidget(reset_btn)
         root.addWidget(preset_row)
 
+        # --- Tek Tık Ses Efekt Modları (Slowed / Speed Up / Nightcore / Bass Boost / Gece) ---
+        from mustiefly_qt.services.sound_modes import SOUND_MODE_ORDER, SOUND_MODES
+        modes_row = QHBoxLayout()
+        modes_row.setSpacing(6)
+        self._mode_buttons: dict[str, QPushButton] = {}
+        active_mode = settings.get("sound_mode", "normal")
+        for key in SOUND_MODE_ORDER:
+            m = SOUND_MODES[key]
+            btn = QPushButton(f"{m.icon} {m.label}")
+            btn.setObjectName("Chip")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(m.description)
+            btn.setCheckable(True)
+            btn.setChecked(key == active_mode)
+            btn.clicked.connect(lambda _checked=False, k=key: self._apply_sound_mode(k))
+            modes_row.addWidget(btn)
+            self._mode_buttons[key] = btn
+        root.addLayout(modes_row)
+
         bands_row = QWidget()
         bands_layout = QHBoxLayout(bands_row)
         bands_layout.setContentsMargins(0, 0, 0, 0)
@@ -319,6 +338,26 @@ class EqualizerWindow(QWidget):
             self.vocal_check.blockSignals(True)
             self.vocal_check.setChecked(enabled)
             self.vocal_check.blockSignals(False)
+
+    def _apply_sound_mode(self, key: str):
+        from mustiefly_qt.services.sound_modes import apply_sound_mode
+        mode = apply_sound_mode(self.playback, key)
+        for k, btn in self._mode_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(k == mode.key)
+            btn.blockSignals(False)
+        self.enable_check.setText("✓ Aktif" if mode.key != "normal" else "Aktif")
+        self._sliders_updating = True
+        try:
+            self.band_values = [
+                float(mode.bands[i]) if i < len(mode.bands) else 0.0
+                for i in range(len(self.band_sliders))
+            ]
+            for i, slider in enumerate(self.band_sliders):
+                slider.setValue(int(round(self.band_values[i])))
+        finally:
+            self._sliders_updating = False
+        self._save_timer.start(400)
 
     def _flush_settings(self):
         self.save_fn()

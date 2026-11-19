@@ -640,6 +640,16 @@ class PlayerBar(QWidget):
             action.setChecked(abs(rate - self._rate) < 0.01)
             action.setData(rate)
 
+        from mustiefly_qt.services.sound_modes import SOUND_MODE_ORDER, SOUND_MODES, apply_sound_mode
+        active_sm = self.playback.settings.get("sound_mode", "normal")
+        sm_menu = menu.addMenu(f"🎧 Ses Modu ({SOUND_MODES.get(active_sm, SOUND_MODES['normal']).label})")
+        for key in SOUND_MODE_ORDER:
+            m = SOUND_MODES[key]
+            act = sm_menu.addAction(f"{m.icon} {m.label} ({m.rate:.2f}x)")
+            act.setCheckable(True)
+            act.setChecked(key == active_sm)
+            act.setData(key)
+
         radio_action = None
         if self.playback.current_song:
             menu.addSeparator()
@@ -669,6 +679,9 @@ class PlayerBar(QWidget):
         elif chosen.parent() is speed_menu:
             self._rate = float(data)
             self.playback.set_rate(self._rate)
+        elif chosen.parent() is sm_menu:
+            mode = apply_sound_mode(self.playback, str(data))
+            self._rate = mode.rate
 
     def _start_sleep(self, minutes: int):
         self.sleep_timer.start(minutes, fade=bool(self.playback.settings.get("sleep_fade_enabled", True)))

@@ -60,6 +60,13 @@ class LyricsWindow(QWidget):
         self.refresh_btn = QPushButton("🔄 Yenile")
         self.refresh_btn.clicked.connect(lambda: self.refresh(force=True))
         btn_row.addWidget(self.refresh_btn)
+
+        self.card_btn = QPushButton("🖼️ Söz Kartı")
+        self.card_btn.setToolTip("Seçtiğin sözlerden paylaşılabilir PNG kart oluştur")
+        self.card_btn.setCursor(Qt.PointingHandCursor)
+        self.card_btn.clicked.connect(self._open_lyric_card)
+        btn_row.addWidget(self.card_btn)
+
         self.mode_label = QLabel("")
         self.mode_label.setObjectName("Muted")
         btn_row.addWidget(self.mode_label)
@@ -190,6 +197,23 @@ class LyricsWindow(QWidget):
             self.lyricsReady.emit(song, token, result)     # queued → GUI thread
         except RuntimeError:
             pass
+
+    def _open_lyric_card(self):
+        from mustiefly_qt.views.lyric_card_dialog import LyricCardDialog
+        song = self._current_song()
+        if not song:
+            return
+        lines: list[str] = []
+        if self._lines:
+            lines = [txt for _, txt in self._lines if txt.strip()]
+        else:
+            plain = self.plain_label.text().strip()
+            if plain:
+                lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
+        thumbs = getattr(self.parent(), "thumbnails", None) if self.parent() is not None else None
+        dlg = LyricCardDialog(song, thumbnails=thumbs, initial_lines=lines, parent=self)
+        dlg.exec()
+        dlg.deleteLater()
 
     def _apply_result(self, song: dict, token: int, result):
         if token != self._token or song is not self._current_song():

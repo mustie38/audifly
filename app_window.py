@@ -132,6 +132,10 @@ class MainWindow(QMainWindow):
         # Ekran Üstü Mini Bildirim / HUD (Gaming Overlay)
         self.hud_overlay = HudOverlay(self.playback, self.thumbnails, self.settings, parent=self)
 
+        # Audifly Connect (QR kodlu yerel telefon web kumandası)
+        from mustiefly_qt.services.connect_server import AudiflyConnectService
+        self.connect_server = AudiflyConnectService(self.store, self.playback, self.thumbnails, parent=self)
+
         # --- Merkezi düzen ---
         central = QWidget()
         self.setCentralWidget(central)
@@ -245,6 +249,7 @@ class MainWindow(QMainWindow):
         self.top_bar.statsRequested.connect(self.show_stats_view)
         self.top_bar.wrappedRequested.connect(self.show_wrapped_view)
         self.top_bar.paletteRequested.connect(self.open_command_palette)
+        self.top_bar.connectRequested.connect(self.open_connect_dialog)
         self.settings_view.diagnosticsRequested.connect(self.open_diagnostics_dialog)
         self.library_view.addSongRequested.connect(self._open_search_dialog)
         self.store.statusMessage.connect(self._on_status_message)
@@ -676,6 +681,15 @@ class MainWindow(QMainWindow):
         duplicates_action = tools_menu.addAction("🧹 Yinelenen Şarkı Bulucu…")
         duplicates_action.triggered.connect(self._open_duplicate_finder)
 
+        connect_action = tools_menu.addAction("📱 Audifly Connect (Telefon Kumandası)…")
+        connect_action.triggered.connect(self.open_connect_dialog)
+
+        polisher_action = tools_menu.addAction("✨ Kütüphane Parlatıcı (Başlık & Etiket Temizle)…")
+        polisher_action.triggered.connect(self.open_library_polisher)
+
+        card_action = tools_menu.addAction("🖼️ Şarkı Sözü Kartı Oluştur (PNG)…")
+        card_action.triggered.connect(self.open_lyric_card_dialog)
+
         undo_action = tools_menu.addAction("↩ Geri Al")
         undo_action.setShortcut("Ctrl+Z")
         undo_action.triggered.connect(self._perform_undo)
@@ -685,6 +699,15 @@ class MainWindow(QMainWindow):
         eq_menu_item = self._main_popup_menu.addMenu("Ses")
         equalizer_action = eq_menu_item.addAction("🎚 Ekolayzer…")
         equalizer_action.triggered.connect(self._toggle_equalizer_window)
+
+        from mustiefly_qt.services.sound_modes import SOUND_MODE_ORDER, SOUND_MODES, apply_sound_mode
+        sm_submenu = eq_menu_item.addMenu("🎧 Ses Efekt Modları")
+        for sm_key in SOUND_MODE_ORDER:
+            m = SOUND_MODES[sm_key]
+            sm_act = sm_submenu.addAction(f"{m.icon} {m.label} ({m.rate:.2f}x)")
+            sm_act.triggered.connect(
+                lambda _c=False, k=sm_key: (apply_sound_mode(self.playback, k), self.save_settings())
+            )
 
         vocal_action = eq_menu_item.addAction("🎙️ Vokal Ayırma / Enstrümantal Mod")
         vocal_action.setShortcut("V")
@@ -1136,6 +1159,38 @@ class MainWindow(QMainWindow):
         self._listen_dialog.raise_()
         self._listen_dialog.activateWindow()
 
+    def open_connect_dialog(self):
+        """Audifly Connect: QR kodlu telefon web kumanda diyaloğunu açar."""
+        from mustiefly_qt.views.connect_dialog import AudiflyConnectDialog
+        dialog = AudiflyConnectDialog(self.connect_server, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def open_library_polisher(self):
+        """✨ Kütüphane Parlatıcı: kirli YouTube başlık & sanatçı etiketlerini temizler."""
+        from mustiefly_qt.views.library_polisher_dialog import LibraryPolisherDialog
+        dialog = LibraryPolisherDialog(self.store, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def open_lyric_card_dialog(self, initial_lines: list[str] | None = None):
+        """🖼️ Paylaşılabilir Şarkı Sözü Kartı (PNG) oluşturma diyaloğunu açar."""
+        song = self.playback.current_song
+        if not song:
+            self._on_status_message("Önce bir şarkı çal — söz kartı çalan şarkı için oluşturulur.", "info")
+            return
+        if initial_lines is None and self._lyrics_window is not None:
+            if getattr(self._lyrics_window, "_lines", None):
+                initial_lines = [txt for _, txt in self._lyrics_window._lines if txt.strip()]
+            elif hasattr(self._lyrics_window, "plain_label"):
+                plain = self._lyrics_window.plain_label.text().strip()
+                if plain:
+                    initial_lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
+        from mustiefly_qt.views.lyric_card_dialog import LyricCardDialog
+        dialog = LyricCardDialog(song, thumbnails=self.thumbnails, initial_lines=initial_lines, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
+
     def open_command_palette(self, initial_query: str = ""):
         """Spotlight & Hızlı Komut Paleti (Ctrl + K)."""
         from mustiefly_qt.views.command_palette import CommandPaletteDialog
@@ -1445,6 +1500,8 @@ class MainWindow(QMainWindow):
                 QSystemTrayIcon.Information, 2000)
             return
         self._really_quit = True
+        if hasattr(self, "connect_server") and self.connect_server is not None:
+            self.connect_server.stop()
         self.listen.shutdown()
         self.discord_rpc.close()
         if self._desktop_widget is not None:
