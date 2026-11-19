@@ -178,7 +178,14 @@ def test_player_bar_startup_volume_and_repeat_sync(library_store, monkeypatch):
 
 
 def test_relay_server_nan_infinity_and_ipv4_mapped_ipv6():
-    from relay_server import server as relay
+    import importlib.util
+    from pathlib import Path
+
+    server_path = Path(__file__).resolve().parents[1] / "relay_server" / "server.py"
+    spec = importlib.util.spec_from_file_location("_audifly_relay_server_test", server_path)
+    relay = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(relay)
 
     assert relay._clean_ms(float("nan"), 5000) == 0
     assert relay._clean_ms(float("inf"), 5000) == 0
