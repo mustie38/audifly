@@ -155,7 +155,7 @@ class NowPlayingPanel(QWidget):
         self.up_next_card = QFrame()
         self.up_next_card.setObjectName("UpNextCard")
         self.up_next_card.setCursor(Qt.PointingHandCursor)
-        self.up_next_card.mousePressEvent = lambda _: self.playback.play_next()
+        self.up_next_card.mousePressEvent = self._on_up_next_clicked
         up_next_layout = QVBoxLayout(self.up_next_card)
         up_next_layout.setContentsMargins(12, 10, 12, 10)
         up_next_layout.setSpacing(4)
@@ -263,6 +263,8 @@ class NowPlayingPanel(QWidget):
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.songLoading.connect(self._on_song_loading)
         self.playback.playStateChanged.connect(self._on_play_state)
+        self.store.queueChanged.connect(self._update_up_next)
+        self.store.playlistsChanged.connect(self._update_up_next)
         self.playback.playError.connect(self._on_play_error)
         self.playback.positionChanged.connect(self._on_position)
         self.playback.radioStarted.connect(self._on_radio_started)
@@ -337,15 +339,22 @@ class NowPlayingPanel(QWidget):
             self.visualizer.set_accent(base)
         self._update_up_next()
 
+    def _on_up_next_clicked(self, event):
+        if event.button() == Qt.LeftButton:
+            self.playback.play_next()
+
     def _update_up_next(self):
-        pl = getattr(self, "_playlist_name", None) or self.playback.playing_playlist
-        idx = getattr(self, "_index", -1)
-        if idx == -1:
-            idx = self.playback.current_index
-        songs = self.store.playlists.get(pl, []) if pl else []
         next_song = None
-        if 0 <= idx + 1 < len(songs):
-            next_song = songs[idx + 1]
+        if self.store.manual_queue:
+            next_song = self.store.manual_queue[0][2]
+        else:
+            pl = getattr(self, "_playlist_name", None) or self.playback.playing_playlist
+            idx = getattr(self, "_index", -1)
+            if idx == -1:
+                idx = self.playback.current_index
+            songs = self.store.playlists.get(pl, []) if pl else []
+            if 0 <= idx + 1 < len(songs):
+                next_song = songs[idx + 1]
 
         if next_song:
             t = next_song.get("title", "")
@@ -361,6 +370,7 @@ class NowPlayingPanel(QWidget):
     def _on_radio_started(self, station: dict):
         """Canlı radyo modu: albüm kapağı yok, plak dönmesin, süre çubuğu yok."""
         self._playlist_name = None
+        self._current_artist = ""
         name = station.get("name", "?")
         self.title_label.setText(name[:40] + ("..." if len(name) > 40 else ""))
         country = f" • {station['country']}" if station.get("country") else ""
@@ -373,6 +383,7 @@ class NowPlayingPanel(QWidget):
         self.artist_profile_btn.setVisible(False)
 
     def _on_radio_stopped(self):
+        self._current_artist = ""
         self.like_btn.setVisible(True)
         self.title_label.setText("Henüz şarkı seçilmedi")
         self.artist_label.setText("")

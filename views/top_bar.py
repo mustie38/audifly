@@ -46,10 +46,11 @@ class TopBar(QFrame):
         self.search_edit.setObjectName("TopSearch")
         self.search_edit.setPlaceholderText("⚡  Ara veya komut çalıştır…")
         self.search_edit.setToolTip("Spotlight & Hızlı Komut Paleti (Ctrl + K)")
-        self.search_edit.setFixedWidth(360)
+        self.search_edit.setMinimumWidth(180)
+        self.search_edit.setMaximumWidth(360)
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.returnPressed.connect(self._emit_search)
-        row.addWidget(self.search_edit)
+        row.addWidget(self.search_edit, 1)
 
         self.kbd_badge = QPushButton("Ctrl + K")
         self.kbd_badge.setCursor(Qt.PointingHandCursor)

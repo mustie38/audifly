@@ -196,14 +196,14 @@ class HudOverlay(QWidget):
     def _on_song_started(self, playlist_name, index, song, is_offline):
         self.show_song(song)
 
-    def show_song(self, song: dict | None):
+    def show_song(self, song: dict | None, *, force: bool = False):
         if not song or not isinstance(song, dict):
             return
-        if not self.settings.get("hud_overlay_enabled", True):
+        if not force and not self.settings.get("hud_overlay_enabled", True):
             return
 
         # Sadece uygulama arka plandayken göster ayarı açıksa ve uygulama aktifse atla
-        if self.settings.get("hud_overlay_only_background", True) and self._is_app_active():
+        if not force and self.settings.get("hud_overlay_only_background", True) and self._is_app_active():
             return
 
         self._current_song = song

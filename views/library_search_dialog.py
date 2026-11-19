@@ -89,8 +89,14 @@ class LibrarySearchDialog(QDialog):
                     matches.append((pl_name, idx, s))
         matches.sort(key=lambda t: t[2].get("title", "").lower())
 
-        self.status_label.setText(f"{len(matches)} sonuç bulundu.")
-        for pl_name, idx, song in matches:
+        max_rows = 120
+        shown = matches[:max_rows]
+        if len(matches) > max_rows:
+            self.status_label.setText(f"{len(matches)} sonuç bulundu (ilk {max_rows} gösteriliyor).")
+        else:
+            self.status_label.setText(f"{len(matches)} sonuç bulundu.")
+        self._thumb_rows: dict[str, list[_SearchRow]] = {}
+        for pl_name, idx, song in shown:
             item = QListWidgetItem()
             row = _SearchRow(self.store, self.playback, self.thumbnails,
                              pl_name, idx, song)
@@ -101,13 +107,20 @@ class LibrarySearchDialog(QDialog):
             item.setSizeHint(row.sizeHint())
             self.results_list.addItem(item)
             self.results_list.setItemWidget(item, row)
+            key = song.get("webpage_url")
+            if key:
+                self._thumb_rows.setdefault(key, []).append(row)
             self._request_thumbnail(row, song)
 
     def _on_thumbnail_ready(self, key: str):
-        for i in range(self.results_list.count()):
-            row = self.results_list.itemWidget(self.results_list.item(i))
-            if isinstance(row, _SearchRow) and row.song.get("webpage_url") == key:
+        rows = getattr(self, "_thumb_rows", {}).get(key)
+        if not rows:
+            return
+        for row in rows:
+            try:
                 self._request_thumbnail(row, row.song)
+            except RuntimeError:
+                pass
 
     def _request_thumbnail(self, row, song):
         if self.thumbnails is None:
@@ -193,5 +206,8 @@ class _SearchRow(QWidget):
             btn.setText("♥" if songs[self.index].get("liked") else "♡")
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
-        self.playRequested.emit(self.index)
+        if event.button() == Qt.LeftButton:
+            self.playRequested.emit(self.index)
+            event.accept()
+            return
         super().mouseDoubleClickEvent(event)

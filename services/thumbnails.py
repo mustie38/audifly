@@ -163,10 +163,8 @@ class ThumbnailService(QObject):
         url = song.get("thumbnail")
         if not key or not url or self._is_failed(key):
             return
-        if key in self._pil_cache:
-            return
         with self._lock:
-            if key in self._fetching:
+            if key in self._pil_cache or key in self._fetching:
                 return
             self._fetching.add(key)
             self._submit(key, url)

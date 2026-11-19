@@ -102,14 +102,9 @@ class QuickAccessCard(QFrame):
         self._hover_play.setIconSize(QSize(16, 16))
         self._hover_play.setCursor(Qt.PointingHandCursor)
         self._hover_play.setStyleSheet(
-            "QPushButton { background: #a980f9; border: none; border-radius: 19px; }"
+            "QPushButton { background: #a980f9; border: 1px solid rgba(255,255,255,0.25); border-radius: 19px; }"
             "QPushButton:hover { background: #b995ff; }"
         )
-        sh = QGraphicsDropShadowEffect(self._hover_play)
-        sh.setBlurRadius(14)
-        sh.setOffset(0, 3)
-        sh.setColor(QColor(0, 0, 0, 150))
-        self._hover_play.setGraphicsEffect(sh)
         self._hover_play.clicked.connect(self.clicked.emit)
         self._hover_play.hide()
 
@@ -160,6 +155,7 @@ class HomeView(QWidget):
     playShuffledRequested = Signal()
     startRadioRequested = Signal(dict)
     artistRequested = Signal(str)
+    roomQueueRequested = Signal(dict)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails=None, username: str = "", parent=None):
@@ -384,6 +380,7 @@ class HomeView(QWidget):
                 lambda i, pl=pl_name, s=song: self.store.add_to_queue_next(pl, i, s))
             row.startRadioRequested.connect(self.startRadioRequested.emit)
             row.artistRequested.connect(self.artistRequested.emit)
+            row.addToRoomQueueRequested.connect(self.roomQueueRequested.emit)
             # ⋮ menüsündeki öğeler de çalışsın (sessiz no-op olmasın):
             row.removeRequested.connect(
                 lambda i, pl=pl_name: self.store.remove_song(pl, i))

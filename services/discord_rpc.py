@@ -32,6 +32,7 @@ class DiscordRPCService(QObject):
         # rpc.update() Discord'a senkron IPC yapar; GUI thread'inde çağrılınca
         # şarkı değişiminde arayüz takılıyordu. Tek işçi thread + son-değer-kazanır.
         self._presence_lock = threading.Lock()
+        self._rpc_lock = threading.Lock()
         self._presence_pending: dict | None = None
         self._presence_worker_running = False
 
@@ -50,13 +51,20 @@ class DiscordRPCService(QObject):
         if self._closed or Presence is None or not self.client_id:
             return
         try:
-            self.rpc = Presence(self.client_id)
-            self.rpc.connect()
-            if self._closed:
-                self.rpc.close()
-                return
-            self.is_connected = True
+            rpc = Presence(self.client_id)
+            rpc.connect()
+            with self._rpc_lock:
+                if self._closed:
+                    try:
+                        rpc.close()
+                    except Exception:
+                        pass
+                    return
+                self.rpc = rpc
+                self.is_connected = True
             log.info("Discord RPC başarıyla bağlandı.")
+            if self.current_song is not None:
+                self._update_presence()
         except Exception as e:
             log.error("%s %s", "Discord RPC bağlanamadı (Discord kapalı olabilir):", e)
             self.is_connected = False
@@ -124,17 +132,22 @@ class DiscordRPCService(QObject):
                     self._presence_worker_running = False
                     return
             try:
-                self.rpc.update(**payload)
+                with self._rpc_lock:
+                    if self._closed or not self.is_connected or self.rpc is None:
+                        continue
+                    self.rpc.update(**payload)
             except Exception as e:
                 log.error("%s %s", "Discord RPC güncellenemedi:", e)
 
     def close(self):
         self._closed = True
-        if self.is_connected and self.rpc:
-            try:
-                self.rpc.clear()
-                self.rpc.close()
-            except Exception:
-                pass
-
-        self.is_connected = False
+        with self._rpc_lock:
+            rpc, self.rpc = self.rpc, None
+            was_connected = self.is_connected
+            self.is_connected = False
+            if was_connected and rpc is not None:
+                try:
+                    rpc.clear()
+                    rpc.close()
+                except Exception:
+                    pass

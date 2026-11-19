@@ -58,7 +58,7 @@ class _QueueList(QListWidget):
                 target_row += 1
         if target_row > source_row:
             target_row -= 1
-        super().dropEvent(event)
+        event.accept()
         if 0 <= source_row < self.count() and 0 <= target_row < self.count() and source_row != target_row:
             self.reordered.emit(source_row, target_row)
 
@@ -479,15 +479,18 @@ class LibraryView(QWidget):
         # Buton geri bildirimi: indirme arka planda sürerken kilitli kalır
         btn = self.ph_download_btn
         btn.setEnabled(False)
-        btn.setText("⏬")
+        btn.setText("⏬ İndiriliyor…")
         btn.setToolTip(f"{len(pending)} şarkı indiriliyor…")
-        QTimer.singleShot(2500, lambda: (
-            btn.setEnabled(True), btn.setText("⬇"),
-            btn.setToolTip("Tümünü çevrimdışı indir")))
+        QTimer.singleShot(2500, self, self._reset_download_btn)
         for i in pending:
             self.playback.download_song_for_offline(name, i)
         self.store.statusMessage.emit(
             f"⬇ {len(pending)} şarkı çevrimdışı indirme kuyruğuna alındı.", "info")
+
+    def _reset_download_btn(self):
+        self.ph_download_btn.setEnabled(True)
+        self.ph_download_btn.setText("⬇ İndir")
+        self.ph_download_btn.setToolTip("Tümünü çevrimdışı indir")
 
     def _refresh_playlist_header(self):
         name = self.store.active_playlist
@@ -638,10 +641,21 @@ class LibraryView(QWidget):
     _ROW_BUFFER = 12       # görünür alanın üstünde/altında önceden kurulan satır sayısı
     _ROW_KEEP = 150        # görünür alandan bu kadar uzaktaki satırların widget'ı serbest bırakılır
 
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if getattr(self, "_dirty", False):
+            self._dirty = False
+            self._run_scheduled_render()
+
     def _schedule_render(self):
         """Store sinyalleri için: kısa süre içindeki tüm tetiklemeleri tek çizime indirir
-        ve kaydırma konumunu korur (beğenince liste başa atlamaz)."""
+        ve kaydırma konumunu korur (beğenince liste başa atlamaz). Ana pencere açıkken
+        bu sekme gizliyse çizimi görünür olana kadar erteler."""
         self._keep_scroll_on_render = True
+        win = self.window()
+        if win is not None and win is not self and win.isVisible() and not self.isVisible():
+            self._dirty = True
+            return
         self._render_timer.start()
 
     def _run_scheduled_render(self):
@@ -666,8 +680,10 @@ class LibraryView(QWidget):
             self.list_widget.setUpdatesEnabled(True)
 
     def _render_inner(self):
+        self._dirty = False
         self.list_widget.clear()
         self._live_rows.clear()
+        self._thumb_rows: dict[str, set[int]] = {}
         if self._mode == "playlist":
             self._refresh_playlist_header()
         if self._mode == "queue":
@@ -902,6 +918,7 @@ class LibraryView(QWidget):
         if pp is not None and 0 <= self.playback.current_index < len(self.store.playlists.get(pp, [])):
             now_song = self.store.playlists[pp][self.playback.current_index]
             banner_item = QListWidgetItem()
+            banner_item.setFlags(banner_item.flags() & ~(Qt.ItemIsDragEnabled | Qt.ItemIsSelectable))
             banner = QLabel(f"ŞİMDİ ÇALIYOR  •  {now_song.get('title', '')}")
             banner.setStyleSheet(
                 "color: #1DB954; font-weight: bold; padding: 8px 12px;"
@@ -913,6 +930,7 @@ class LibraryView(QWidget):
 
         if not self.store.manual_queue:
             hint = QListWidgetItem()
+            hint.setFlags(hint.flags() & ~(Qt.ItemIsDragEnabled | Qt.ItemIsSelectable))
             label = QLabel("Kuyruk boş. Bir şarkının ⋮ menüsünden \"Kuyruğa Ekle\" diyebilirsin.")
             label.setObjectName("Muted")
             label.setAlignment(Qt.AlignCenter)
@@ -965,10 +983,23 @@ class LibraryView(QWidget):
         pm = self.thumbnails.pixmap_for(song, 36)
         if pm is not None:
             row.set_thumbnail(pm)
+        else:
+            key = song.get("webpage_url")
+            if key:
+                thumb_rows = getattr(self, "_thumb_rows", None)
+                if thumb_rows is None:
+                    thumb_rows = self._thumb_rows = {}
+                thumb_rows.setdefault(key, set()).add(row.index)
 
     def _on_thumbnail_ready(self, key: str):
-        """Bir thumbnail indiğinde sadece eşleşen görünür satırları günceller —
-        tüm listeyi yeniden oluşturmaz (O(n²) davranışını önler)."""
+        """Bir thumbnail indiğinde sadece eşleşen görünür satırları O(1) günceller."""
+        if not self.isVisible():
+            return
+        thumb_rows = getattr(self, "_thumb_rows", None)
+        if thumb_rows is not None:
+            if key not in thumb_rows:
+                return
+            thumb_rows.pop(key, None)
         for i in list(self._live_rows):
             item = self.list_widget.item(i)
             row = self.list_widget.itemWidget(item) if item is not None else None

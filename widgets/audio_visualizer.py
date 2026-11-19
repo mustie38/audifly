@@ -126,19 +126,25 @@ class NeonAudioVisualizer(QWidget):
         if hasattr(self.playback, "playStateChanged"):
             self.playback.playStateChanged.connect(self.set_playing)
         if hasattr(self.playback, "songStarted"):
-            self.playback.songStarted.connect(lambda *_: self._on_song_changed())
+            self.playback.songStarted.connect(self._on_song_changed)
         if hasattr(self.playback, "radioStarted"):
-            self.playback.radioStarted.connect(lambda *_: self.set_playing(True))
+            self.playback.radioStarted.connect(self._on_radio_started)
         if hasattr(self.playback, "radioStopped"):
-            self.playback.radioStopped.connect(lambda *_: self.set_playing(False))
+            self.playback.radioStopped.connect(self._on_radio_stopped)
         # Başlangıç durumu
         is_pl = bool(getattr(self.playback, "is_playing", False))
         self.set_playing(is_pl)
 
-    def _on_song_changed(self):
+    def _on_song_changed(self, *_args):
         # Yeni şarkıda faz ve ritim tohumunu tazele
         self._beat_energy = 0.85
         self.set_playing(True)
+
+    def _on_radio_started(self, *_args):
+        self.set_playing(True)
+
+    def _on_radio_stopped(self, *_args):
+        self.set_playing(False)
 
     @property
     def mode(self) -> str:
@@ -586,23 +592,30 @@ class NeonAudioVisualizer(QWidget):
         painter.setBrush(QBrush(radial))
         painter.drawEllipse(QPointF(cx, cy), glow_r, glow_r)
 
-        # Dairesel frekans ışınları
+        # Dairesel frekans ışınları (trigonometrik birim çember önbellekli)
         n = self._bar_count
-        for i in range(n):
-            angle = (2.0 * math.pi * i) / n - math.pi * 0.5
-            ratio = i / max(1, n - 1)
+        circle = getattr(self, "_unit_circle", None)
+        if circle is None or len(circle) != n:
+            circle = [
+                (
+                    math.cos((2.0 * math.pi * i) / n - math.pi * 0.5),
+                    math.sin((2.0 * math.pi * i) / n - math.pi * 0.5),
+                    i / max(1, n - 1),
+                )
+                for i in range(n)
+            ]
+            self._unit_circle = circle
+        pen_w = max(2.0, min(4.0, (2.0 * math.pi * base_r / n) * 0.6))
+        pen = QPen()
+        pen.setWidthF(pen_w)
+        pen.setCapStyle(Qt.RoundCap)
+        for i, (ca, sa, ratio) in enumerate(circle):
             bar_len = max(2.5, self._levels[i] * max_bar_len)
-
-            x1 = cx + math.cos(angle) * base_r
-            y1 = cy + math.sin(angle) * base_r
-            x2 = cx + math.cos(angle) * (base_r + bar_len)
-            y2 = cy + math.sin(angle) * (base_r + bar_len)
-
-            col = self._color_at(ratio, 240)
-            pen = QPen(col, max(2.0, min(4.0, (2.0 * math.pi * base_r / n) * 0.6)))
-            pen.setCapStyle(Qt.RoundCap)
+            r2 = base_r + bar_len
+            pen.setColor(self._color_at(ratio, 240))
             painter.setPen(pen)
-            painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            painter.drawLine(QPointF(cx + ca * base_r, cy + sa * base_r),
+                             QPointF(cx + ca * r2, cy + sa * r2))
 
         # İç neon çekirdek halkası
         ring_pen = QPen(QColor(255, 255, 255, 210), 1.8)

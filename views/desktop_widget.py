@@ -85,11 +85,6 @@ class DesktopWidget(QWidget):
 
         self.card = QFrame()
         self.card.setObjectName("DesktopWidgetCard")
-        shadow = QGraphicsDropShadowEffect(self.card)
-        shadow.setBlurRadius(22)
-        shadow.setOffset(0, 6)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        self.card.setGraphicsEffect(shadow)
 
         card_layout = QHBoxLayout(self.card)
         card_layout.setContentsMargins(12, 10, 12, 10)
@@ -224,6 +219,12 @@ class DesktopWidget(QWidget):
             "QProgressBar { background: rgba(255, 255, 255, 0.10); border: none; border-radius: 1px; }"
             f"QProgressBar::chunk {{ background: {self._accent}; border-radius: 1px; }}"
         )
+        if hasattr(self, "play_btn"):
+            radius = self.play_btn.width() // 2 or 16
+            self.play_btn.setStyleSheet(
+                f"QPushButton {{ background: {self._accent}; border: none; border-radius: {radius}px; }}"
+                f"QPushButton:hover {{ background: {self._accent}; border: 1px solid rgba(255,255,255,0.45); }}"
+            )
 
     def _wire_signals(self):
         self.playback.songStarted.connect(self._on_song_started)
@@ -297,13 +298,27 @@ class DesktopWidget(QWidget):
 
     def _on_radio_started(self, station: dict):
         name = station.get("name", "Canlı Radyo")
+        self._current_key = None
         self.title_label.setText(name[:26] + ("…" if len(name) > 26 else ""))
         self.artist_label.setText("📻 Canlı Radyo")
+        self.cover_label.setPixmap(QPixmap())
+        self.cover_label.setText("📻")
+        self.cover_label.setStyleSheet(
+            f"background: {cover_color_for(name)}; border-radius: {COVER_RADIUS}px; "
+            "font-size: 22px; color: white;"
+        )
         self.progress.setValue(0)
 
     def _on_radio_stopped(self):
+        self._current_key = None
         self.title_label.setText("Müzik Çalmıyor")
         self.artist_label.setText("Audifly Masaüstü Widget")
+        self.cover_label.setPixmap(QPixmap())
+        self.cover_label.setText("♪")
+        self.cover_label.setStyleSheet(
+            f"background: {self._accent}; border-radius: {COVER_RADIUS}px; "
+            "font-size: 24px; color: white;"
+        )
         self.progress.setValue(0)
 
     # --- Hover ve Sürükleme ---

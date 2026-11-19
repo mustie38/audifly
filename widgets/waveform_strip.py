@@ -109,24 +109,29 @@ class WaveformStrip(QWidget):
     def paintEvent(self, event):  # noqa: N802
         if not self._enabled:
             return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(Qt.NoPen)
         w = float(self.width() or 1400)
-        bar_w = max(w / BAR_COUNT, 2.0)
         h = float(self.height())
+        if h <= 0:
+            return
+        painter = QPainter(self)
+        painter.setPen(Qt.NoPen)
+        bar_w = max(w / BAR_COUNT, 2.0)
 
-        grad = QLinearGradient(0, 0, w, 0)
-        c1 = QColor(self._c1.red(), self._c1.green(), self._c1.blue(), 195)
-        c2 = QColor(self._c2.red(), self._c2.green(), self._c2.blue(), 215)
-        grad.setColorAt(0.0, c1)
-        grad.setColorAt(0.5, c2)
-        grad.setColorAt(1.0, c1)
-        painter.setBrush(QBrush(grad))
+        brush_key = (int(w), self._c1.rgba(), self._c2.rgba())
+        if getattr(self, "_cached_brush_key", None) != brush_key:
+            grad = QLinearGradient(0, 0, w, 0)
+            c1 = QColor(self._c1.red(), self._c1.green(), self._c1.blue(), 195)
+            c2 = QColor(self._c2.red(), self._c2.green(), self._c2.blue(), 215)
+            grad.setColorAt(0.0, c1)
+            grad.setColorAt(0.5, c2)
+            grad.setColorAt(1.0, c1)
+            self._cached_brush = QBrush(grad)
+            self._cached_brush_key = brush_key
+        painter.setBrush(self._cached_brush)
 
         draw_w = max(bar_w - 2.0, 1.2)
         for i, bh in enumerate(self._heights):
             x = i * bar_w
             bh_clamped = max(1.0, min(h, float(bh)))
-            painter.drawRoundedRect(QRectF(x, h - bh_clamped, draw_w, bh_clamped), 1.2, 1.2)
+            painter.drawRect(QRectF(x, h - bh_clamped, draw_w, bh_clamped))
         painter.end()

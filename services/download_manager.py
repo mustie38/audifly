@@ -92,7 +92,8 @@ class DownloadManager(QObject):
             item = {
                 "key": url, "playlist": playlist_name, "index": index,
                 "song": song, "state": QUEUED, "progress": 0.0,
-                "error": "", "path": None, "cancel": threading.Event(),
+                "error": "", "path": None, "preexisting": False,
+                "cancel": threading.Event(),
             }
             self.items[url] = item
             if url not in self._order:
@@ -196,7 +197,8 @@ class DownloadManager(QObject):
         song = item["song"]
         key = item["key"]
         cancel = item["cancel"]
-        item["progress"] = 0.0
+        with self._lock:
+            item["progress"] = 0.0
         self.itemChanged.emit(key)
         try:
             safe_title = "".join(
@@ -208,7 +210,8 @@ class DownloadManager(QObject):
             if cancel.is_set():
                 raise _Cancelled()
             if os.path.isfile(filepath) and os.path.getsize(filepath) > 0:
-                item["preexisting"] = True  # zaten diskteydi — "yeni indirildi" sayılmasın
+                with self._lock:
+                    item["preexisting"] = True  # zaten diskteydi — "yeni indirildi" sayılmasın
                 self._finishRequested.emit(item, filepath)
                 return
 
@@ -227,7 +230,8 @@ class DownloadManager(QObject):
                     now = _time.monotonic()
                     if now - last_t["v"] >= PROGRESS_EMIT_INTERVAL or frac >= 1.0:
                         last_t["v"] = now
-                        item["progress"] = min(frac, 1.0)
+                        with self._lock:
+                            item["progress"] = min(frac, 1.0)
                         self.itemChanged.emit(key)
 
             ydl_opts = yt_dlp_base_opts(
@@ -249,16 +253,20 @@ class DownloadManager(QObject):
                 raise RuntimeError("İndirme ses dosyası üretmedi; FFmpeg kurulumunu kontrol et.")
             self._finishRequested.emit(item, filepath)
         except (*_CANCEL_EXCS,):
-            item["state"] = CANCELLED
+            with self._lock:
+                item["state"] = CANCELLED
+                still_present = self.items.get(key) is item
             # Öğe bu arada listeden kaldırıldıysa (remove) satırı/bildirimi yok say
-            if self.items.get(key) is item and not self._stopping.is_set():
+            if still_present and not self._stopping.is_set():
                 self.itemChanged.emit(key)
                 self.downloadFailed.emit(song, "İptal edildi.")
         except Exception as e:
             log.error("%s %s", "İndirme hatası:", e)
-            item["state"] = CANCELLED if cancel.is_set() else FAILED
-            item["error"] = "İptal edildi." if cancel.is_set() else str(e)[:200]
-            if self.items.get(key) is item and not self._stopping.is_set():
+            with self._lock:
+                item["state"] = CANCELLED if cancel.is_set() else FAILED
+                item["error"] = "İptal edildi." if cancel.is_set() else str(e)[:200]
+                still_present = self.items.get(key) is item
+            if still_present and not self._stopping.is_set():
                 self.itemChanged.emit(key)
                 self.downloadFailed.emit(song, str(e))
 

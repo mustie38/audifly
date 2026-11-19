@@ -57,14 +57,9 @@ class PlaylistCard(QWidget):
         self._hover_play.setIconSize(QSize(15, 15))
         self._hover_play.setCursor(Qt.PointingHandCursor)
         self._hover_play.setStyleSheet(
-            "QPushButton { background: #a980f9; border: none; border-radius: 18px; }"
+            "QPushButton { background: #a980f9; border: 1px solid rgba(255,255,255,0.25); border-radius: 18px; }"
             "QPushButton:hover { background: #b995ff; }"
         )
-        sh = QGraphicsDropShadowEffect(self._hover_play)
-        sh.setBlurRadius(14)
-        sh.setOffset(0, 3)
-        sh.setColor(QColor(0, 0, 0, 150))
-        self._hover_play.setGraphicsEffect(sh)
         self._hover_play.clicked.connect(lambda: self.clicked.emit(self.name))
         self._hover_play.hide()
 
@@ -136,13 +131,12 @@ class LibraryGridView(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll, stretch=1)
 
-        self._dirty = False
+        self._dirty = True
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(60)
         self._refresh_timer.timeout.connect(self.refresh)
         self.store.playlistsChanged.connect(self._on_store_changed)
-        self.refresh()
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)

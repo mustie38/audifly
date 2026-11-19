@@ -51,14 +51,17 @@ class GlobalMediaKeys(QObject):
         if not KEYBOARD_AVAILABLE:
             log.warning("Global medya tuşları devre dışı: 'keyboard' paketi kurulu değil.")
             return
+        self.stop()
         try:
-            self._hotkeys = [
-                _keyboard_lib.add_hotkey('play/pause media', self._toggle.emit),
-                _keyboard_lib.add_hotkey('next track', self._next.emit),
-                _keyboard_lib.add_hotkey('previous track', self._previous.emit),
-            ]
+            for key_name, sig in (
+                ('play/pause media', self._toggle.emit),
+                ('next track', self._next.emit),
+                ('previous track', self._previous.emit),
+            ):
+                self._hotkeys.append(_keyboard_lib.add_hotkey(key_name, sig))
         except Exception as e:
-            # Bazı platformlarda yönetici izni gerekebilir — sorun değil.
+            # Bazı platformlarda yönetici izni gerekebilir — kısmi kayıtları temizle.
+            self.stop()
             log.error("%s %s", "Global medya tuşları ayarlanamadı:", e)
 
     def stop(self):

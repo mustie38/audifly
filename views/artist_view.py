@@ -360,12 +360,21 @@ class ArtistDetailView(QWidget):
         if not clean_name:
             return
 
-        if push_history and self._current_artist:
-            self._nav_stack.append((self._current_mode, self._current_artist, self._current_browse_id))
+        if push_history and (self._current_artist or self._current_browse_id):
+            if self._current_mode == "album":
+                self._nav_stack.append((
+                    "album", self._current_browse_id,
+                    getattr(self, "_current_album_title", ""), self._current_artist,
+                ))
+            else:
+                self._nav_stack.append(("artist", self._current_browse_id, self._current_artist, ""))
 
         self._current_mode = "artist"
         self._current_artist = clean_name
         self._current_browse_id = browse_id
+        self._artist_data = None
+        self._album_data = None
+        self._avatar_url = None
         self._token += 1
         token = self._token
 
@@ -422,7 +431,10 @@ class ArtistDetailView(QWidget):
         def worker():
             data = self._fetch_artist_remote(clean_name, browse_id)
             if token == self._token:
-                self.artistDataReady.emit(token, clean_name, data)
+                try:
+                    self.artistDataReady.emit(token, clean_name, data)
+                except RuntimeError:
+                    pass
 
         threading.Thread(target=worker, daemon=True, name="ArtistWorker").start()
 
@@ -800,7 +812,16 @@ class ArtistDetailView(QWidget):
         # Tıklanma olayı
         b_id = album.get("browseId")
         if b_id:
-            card.mousePressEvent = lambda e: self.show_album(b_id, album.get("title", ""), self._current_artist)
+            alb_title = album.get("title", "")
+
+            def _on_album_click(e, _bid=b_id, _t=alb_title, _card=card):
+                if e.button() == Qt.LeftButton:
+                    self.show_album(_bid, _t, self._current_artist)
+                    e.accept()
+                else:
+                    QFrame.mousePressEvent(_card, e)
+
+            card.mousePressEvent = _on_album_click
 
         return card
 
@@ -893,7 +914,15 @@ class ArtistDetailView(QWidget):
 
         # Tıklanma olayı
         b_id = artist_dict.get("browseId") or ""
-        card.mousePressEvent = lambda e: self.show_artist(name, b_id)
+
+        def _on_related_click(e, _name=name, _bid=b_id, _card=card):
+            if e.button() == Qt.LeftButton:
+                self.show_artist(_name, _bid)
+                e.accept()
+            else:
+                QFrame.mousePressEvent(_card, e)
+
+        card.mousePressEvent = _on_related_click
 
         return card
 
@@ -904,11 +933,23 @@ class ArtistDetailView(QWidget):
         if not browse_id:
             return
 
-        if push_history and self._current_artist:
-            self._nav_stack.append((self._current_mode, self._current_artist, self._current_browse_id))
+        if push_history and (self._current_artist or self._current_browse_id):
+            if self._current_mode == "album":
+                self._nav_stack.append((
+                    "album", self._current_browse_id,
+                    getattr(self, "_current_album_title", ""), self._current_artist,
+                ))
+            else:
+                self._nav_stack.append(("artist", self._current_browse_id, self._current_artist, ""))
 
         self._current_mode = "album"
         self._current_browse_id = browse_id
+        self._current_album_title = title or "Albüm"
+        if artist_name:
+            self._current_artist = artist_name
+        self._artist_data = None
+        self._album_data = None
+        self._avatar_url = None
         self._token += 1
         token = self._token
 
@@ -951,7 +992,10 @@ class ArtistDetailView(QWidget):
         def worker():
             data = self._fetch_album_remote(browse_id)
             if token == self._token:
-                self.albumDataReady.emit(token, data, artist_name)
+                try:
+                    self.albumDataReady.emit(token, data, artist_name)
+                except RuntimeError:
+                    pass
 
         threading.Thread(target=worker, daemon=True, name="AlbumWorker").start()
 
@@ -1034,11 +1078,11 @@ class ArtistDetailView(QWidget):
     # =========================================================================
     def _on_back_clicked(self):
         if self._nav_stack:
-            prev_mode, prev_id, extra = self._nav_stack.pop()
+            prev_mode, prev_bid, prev_title_or_artist, prev_artist = self._nav_stack.pop()
             if prev_mode == "artist":
-                self.show_artist(prev_id, extra, push_history=False)
+                self.show_artist(prev_title_or_artist, prev_bid, push_history=False)
             elif prev_mode == "album":
-                self.show_album(prev_id, extra, push_history=False)
+                self.show_album(prev_bid, prev_title_or_artist, prev_artist, push_history=False)
         else:
             self.backRequested.emit()
 
@@ -1100,7 +1144,13 @@ class ArtistDetailView(QWidget):
         self.store.statusMessage.emit(f"▶ {pl_name} başlatıldı ({len(all_songs)} şarkı).", "success")
 
     def _on_shuffle_all(self):
-        self.playback.shuffle_mode = True
+        if hasattr(self.playback, "enable_shuffle"):
+            self.playback.enable_shuffle()
+        elif not self.playback.shuffle_mode:
+            if hasattr(self.playback, "toggle_shuffle"):
+                self.playback.toggle_shuffle()
+            else:
+                self.playback.shuffle_mode = True
         self._on_play_all()
 
     def _on_start_radio(self):

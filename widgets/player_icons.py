@@ -29,9 +29,18 @@ def _stroke(color: str, width: float = 1.8) -> QPen:
     return pen
 
 
+_PIXMAP_CACHE: dict[tuple[str, int, str], QPixmap] = {}
+_ICON_CACHE: dict[tuple[str, int, str], QIcon] = {}
+_MAX_CACHE_ENTRIES = 512
+
+
 def icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
     """`kind` ikonunu `color` renginde, `size`x`size` piksellik (2x DPR ile
-    keskin görünen) bir QPixmap olarak döndürür."""
+    keskin görünen) bir QPixmap olarak döndürür (önbellekli)."""
+    key = (kind, size, color)
+    cached = _PIXMAP_CACHE.get(key)
+    if cached is not None:
+        return cached
     dpr = 2
     pm = QPixmap(size * dpr, size * dpr)
     pm.setDevicePixelRatio(dpr)
@@ -41,11 +50,21 @@ def icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
     if draw is not None:
         draw(p, color)
     p.end()
+    if len(_PIXMAP_CACHE) >= _MAX_CACHE_ENTRIES:
+        _PIXMAP_CACHE.clear()
+        _ICON_CACHE.clear()
+    _PIXMAP_CACHE[key] = pm
     return pm
 
 
 def icon(kind: str, size: int, color: str) -> QIcon:
-    return QIcon(icon_pixmap(kind, size, color))
+    key = (kind, size, color)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
+    ic = QIcon(icon_pixmap(kind, size, color))
+    _ICON_CACHE[key] = ic
+    return ic
 
 
 # ---------------------------------------------------------------------------

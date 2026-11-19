@@ -308,6 +308,7 @@ class MainWindow(QMainWindow):
         self.library_view.artistRequested.connect(self.open_artist_page)
         self.explore_view.artistRequested.connect(self.open_artist_page)
         self.home_view.artistRequested.connect(self.open_artist_page)
+        self.home_view.roomQueueRequested.connect(self.listen.add_to_room_queue)
         self.stats_view.artistRequested.connect(self.open_artist_page)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
@@ -465,7 +466,7 @@ class MainWindow(QMainWindow):
         tray_menu.addSeparator()
 
         show_action = tray_menu.addAction("Göster")
-        show_action.triggered.connect(self.showNormal)
+        show_action.triggered.connect(self._restore_from_tray)
 
         quit_action = tray_menu.addAction("Çıkış")
         quit_action.triggered.connect(self._quit_app)
@@ -474,11 +475,16 @@ class MainWindow(QMainWindow):
         self.tray_icon.show()
         self.tray_icon.activated.connect(self._on_tray_activated)
 
+    def _restore_from_tray(self):
+        if self._desktop_widget is not None and self._desktop_widget.isVisible():
+            self._desktop_widget.close()
+        self.showNormal()
+        self.activateWindow()
+
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.DoubleClick:
             if self.isHidden() or self.isMinimized():
-                self.showNormal()
-                self.activateWindow()
+                self._restore_from_tray()
             else:
                 self.hide()
 
@@ -716,23 +722,52 @@ class MainWindow(QMainWindow):
                 btn.style().unpolish(btn)
                 btn.style().polish(btn)
 
+    def _revert_unsaved_settings_preview(self):
+        old_theme = getattr(self, "_settings_was_theme", None)
+        if old_theme and self.settings.get("theme") != old_theme:
+            self.settings["theme"] = old_theme
+            self._reset_accent()
+            if self.settings.get("dynamic_theme", True):
+                self._apply_dynamic_accent()
+        old_lang = getattr(self, "_settings_was_lang", None)
+        if old_lang and self.settings.get("language") != old_lang:
+            self.settings["language"] = old_lang
+            apply_language(old_lang)
+
     def _switch_view(self, index: int):
         widget = self.view_stack.widget(index)
+        if (self.view_stack.currentWidget() is getattr(self, "settings_view", None)
+                and widget is not self.settings_view):
+            self._revert_unsaved_settings_preview()
         self.view_stack.setCurrentIndex(index)
         if widget is None:
             return
-        # Yumuşak geçiş: 150ms fade. Efekt bitince kaldırılır (kalıcı
-        # QGraphicsOpacityEffect render performansını düşürür).
-        # Yüzlerce satır widget'ı içeren şarkı listesinde efekt her karede tüm
-        # listeyi yeniden çizdirip takılma yaptığı için orada uygulanmaz.
-        if widget is getattr(self, "library_view", None):
-            return
+        prev_anim = getattr(self, "_fade_anim", None)
+        if prev_anim is not None:
+            self._fade_anim = None
+            try:
+                prev_anim.stop()
+            except RuntimeError:
+                pass
         old = getattr(self, "_fade_widget", None)
-        if old is not None and old is not widget:
+        if old is not None:
+            self._fade_widget = None
             try:
                 old.setGraphicsEffect(None)
             except RuntimeError:
                 pass  # widget bu arada yok edildi
+        # Yumuşak geçiş: 150ms fade. Ağır kaydırılabilir görünümlerde (şarkı listesi,
+        # keşfet, ana sayfa, sanatçı, ayarlar) tam ekran CPU compositing takılma yaptığı
+        # için anında geçiş yapılır.
+        heavy_views = {
+            getattr(self, "library_view", None),
+            getattr(self, "explore_view", None),
+            getattr(self, "home_view", None),
+            getattr(self, "artist_view", None),
+            getattr(self, "settings_view", None),
+        }
+        if widget in heavy_views:
+            return
         self._fade_widget = widget
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
@@ -740,9 +775,19 @@ class MainWindow(QMainWindow):
         anim.setDuration(150)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
-        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+        def _cleanup_fade():
+            if getattr(self, "_fade_anim", None) is anim:
+                self._fade_anim = None
+                self._fade_widget = None
+                try:
+                    widget.setGraphicsEffect(None)
+                except RuntimeError:
+                    pass
+
+        anim.finished.connect(_cleanup_fade)
         self._fade_anim = anim  # GC'ye yenilmesin
+        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def show_home_view(self):
         self._refresh_home_recent()
@@ -767,11 +812,13 @@ class MainWindow(QMainWindow):
         self._switch_view(3)
 
     def show_stats_view(self):
-        self.stats_view.refresh()
+        if getattr(self.stats_view, "_dirty", True):
+            self.stats_view.refresh()
         self._switch_view(4)
 
     def show_library_grid(self):
-        self.library_grid.refresh()
+        if getattr(self.library_grid, "_dirty", True):
+            self.library_grid.refresh()
         self._switch_view(5)
 
     def show_downloads_view(self):
@@ -948,6 +995,8 @@ class MainWindow(QMainWindow):
         if self._karaoke_view is not None and hasattr(self._karaoke_view, "visualizer"):
             self._karaoke_view.visualizer.set_mode(mode)
             self._karaoke_view._update_viz_btn_ui()
+        if self._desktop_widget is not None and hasattr(self._desktop_widget, "visualizer"):
+            self._desktop_widget.visualizer.set_mode(mode)
         self.save_settings()
 
     def _on_visualizer_palette_changed(self, palette: str):
@@ -956,6 +1005,8 @@ class MainWindow(QMainWindow):
             self.player_bar.waveform_strip.set_palette(palette)
         if self._karaoke_view is not None and hasattr(self._karaoke_view, "visualizer"):
             self._karaoke_view.visualizer.set_palette(palette)
+        if self._desktop_widget is not None and hasattr(self._desktop_widget, "visualizer"):
+            self._desktop_widget.visualizer.set_palette(palette)
         self.save_settings()
 
     def _apply_visualizer_settings(self):
@@ -973,6 +1024,9 @@ class MainWindow(QMainWindow):
             self._karaoke_view.visualizer.set_mode(mode if enabled else "off")
             self._karaoke_view.visualizer.set_palette(palette)
             self._karaoke_view._update_viz_btn_ui()
+        if self._desktop_widget is not None and hasattr(self._desktop_widget, "visualizer"):
+            self._desktop_widget.visualizer.set_mode(mode if enabled else "off")
+            self._desktop_widget.visualizer.set_palette(palette)
 
     def _reset_accent(self):
         """Dinamik tema kapatıldığında / tema değiştiğinde temel renge döner."""
@@ -1094,6 +1148,7 @@ class MainWindow(QMainWindow):
             initial_query=initial_query,
         )
         dialog.exec()
+        dialog.run_selected_callback()
         dialog.deleteLater()
 
     def _open_library_search_dialog(self):
@@ -1143,16 +1198,7 @@ class MainWindow(QMainWindow):
         """'Geri' ya da 'İptal' — kaydedilmemiş canlı tema/dil önizlemesini geri alır
         ve önceki sayfaya döner."""
         if revert:
-            old_theme = getattr(self, "_settings_was_theme", None)
-            if old_theme and self.settings.get("theme") != old_theme:
-                self.settings["theme"] = old_theme
-                self._reset_accent()
-                if self.settings.get("dynamic_theme", True):
-                    self._apply_dynamic_accent()
-            old_lang = getattr(self, "_settings_was_lang", None)
-            if old_lang and self.settings.get("language") != old_lang:
-                self.settings["language"] = old_lang
-                apply_language(old_lang)
+            self._revert_unsaved_settings_preview()
         self.view_stack.setCurrentIndex(self._pre_settings_index)
 
     def _on_settings_saved(self):
@@ -1429,4 +1475,9 @@ class MainWindow(QMainWindow):
             self.playback.shutdown()
         except Exception as e:
             log.error("%s %s", "VLC kaynakları serbest bırakılamadı:", e)
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.hide()
+            except Exception:
+                pass
         super().closeEvent(event)

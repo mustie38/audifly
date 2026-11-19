@@ -123,8 +123,15 @@ class HistoryStore:
             if len(ts) == 19 and ts[10] == "T":
                 if ts >= cutoff_iso:
                     out.append(e)
-            elif datetime.fromisoformat(ts) >= cutoff:
-                out.append(e)
+            else:
+                try:
+                    parsed = datetime.fromisoformat(ts)
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.astimezone().replace(tzinfo=None)
+                    if parsed >= cutoff:
+                        out.append(e)
+                except ValueError:
+                    pass
         return out
 
     def recent(self, limit: int = 50) -> list[dict]:

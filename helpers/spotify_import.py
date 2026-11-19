@@ -161,7 +161,8 @@ def _token_request(data, client_id, client_secret):
     return requests.post(SPOTIFY_TOKEN_URL, data={**data, "client_id": client_id}, timeout=10)
 
 
-def get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn):
+def get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn,
+                                  *, allow_interactive: bool = True):
     """Kullanıcı bağlamlı access token döner. client_secret ARTIK İSTEĞE BAĞLI:
     yetkilendirme her zaman PKCE (S256) ile yapılır. Kayıtlı refresh_token varsa
     tarayıcı açmadan yenilenir."""
@@ -176,6 +177,11 @@ def get_spotify_user_access_token(client_id, client_secret, settings, save_setti
                 settings["spotify_refresh_token"] = data["refresh_token"]
                 save_settings_fn()
             return data["access_token"]
+        if not allow_interactive:
+            raise SpotifyAuthError(resp.status_code, _spotify_error_detail(resp))
+
+    if not allow_interactive:
+        raise SpotifyAuthError(401, "Kayıtlı Spotify oturumu yok.")
 
     verifier, challenge = make_pkce_pair()
     code, error = spotify_authorize_interactive(client_id, code_challenge=challenge)
@@ -195,13 +201,18 @@ def get_spotify_user_access_token(client_id, client_secret, settings, save_setti
 
 
 def search_spotify_playlist(query, client_id, client_secret, settings, save_settings_fn,
-                             prefer_owner_id="spotify"):
+                             prefer_owner_id="spotify", *, allow_interactive: bool = True):
     """Bir playlist adını (örn. 'Top 50 - Türkiye') Spotify'da arar ve en
     uygun playlist'in ID'sini döner — kullanıcı ID'yi elle bulup yapıştırmak
     zorunda kalmasın diye. Sonuçlar arasında sahibi resmi 'Spotify' hesabı
     olan (örn. resmi Top 50/Viral 50 chart'ları) varsa o önceliklidir;
     yoksa ilk sonuca düşülür. (id, playlist_adı) döner; bulunamazsa (None, None)."""
-    token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
+    if allow_interactive:
+        token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
+    else:
+        token = get_spotify_user_access_token(
+            client_id, client_secret, settings, save_settings_fn, allow_interactive=False
+        )
     headers = {"Authorization": f"Bearer {token}"}
     resp = requests.get(
         f"{SPOTIFY_API_BASE}/search", headers=headers,
@@ -266,7 +277,8 @@ def fetch_spotify_playlist_embed(playlist_id: str, get=None) -> tuple[str, list[
     return playlist_name, queries
 
 
-def fetch_spotify_playlist(playlist_id, client_id, client_secret, settings, save_settings_fn):
+def fetch_spotify_playlist(playlist_id, client_id, client_secret, settings, save_settings_fn,
+                           *, allow_interactive: bool = True):
     """Bir Spotify playlist'inin adını ve tüm şarkılarını ('Sanatçı - Şarkı Adı'
     arama sorguları olarak) çeker.
 
@@ -279,7 +291,12 @@ def fetch_spotify_playlist(playlist_id, client_id, client_secret, settings, save
         return fetch_spotify_playlist_embed(playlist_id)
 
     try:
-        token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
+        if allow_interactive:
+            token = get_spotify_user_access_token(client_id, client_secret, settings, save_settings_fn)
+        else:
+            token = get_spotify_user_access_token(
+                client_id, client_secret, settings, save_settings_fn, allow_interactive=False
+            )
         headers = {"Authorization": f"Bearer {token}"}
 
         meta_resp = requests.get(
@@ -332,9 +349,11 @@ def export_playlist_m3u(songs, path) -> str | None:
             f.write("#EXTM3U\n")
             for s in songs:
                 dur = int(s.get('duration') or 0)
-                title = f"{s.get('uploader', '')} - {s.get('title', '')}".strip(" -")
+                raw_title = f"{s.get('uploader', '')} - {s.get('title', '')}".strip(" -")
+                title = raw_title.replace("\r", " ").replace("\n", " ")
+                url = str(s.get('webpage_url', '') or '').replace("\r", "").replace("\n", "")
                 f.write(f"#EXTINF:{dur},{title}\n")
-                f.write(f"{s.get('webpage_url', '')}\n")
+                f.write(f"{url}\n")
         return None
     except Exception as e:
         return str(e)

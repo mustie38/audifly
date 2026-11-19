@@ -222,6 +222,9 @@ class CommandPaletteDialog(QDialog):
         self._init_data()
 
         self._debounce = QTimer(self)
+        self._executed = False
+        self._selected_callback = None
+
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(DEBOUNCE_MS)
         self._debounce.timeout.connect(self._run_search)
@@ -337,7 +340,6 @@ class CommandPaletteDialog(QDialog):
             "}"
         )
         self.results_list.itemClicked.connect(lambda _: self._execute_current_item())
-        self.results_list.itemDoubleClicked.connect(lambda _: self._execute_current_item())
         container_layout.addWidget(self.results_list, stretch=1)
 
         # Alt Ayırıcı
@@ -838,12 +840,20 @@ class CommandPaletteDialog(QDialog):
         self.results_list.setCurrentRow(new_row)
 
     def _execute_current_item(self):
+        if self._executed:
+            return
         row = self.results_list.currentRow()
         if 0 <= row < len(self._current_matches):
+            self._executed = True
             item = self._current_matches[row]
+            self._selected_callback = item.callback
             self.accept()
-            if item.callback is not None:
-                QTimer.singleShot(20, item.callback)
+
+    def run_selected_callback(self):
+        """exec() kapandıktan sonra (deleteLater öncesi) seçilen eylemi çalıştırır."""
+        cb, self._selected_callback = self._selected_callback, None
+        if cb is not None:
+            cb()
 
     # --- AKSİYON METOTLARI ---
 
@@ -877,14 +887,15 @@ class CommandPaletteDialog(QDialog):
             else:
                 song = self.playback.current_song
                 if song:
-                    hud.show_song(song)
+                    hud.show_song(song, force=True)
                 elif hasattr(self.app_window, "show_success_message"):
                     self.app_window.show_success_message("HUD: Şu an çalan şarkı yok")
 
     def _cmd_start_radio(self):
         song = self.playback.current_song
-        if song and hasattr(self.playback, "start_radio_for"):
-            self.playback.start_radio_for(song)
+        song_radio = getattr(self.app_window, "song_radio", None) if self.app_window else None
+        if song and song_radio is not None and hasattr(song_radio, "start_radio_for_song"):
+            song_radio.start_radio_for_song(song)
             if self.app_window and hasattr(self.app_window, "show_success_message"):
                 self.app_window.show_success_message(f"📻 Şarkı Radyosu: {song.get('title', 'Parça')}")
         elif self.app_window and hasattr(self.app_window, "show_radio_view"):

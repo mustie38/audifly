@@ -234,13 +234,19 @@ class DiscoveryService:
         # denenmez, sessizce YouTube arama yedeği kullanılır.
         self.settings = settings or {}
         self.save_settings_fn = save_settings_fn
-        self.spotify_client_id = self.settings.get("spotify_client_id", "")
-        self.spotify_client_secret = self.settings.get("spotify_client_secret", "")
         # Playlist adı -> ID çözümlemeleri (örn. "Top 50 - Türkiye" -> "37i9...").
         # Bir kez arama yapılıp bulununca önbellekten taşınır, her refresh'te
         # tekrar Spotify'da aranmaz.
         self._resolved_playlist_ids: dict[str, str] = (
             (self.get_cached_data() or {}).get("spotify_playlist_ids", {}))
+
+    @property
+    def spotify_client_id(self) -> str:
+        return self.settings.get("spotify_client_id", "")
+
+    @property
+    def spotify_client_secret(self) -> str:
+        return self.settings.get("spotify_client_secret", "")
 
     # --- Önbellek G/Ç ---
     def get_cached_data(self) -> dict | None:
@@ -251,7 +257,7 @@ class DiscoveryService:
         try:
             with open(self._cache_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, dict) and data.get("version") != CACHE_VERSION:
+            if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
                 return None
             return data
         except Exception as e:
@@ -379,7 +385,8 @@ class DiscoveryService:
         try:
             playlist_id, _name = search_spotify_playlist(
                 query, self.spotify_client_id, self.spotify_client_secret,
-                self.settings, self.save_settings_fn or (lambda: None))
+                self.settings, self.save_settings_fn or (lambda: None),
+                allow_interactive=False)
         except Exception as e:
             log.error("%s %s", f"Spotify playlist aranamadı ('{query}'):", e)
             return None
@@ -400,7 +407,8 @@ class DiscoveryService:
         try:
             _, queries = fetch_spotify_playlist(
                 playlist_id, self.spotify_client_id, self.spotify_client_secret,
-                self.settings, self.save_settings_fn or (lambda: None))
+                self.settings, self.save_settings_fn or (lambda: None),
+                allow_interactive=False)
         except Exception as e:
             log.error("%s %s", f"Spotify playlist çekilemedi ({playlist_id}):", e)
             return []
@@ -539,7 +547,7 @@ class DiscoveryService:
         except Exception as e:
             log.error("%s %s", f"Keşfet sorgusu başarısız ('{query}'):", e)
             return []
-        tracks = [self._entry_to_track(e) for e in (info.get("entries") or [])]
+        tracks = [self._entry_to_track(e) for e in ((info or {}).get("entries") or [])]
         tracks = [t for t in tracks if t]
         return self._dedupe_and_clean(tracks)[:limit]
 
@@ -584,7 +592,7 @@ class DiscoveryService:
 
         seen = set()
         artists = []
-        for entry in (info.get("entries") or []):
+        for entry in ((info or {}).get("entries") or []):
             name = entry.get("uploader") or entry.get("channel")
             if not name or name in seen:
                 continue
@@ -668,7 +676,7 @@ class DiscoveryService:
             except Exception as e:
                 log.error("%s %s", f"Trend araması başarısız ('{q}'):", e)
                 continue
-            tracks.extend(self._entry_to_track(e) for e in (info.get("entries") or []))
+            tracks.extend(self._entry_to_track(e) for e in ((info or {}).get("entries") or []))
         return [t for t in tracks if t]
 
     # --- Veri dönüştürme ---

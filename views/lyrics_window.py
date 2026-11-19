@@ -186,7 +186,10 @@ class LyricsWindow(QWidget):
             )
         except Exception:                                 # söz hatası çalmayı/arayüzü bozmasın
             result = ly.LyricsResult(ly.ERROR)
-        self.lyricsReady.emit(song, token, result)         # queued → GUI thread
+        try:
+            self.lyricsReady.emit(song, token, result)     # queued → GUI thread
+        except RuntimeError:
+            pass
 
     def _apply_result(self, song: dict, token: int, result):
         if token != self._token or song is not self._current_song():

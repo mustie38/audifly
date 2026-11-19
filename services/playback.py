@@ -97,6 +97,7 @@ class PlaybackEngine(QObject):
     searchFailed = Signal(str)
     songEnded = Signal()
     shuffleChanged = Signal(bool)                      # karışık çal modu deşti
+    repeatChanged = Signal(str)                        # tekrar modu değişti (off | all | one)
     radioStarted = Signal(dict)                        # radyo istasyonu çalmaya başladı
     radioStopped = Signal()
     vocalRemoverChanged = Signal(bool)                 # Vokal ayırma / enstrümantal durumu (True=vokal kısık)
@@ -150,6 +151,7 @@ class PlaybackEngine(QObject):
         self._current_song_ref: dict | None = None
         self._current_url: str | None = None
         self._current_is_offline: bool = False
+        self._fallback_pos_ms: int | None = None
         # Birlikte Dinle: oda sahibi olmayan kişide şarkı bitince sıradakini oda sahibi seçer
         self.suppress_auto_advance = False
         # Birlikte Dinle ortak sırası: (playlist, index) döndürürse önce o çalınır
@@ -679,6 +681,7 @@ class PlaybackEngine(QObject):
     # --- Dinleme geçmişi oturumu ---
     def _begin_listen(self, song: dict, completed_previous: bool = False):
         self._end_listen(completed_previous)
+        self._fallback_pos_ms = None
         self._listen = {"song": dict(song), "seconds": 0.0, "last": time.monotonic()}
 
     def _tick_listen(self, is_playing: bool):
@@ -690,9 +693,12 @@ class PlaybackEngine(QObject):
         session["last"] = now
         if is_playing and 0 <= delta < 2.0 * UI_TICK_MS / 1000 + 1:   # uyku/askı sıçramalarını sayma
             session["seconds"] += delta
+            if self._fallback_pos_ms is not None:
+                self._fallback_pos_ms += int(delta * 1000)
 
     def _end_listen(self, completed: bool = False):
         session, self._listen = self._listen, None
+        self._fallback_pos_ms = None
         if session is None:
             return
         try:
@@ -705,11 +711,12 @@ class PlaybackEngine(QObject):
         çalan şarkıyı yeniden konumlandırır. Şarkı tamamen kaldırıldıysa
         oynatmayı durdurur — bayat bir index'in YANLIŞ şarkıyı göstermesine/
         çalmasına engel olur (orijinaldeki inline düzeltmenin genel hali)."""
-        if self.playing_playlist is None or self._current_song_ref is None:
+        if self.playing_playlist is None or self._current_song_ref is None or self.is_loading:
             return
         pl, idx = self.store.locate_song(
             self.playing_playlist, self.current_index, self._current_song_ref)
         if pl is None:
+            self._abort_crossfade()
             self._end_listen()
             try:
                 self.player.stop()
@@ -925,6 +932,7 @@ class PlaybackEngine(QObject):
         self.player_b.audio_set_volume(0)
         self.player_b.play()
         self._apply_saved_rate_to(self.player_b)
+        self._xfade_queued_raw = None  # şarkı çalmaya başladı — iptal edilirse kuyruğa iade edilmesin
 
         # Şarkı muhasebesini ŞİMDİ yap — songStarted yeni şarkıyı işaret etsin
         self.playing_playlist = playlist_name
@@ -1097,6 +1105,9 @@ class PlaybackEngine(QObject):
             if self.player.get_state() in (
                     vlc.State.Playing, vlc.State.Paused, vlc.State.Buffering):
                 self.player.set_rate(rate)
+            if self._xfade_is_ramping() and self.player_b.get_state() in (
+                    vlc.State.Playing, vlc.State.Paused, vlc.State.Buffering):
+                self.player_b.set_rate(rate)
         except Exception as e:
             log.error("%s %s", "Hız ayarlanamadı:", e)
 
@@ -1197,6 +1208,10 @@ class PlaybackEngine(QObject):
             if callable(self.autoplay_handler) and self.settings.get("autoplay_enabled", True):
                 try:
                     if self.autoplay_handler():
+                        try:
+                            self.player.stop()
+                        except Exception:
+                            pass
                         return
                 except Exception as e:
                     log.warning("%s %s", "Autoplay tetikleme hatası:", e)
@@ -1251,6 +1266,7 @@ class PlaybackEngine(QObject):
     def cycle_repeat(self) -> str:
         order = {"off": "all", "all": "one", "one": "off"}
         self.repeat_mode = order[self.repeat_mode]
+        self.repeatChanged.emit(self.repeat_mode)
         return self.repeat_mode
 
     # --- Radyo (canlı internet yayını) ---
@@ -1271,6 +1287,10 @@ class PlaybackEngine(QObject):
         self._abort_crossfade()
         self.playing_playlist = None
         self.current_index = -1
+        self._current_song_ref = None
+        self._current_url = None
+        self._current_is_offline = False
+        self._fallback_pos_ms = None
         self.is_loading = False
         self.next_song_preloaded = None
 
@@ -1309,6 +1329,10 @@ class PlaybackEngine(QObject):
         self._end_listen()
         self.player.stop()
         self.radio_playing = None
+        self._current_song_ref = None
+        self._current_url = None
+        self._current_is_offline = False
+        self._fallback_pos_ms = None
         self.radioStopped.emit()
         self.playStateChanged.emit(False)
 
@@ -1421,8 +1445,7 @@ class PlaybackEngine(QObject):
                     self.player.set_time(clamped)
             else:
                 self.player.set_time(clamped)
-            if self._listen is not None:
-                self._listen["seconds"] = clamped / 1000.0
+            self._fallback_pos_ms = clamped
             self.seeked.emit(clamped)
 
     def shutdown(self):
@@ -1489,6 +1512,8 @@ class PlaybackEngine(QObject):
                             pos_frac = 0.0
                         if isinstance(pos_frac, float) and 0.0 < pos_frac <= 1.0 and isinstance(total, int) and total > 0:
                             current = int(pos_frac * total)
+                        elif self._fallback_pos_ms is not None:
+                            current = self._fallback_pos_ms
                         elif self._listen is not None and self._listen.get("seconds", 0.0) > 0:
                             current = int(self._listen["seconds"] * 1000)
                     if total > 0:

@@ -42,17 +42,16 @@ class BulkSearchWorker(QObject):
         failed: list[str] = []
         completed = 0
 
-        ydl_opts = yt_dlp_base_opts(
-            format='bestaudio/best',
-            quiet=True,
-            default_search='ytsearch1:',
-            noplaylist=True,
-            extract_flat='in_playlist',
-            socket_timeout=15,
-        )
-
         def search_one(query):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            opts = yt_dlp_base_opts(
+                format='bestaudio/best',
+                quiet=True,
+                default_search='ytsearch1:',
+                noplaylist=True,
+                extract_flat='in_playlist',
+                socket_timeout=15,
+            )
+            with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(query, download=False)
             if isinstance(info, dict) and info.get('entries'):
                 entries = [e for e in info['entries'] if e]

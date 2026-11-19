@@ -45,6 +45,8 @@ class _AmbientBackground(QWidget):
         self._c1 = QColor("#5a2d82")
         self._c2 = QColor("#1e3c72")
         self._base = QColor(10, 8, 16)
+        self._cached_bg: QPixmap | None = None
+        self._cached_key: tuple | None = None
 
     def set_colors(self, hex1: str | None, hex2: str | None = None):
         if hex1:
@@ -61,15 +63,20 @@ class _AmbientBackground(QWidget):
                     self._c2 = QColor(int(r2 * 255), int(g2 * 255), int(b2 * 255))
             except Exception:
                 pass
+        self._cached_bg = None
+        self._cached_key = None
         self.update()
 
-    def paintEvent(self, event):  # noqa: N802
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height()
+    def _ensure_cached_bg(self, w: int, h: int) -> QPixmap:
+        key = (w, h, self._c1.rgba(), self._c2.rgba())
+        if self._cached_bg is not None and self._cached_key == key:
+            return self._cached_bg
+        pm = QPixmap(w, h)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
 
         # 1) Çok koyu arka plan
-        painter.fillRect(0, 0, w, h, self._base)
+        p.fillRect(0, 0, w, h, self._base)
 
         # 2) Sol-üst ışık küresi (birinci renk)
         g1 = QRadialGradient(w * 0.28, h * 0.38, max(w, h) * 0.65)
@@ -78,7 +85,7 @@ class _AmbientBackground(QWidget):
         g1.setColorAt(0.0, c1_intense)
         g1.setColorAt(0.45, c1_fade)
         g1.setColorAt(1.0, QColor(0, 0, 0, 0))
-        painter.fillRect(0, 0, w, h, g1)
+        p.fillRect(0, 0, w, h, g1)
 
         # 3) Sağ-alt ışık küresi (ikinci renk)
         g2 = QRadialGradient(w * 0.72, h * 0.65, max(w, h) * 0.70)
@@ -87,14 +94,27 @@ class _AmbientBackground(QWidget):
         g2.setColorAt(0.0, c2_intense)
         g2.setColorAt(0.50, c2_fade)
         g2.setColorAt(1.0, QColor(0, 0, 0, 0))
-        painter.fillRect(0, 0, w, h, g2)
+        p.fillRect(0, 0, w, h, g2)
 
         # 4) Metin okunurluğu için koyu tül katmanı
         dark_overlay = QLinearGradient(0, 0, 0, h)
         dark_overlay.setColorAt(0.0, QColor(8, 6, 14, 150))
         dark_overlay.setColorAt(0.5, QColor(6, 5, 10, 110))
         dark_overlay.setColorAt(1.0, QColor(8, 6, 14, 210))
-        painter.fillRect(0, 0, w, h, dark_overlay)
+        p.fillRect(0, 0, w, h, dark_overlay)
+        p.end()
+
+        self._cached_bg = pm
+        self._cached_key = key
+        return pm
+
+    def paintEvent(self, event):  # noqa: N802
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+        painter = QPainter(self)
+        painter.drawPixmap(0, 0, self._ensure_cached_bg(w, h))
+        painter.end()
 
 
 class KaraokeView(QWidget):
@@ -602,11 +622,13 @@ class KaraokeView(QWidget):
         super().keyPressEvent(event)
 
     def showEvent(self, event):  # noqa: N802
+        self._closed_flag = False
         super().showEvent(event)
         self._sync_all()
         self._hud_timer.start()
 
     def closeEvent(self, event):  # noqa: N802
+        self._closed_flag = True
         self._hud_timer.stop()
         self.closed.emit()
         super().closeEvent(event)
@@ -661,6 +683,8 @@ class KaraokeView(QWidget):
         self._load_lyrics(song)
 
     def _on_song_started(self, playlist_name, index, song, is_offline):
+        if getattr(self, "_closed_flag", False):
+            return
         self._sync_all(song)
 
     def _on_thumbnail_ready(self, key: str):
@@ -736,7 +760,10 @@ class KaraokeView(QWidget):
                 )
             except Exception:
                 res = ly.LyricsResult(ly.ERROR)
-            self.lyricsReady.emit(song, token, res)
+            try:
+                self.lyricsReady.emit(song, token, res)
+            except RuntimeError:
+                pass
 
         threading.Thread(target=worker, daemon=True, name="KaraokeLyricsWorker").start()
 
@@ -783,6 +810,8 @@ class KaraokeView(QWidget):
 
     # --- Konum & Canlı Karaoke Kaydırma ---
     def _on_position(self, current_ms: int, total_ms: int):
+        if getattr(self, "_closed_flag", False):
+            return
         if not self._seeking:
             if total_ms > 0:
                 self.time_slider.setRange(0, total_ms)

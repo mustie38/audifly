@@ -402,6 +402,9 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                     seen_ids.add(cid)
                 all_candidates.append(data)
 
+    any_http_ok = False
+    had_network_error = False
+
     try:
         # Aşama 1: Kesin eşleşme (/get)
         if duration and artist:
@@ -410,10 +413,14 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                                 params={"track_name": track, "artist_name": artist,
                                         "duration": int(duration)})
                 if resp.status_code == 200:
+                    any_http_ok = True
                     add_candidates(resp.json())
-                elif resp.status_code != 404:
+                elif resp.status_code == 404:
+                    any_http_ok = True
+                else:
                     resp.raise_for_status()
             except (requests.RequestException, ValueError):
+                had_network_error = True
                 if is_mock:
                     raise
 
@@ -425,10 +432,14 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                 resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
                                 params={"track_name": track, "artist_name": artist})
                 if resp.status_code == 200:
+                    any_http_ok = True
                     add_candidates(resp.json())
-                elif resp.status_code != 404:
+                elif resp.status_code == 404:
+                    any_http_ok = True
+                else:
                     resp.raise_for_status()
             except (requests.RequestException, ValueError):
+                had_network_error = True
                 if is_mock:
                     raise
             best = pick_best(all_candidates, track, artist, duration)
@@ -439,9 +450,12 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                 resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
                                 params={"q": f"{track} {artist}".strip()})
                 if resp.status_code == 200:
+                    any_http_ok = True
                     add_candidates(resp.json())
+                elif resp.status_code == 404:
+                    any_http_ok = True
             except Exception:
-                pass
+                had_network_error = True
             best = pick_best(all_candidates, track, artist, duration)
 
         # Aşama 4: Türkçe karakter dönüştürülmüş genel sorgu
@@ -452,9 +466,12 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                     resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
                                     params={"q": deacc_q})
                     if resp.status_code == 200:
+                        any_http_ok = True
                         add_candidates(resp.json())
+                    elif resp.status_code == 404:
+                        any_http_ok = True
                 except Exception:
-                    pass
+                    had_network_error = True
                 best = pick_best(all_candidates, track, artist, duration)
 
         # Aşama 5: Şarkı adı tek başına arama (uploader etiket/kanal adı olduğunda kurtarır)
@@ -463,9 +480,12 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
                 resp = http.get(f"{API}/search", headers=HEADERS, timeout=7,
                                 params={"q": track.strip()})
                 if resp.status_code == 200:
+                    any_http_ok = True
                     add_candidates(resp.json())
+                elif resp.status_code == 404:
+                    any_http_ok = True
             except Exception:
-                pass
+                had_network_error = True
             best = pick_best(all_candidates, track, artist, duration)
 
     except (requests.RequestException, ValueError) as e:
@@ -485,6 +505,8 @@ def fetch_lyrics_result(title: str, uploader: str = "", duration: float = 0,
             result = yt_res
 
     if result is None:
+        if had_network_error and not any_http_ok:
+            return LyricsResult(ERROR)      # ağ hatası önbelleğe yazılmaz
         result = LyricsResult(NOT_FOUND)
 
     if path:

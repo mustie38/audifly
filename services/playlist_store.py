@@ -117,24 +117,38 @@ class PlaylistStore(QObject):
 
     # --- Yükleme ---
     def load(self):
+        recovered = False
         if not os.path.exists(self.paths.playlist_file):
-            return
-        try:
-            with open(self.paths.playlist_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            normalized = _normalize_library(data)
-        except (ValueError, OSError, UnicodeDecodeError) as e:
-            log.warning("Ana playlist okunamadı (%s), yedekler deneniyor...", e)
             data = self._try_recover_from_backup()
-            self._quarantine_library_file()   # bozuk dosya sonraki kayıtla ezilmesin
             if data is None:
-                self.statusMessage.emit(
-                    "Kütüphane okunamadı; bozuk dosya '.corrupt' olarak saklandı, "
-                    "geçerli bir yedek bulunamadı.", "warning")
                 return
             normalized = _normalize_library(data)
+            recovered = True
             self.statusMessage.emit("Kütüphane yedekten kurtarıldı.", "success")
+        else:
+            try:
+                with open(self.paths.playlist_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                normalized = _normalize_library(data)
+            except (ValueError, OSError, UnicodeDecodeError) as e:
+                log.warning("Ana playlist okunamadı (%s), yedekler deneniyor...", e)
+                data = self._try_recover_from_backup()
+                self._quarantine_library_file()   # bozuk dosya sonraki kayıtla ezilmesin
+                if data is None:
+                    self.statusMessage.emit(
+                        "Kütüphane okunamadı; bozuk dosya '.corrupt' olarak saklandı, "
+                        "geçerli bir yedek bulunamadı.", "warning")
+                    return
+                normalized = _normalize_library(data)
+                recovered = True
+                self.statusMessage.emit("Kütüphane yedekten kurtarıldı.", "success")
         self.playlists, self.active_playlist, self.playlist_covers = normalized
+        if recovered:
+            try:
+                atomic_write_json(self.paths.playlist_file, self._build_snapshot())
+            except OSError as e:
+                log.error("Kurtarılan kütüphane diske yazılamadı: %s", e)
+                self.save()
         total = sum(len(songs) for songs in self.playlists.values())
         self.statusMessage.emit(f"{len(self.playlists)} çalma listesi yüklendi ({total} şarkı).", "info")
 

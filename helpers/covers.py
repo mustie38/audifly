@@ -132,7 +132,7 @@ def pick_and_save_cover(store: PlaylistStore, name: str, covers_dir: str, parent
 
 def format_playlist_duration(songs: list[dict]) -> str:
     """'3 dakika 12 saniye' / '1 saat 4 dakika' biçiminde toplam süre."""
-    total = sum((s.get("duration") or 0) for s in songs)
+    total = int(sum((s.get("duration") or 0) for s in songs))
     if total <= 0:
         return ""
     hours, rem = divmod(total, 3600)

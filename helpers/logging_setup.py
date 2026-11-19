@@ -68,8 +68,9 @@ def configure_logging(log_dir: str | None = None, level: int = logging.INFO) -> 
             file_handler.setFormatter(formatter)
             root.addHandler(file_handler)
         except Exception:
-            # Log dosyası açılamazsa bile uygulama konsol logu ile çalışmaya devam eder.
-            root.addHandler(console)
+            # Log dosyası açılamazsa bile uygulama konsol logu ile çalışmaya devam eder
+            # (console handler zaten yukarıda eklendi).
+            pass
 
     _configured = True
 

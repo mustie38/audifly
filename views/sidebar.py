@@ -356,6 +356,7 @@ class SidebarWidget(QWidget):
         self.smart_folder_btn.setProperty("has_active", "true" if in_folder else "false")
         ic_kind = "folder_open" if self._smart_folder_open else "folder"
         self.smart_folder_btn.setIcon(vicon(ic_kind, 16, "#ffffff" if in_folder else "#b497ff"))
+        self._playlist_active = (key is None)
         self.smart_folder_btn.style().unpolish(self.smart_folder_btn)
         self.smart_folder_btn.style().polish(self.smart_folder_btn)
 
@@ -400,10 +401,8 @@ class SidebarWidget(QWidget):
         self.refresh()
 
     def refresh(self):
-        current_name = None
-        selected_items = self.playlist_list.selectedItems()
-        if selected_items:
-            current_name = selected_items[0].data(Qt.UserRole)
+        show_active = getattr(self, "_playlist_active", False)
+        active_name = self.store.active_playlist if show_active else None
 
         self.playlist_list.clear()
         for name, songs in self.store.playlists.items():
@@ -413,10 +412,11 @@ class SidebarWidget(QWidget):
 
             pm = self._playlist_cover_pixmap(name, songs)
             row = _PlaylistRow(name, len(songs), pm)
-            row.set_active(name == self.store.active_playlist or name == current_name)
+            is_active = (active_name is not None and name == active_name)
+            row.set_active(is_active)
             self.playlist_list.addItem(item)
             self.playlist_list.setItemWidget(item, row)
-            if name == self.store.active_playlist or name == current_name:
+            if is_active:
                 item.setSelected(True)
 
     def _refresh_stale_covers(self):
@@ -520,11 +520,12 @@ class SidebarWidget(QWidget):
         name, ok = QInputDialog.getText(self, "Yeni Çalma Listesi", "Liste adı:")
         if not ok or not name.strip():
             return
-        success, err = self.store.create_playlist(name)
+        clean_name = name.strip()
+        success, err = self.store.create_playlist(clean_name)
         if not success:
             QMessageBox.warning(self, "Hata", err)
         else:
-            self.playlistSelected.emit(name)
+            self.playlistSelected.emit(clean_name)
 
     def _on_context_menu(self, pos):
         item = self.playlist_list.itemAt(pos)

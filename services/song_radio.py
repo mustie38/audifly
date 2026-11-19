@@ -202,8 +202,8 @@ class SongRadioService(QObject):
     radioStarted = Signal(str, dict)       # playlist_name, seed_song
     radioReady = Signal(str, int)          # playlist_name, track_count
     autoplayTriggered = Signal(str, dict)  # playlist_name, first_song
-    _radioTracksFetched = Signal(dict, object, bool)
-    _autoplayTracksFetched = Signal(dict, object)
+    _radioTracksFetched = Signal(int, dict, object, bool)
+    _autoplayTracksFetched = Signal(int, dict, object)
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine, parent=None):
         super().__init__(parent)
@@ -215,6 +215,7 @@ class SongRadioService(QObject):
         self._prefetch_lock = threading.Lock()
         self._is_prefetching = False
         self._is_handling_autoplay = False
+        self._radio_gen = 0
 
         self._radioTracksFetched.connect(self._on_radio_tracks_fetched)
         self._autoplayTracksFetched.connect(self._on_autoplay_tracks_fetched)
@@ -245,14 +246,22 @@ class SongRadioService(QObject):
             self.playback.play_song_at_index(RADIO_PLAYLIST_NAME, 0)
         self.radioStarted.emit(RADIO_PLAYLIST_NAME, seed)
 
+        self._radio_gen += 1
+        gen = self._radio_gen
+
         # Arka planda benzer parçaları çekip ana thread'e sinyal ile teslim et
         def worker():
             recommendations = fetch_radio_recommendations(seed, limit=30)
-            self._radioTracksFetched.emit(seed, recommendations, not has_playable_url)
+            try:
+                self._radioTracksFetched.emit(gen, seed, recommendations, not has_playable_url)
+            except RuntimeError:
+                pass
 
         threading.Thread(target=worker, daemon=True, name="SongRadioWorker").start()
 
-    def _on_radio_tracks_fetched(self, seed: dict, recommendations: list[dict], start_first: bool):
+    def _on_radio_tracks_fetched(self, gen: int, seed: dict, recommendations: list[dict], start_first: bool):
+        if gen != self._radio_gen or getattr(self.playback, "_closed", False):
+            return
         if not recommendations:
             self.store.statusMessage.emit("⚠️ Şarkı radyosu için benzer parça bulunamadı.", "warning")
             return
@@ -326,18 +335,25 @@ class SongRadioService(QObject):
             return False
         self._is_handling_autoplay = True
 
+        seed_key = seed.get("webpage_url") or seed.get("title")
         with self._prefetch_lock:
-            cached_tracks = list(self._prefetched_tracks)
+            if self._prefetched_seed_key == seed_key and self._prefetched_tracks:
+                cached_tracks = list(self._prefetched_tracks)
+            else:
+                cached_tracks = []
             self._prefetched_tracks = []
             self._prefetched_seed_key = None
 
         if cached_tracks:
-            self._apply_autoplay_tracks(seed, cached_tracks)
-            self._is_handling_autoplay = False
+            try:
+                self._apply_autoplay_tracks(seed, cached_tracks)
+            finally:
+                self._is_handling_autoplay = False
             return True
 
         # Önbellekte henüz yoksa arka planda çekip anında başlat
         self.store.statusMessage.emit("♾️ Çalma listesi tamamlandı; benzer şarkılar aranıyor…", "info")
+        play_gen = getattr(self.playback, "_play_generation", 0)
 
         def worker():
             try:
@@ -345,13 +361,21 @@ class SongRadioService(QObject):
             except Exception as e:
                 log.warning("Autoplay anlık öneri hatası: %s", e)
                 tracks = []
-            self._autoplayTracksFetched.emit(seed, tracks)
+            try:
+                self._autoplayTracksFetched.emit(play_gen, seed, tracks)
+            except RuntimeError:
+                pass
 
         threading.Thread(target=worker, daemon=True, name="AutoplayOnDemand").start()
         return True
 
-    def _on_autoplay_tracks_fetched(self, seed: dict, tracks: list[dict]):
+    def _on_autoplay_tracks_fetched(self, play_gen: int, seed: dict, tracks: list[dict]):
         try:
+            # Kullanıcı bu sırada başka bir şarkı/radyo başlattıysa veya uygulama kapandıysa dokunma
+            if (getattr(self.playback, "_closed", False)
+                    or play_gen != getattr(self.playback, "_play_generation", 0)
+                    or getattr(self.playback, "radio_playing", None) is not None):
+                return
             if tracks:
                 self._apply_autoplay_tracks(seed, tracks)
             else:
@@ -383,6 +407,11 @@ class SongRadioService(QObject):
             if start_index < len(existing_list):
                 self.playback.play_song_at_index(AUTOPLAY_PLAYLIST_NAME, start_index, auto=True)
                 self.store.statusMessage.emit("♾️ Sonsuz Çalma yeni önerilerle devam ediyor.", "info")
+            else:
+                self.store.statusMessage.emit("♾️ Yeni benzer şarkı bulunamadı, çalma durduruldu.", "info")
+                if self.playback.player is not None:
+                    self.playback.player.stop()
+                self.playback.playStateChanged.emit(False)
         else:
             # Başka bir listeden Sonsuz Çalma moduna geçiş
             self.store.playlists[AUTOPLAY_PLAYLIST_NAME] = tracks

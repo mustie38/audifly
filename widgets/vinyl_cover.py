@@ -61,6 +61,7 @@ class VinylCoverWidget(QWidget):
         """Kapağı ayarlar (kare verilirse dairesel kırpılır). None ise fallback'e döner."""
         if pm is None or pm.isNull():
             self._base_pixmap = None
+            self._timer.stop()
             self.fallback_label.setVisible(True)
             self.update()
             return
@@ -71,6 +72,9 @@ class VinylCoverWidget(QWidget):
         )
         self._rotated_cache = None
         self._angle = 0.0
+        if getattr(self, "_want_playing", False) and self.isVisible():
+            if not self._timer.isActive():
+                self._timer.start(TICK_MS)
         self.update()
 
     def set_fallback_text(self, text: str):

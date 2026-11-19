@@ -428,12 +428,7 @@ class ListenTogether(QObject):
         self._ping_sent.clear()
         self.latency_ms = 0
         ws, self._ws = self._ws, None
-        if ws is not None:
-            try:
-                ws.close()
-                ws.deleteLater()
-            except Exception as e:   # kapanış hatası uygulamayı etkilemesin
-                log.warning("Soket kapatılamadı: %s", e)
+        self._detach_socket(ws)
         self.members, self.host_id, self.my_id = [], "", ""
         self.playback.suppress_auto_advance = False
         self.room_queue, self.chat_log = [], []
@@ -567,15 +562,40 @@ class ListenTogether(QObject):
             self.state = state
             self.stateChanged.emit(state)
 
+    def _detach_socket(self, ws, *, abort: bool = False):
+        """Eski QWebSocket'in sinyallerini koparır, kapatır ve güvenli şekilde siler."""
+        if ws is None:
+            return
+        for sig_name, slot in (
+            ("connected", self._on_ws_connected),
+            ("disconnected", self._connection_lost),
+            ("errorOccurred", self._on_ws_error),
+            ("textMessageReceived", self._on_text),
+        ):
+            sig = getattr(ws, sig_name, None)
+            if sig is not None:
+                try:
+                    sig.disconnect(slot)
+                except Exception:
+                    pass
+        try:
+            if abort and hasattr(ws, "abort"):
+                ws.abort()
+            elif hasattr(ws, "close"):
+                ws.close()
+        except Exception as e:
+            log.warning("Soket kapatılamadı: %s", e)
+        try:
+            if hasattr(ws, "deleteLater"):
+                ws.deleteLater()
+        except Exception:
+            pass
+
     def _open_socket(self):
         if not self._wanted:
             return
         old, self._ws = self._ws, None
-        if old is not None:
-            try:
-                old.deleteLater()
-            except Exception:
-                pass
+        self._detach_socket(old, abort=True)
         ws = self._socket_factory()
         ws.connected.connect(self._on_ws_connected)
         ws.disconnected.connect(self._connection_lost)
@@ -601,11 +621,7 @@ class ListenTogether(QObject):
         """12 sn içinde 'joined' gelmediyse soketi bırakıp yeniden dene."""
         if self._wanted and not self.joined:
             ws, self._ws = self._ws, None
-            if ws is not None:
-                try:
-                    ws.abort() if hasattr(ws, "abort") else ws.close()
-                except Exception:
-                    pass
+            self._detach_socket(ws, abort=True)
             self._connection_lost()
 
     def _on_ws_error(self, *_args):
@@ -696,12 +712,7 @@ class ListenTogether(QObject):
                     log.info("Sunucu v2 protokolünü desteklemiyor, geriye dönük uyumluluk (v1) deneniyor...")
                     self._active_protocol_version = 1
                     ws, self._ws = self._ws, None
-                    if ws is not None:
-                        try:
-                            ws.close()
-                            ws.deleteLater()
-                        except Exception:
-                            pass
+                    self._detach_socket(ws)
                     self._open_socket()
                     return
                 self.leave(silent=True)
@@ -762,15 +773,22 @@ class ListenTogether(QObject):
     def _current_song(self):
         return getattr(self.playback, "_current_song_ref", None)
 
+    def _active_player(self):
+        pb = self.playback
+        xfade_ramping = getattr(pb, "_xfade_is_ramping", None)
+        if callable(xfade_ramping) and xfade_ramping():
+            return getattr(pb, "player_b", pb.player)
+        return pb.player
+
     def _player_time(self) -> int:
         try:
-            return max(0, int(self.playback.player.get_time()))
+            return max(0, int(self._active_player().get_time()))
         except Exception:
             return 0
 
     def _is_playing(self) -> bool:
         try:
-            return bool(self.playback.player.is_playing())
+            return bool(self._active_player().is_playing())
         except Exception:
             return False
 

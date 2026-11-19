@@ -408,6 +408,7 @@ class DiscoverySection(QWidget):
         self.cat_def = cat_def
         self.thumbnails = thumbnails
         self.items: list[dict] = []
+        self._loaded = False
         self._is_artist = cat_def.get("kind") == "artist"
         self._track_cards: dict[str, list[TrackCard]] = {}
         self._artist_cards: dict[str, list[ArtistCard]] = {}
@@ -486,7 +487,9 @@ class DiscoverySection(QWidget):
     def set_data(self, section: dict | None):
         """Bölüm verisini uygular. Veri yoksa bölüm tamamen gizlenir
         (spec: "veri yoksa -> bölümü gizle")."""
+        self._loaded = True
         if not section or not section.get("items"):
+            self.items = []
             self.hide()
             return
         self.show()
@@ -643,7 +646,13 @@ class ExploreView(QWidget):
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
 
-        self._load_cache_then_refresh()
+        self._initialized = False
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if not self._initialized:
+            self._initialized = True
+            self._load_cache_then_refresh()
 
     def _on_thumbnail_ready(self, key: str):
         if self.thumbnails is None:
@@ -693,17 +702,25 @@ class ExploreView(QWidget):
         threading.Thread(target=self._refresh_worker, args=(force,), daemon=True).start()
 
     def _refresh_worker(self, force: bool):
+        def _safe_emit(sig, *args):
+            try:
+                sig.emit(*args)
+            except RuntimeError:
+                pass
+
         try:
             cache = self.discovery.refresh_if_needed(
-                force=force, on_section=lambda s: self.sectionUpdated.emit(s))
+                force=force, on_section=lambda s: _safe_emit(self.sectionUpdated, s))
             if cache.get("hero"):
-                self.heroUpdated.emit(cache["hero"])
-            self.refreshFinished.emit(True, self._status_text(cache.get("last_updated", 0)))
+                _safe_emit(self.heroUpdated, cache["hero"])
+            _safe_emit(self.refreshFinished, True, self._status_text(cache.get("last_updated", 0)))
         except Exception as e:
             log.error("%s %s", "Keşfet güncellemesi başarısız:", e)
-            self.refreshFinished.emit(
+            _safe_emit(
+                self.refreshFinished,
                 False,
-                "Keşfet verileri şu anda güncellenemiyor. Son güncellenen içerikler gösteriliyor.")
+                "Keşfet verileri şu anda güncellenemiyor. Son güncellenen içerikler gösteriliyor.",
+            )
 
     def _on_section_updated(self, section: dict):
         widget = self._sections.get(section.get("id"))
@@ -740,7 +757,7 @@ class ExploreView(QWidget):
         }
         for sec_id, sec_widget in self._sections.items():
             if filter_key == "all":
-                sec_widget.setVisible(bool(sec_widget.items) or sec_widget.cat_def is not None)
+                sec_widget.setVisible(bool(sec_widget.items) or not getattr(sec_widget, "_loaded", False))
                 continue
             if filter_key == "artists":
                 visible = sec_widget._is_artist

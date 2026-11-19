@@ -95,6 +95,10 @@ class _ToggleSwitch(QCheckBox):
 
     thumbPos = Property(float, _get_thumb_pos, _set_thumb_pos)
 
+    def set_accent(self, accent: str):
+        self._accent = accent
+        self.update()
+
     def setChecked(self, checked: bool):  # noqa: N802
         super().setChecked(checked)
         self._thumb_pos = 1.0 if checked else 0.0
@@ -169,43 +173,11 @@ class SettingsView(QWidget):
         self._thumb_service = thumbnails
         self._theme = THEMES.get(settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
         self._searchable_rows: list[tuple[str, str, QWidget]] = []  # (cat_key, text_lower, row_widget)
+        self._scroll_pages: list[tuple[QScrollArea, QWidget]] = []
         self._active_build_cat = "general"
 
         self.setObjectName("SettingsView")
-        self.setStyleSheet(f"""
-            QWidget#SettingsView {{ background: {self._theme.bg_main}; }}
-            QWidget#SettingsView QLabel#SettingsRowTitle {{
-                font-weight: 600; font-size: 13px; color: {self._theme.text};
-            }}
-            QWidget#SettingsView QWidget#SettingsHeader {{
-                border-bottom: 1px solid {self._theme.bg_row_hover};
-                background: {self._theme.bg_sidebar};
-            }}
-            QWidget#SettingsView QWidget#SettingsFooter {{
-                border-top: 1px solid {self._theme.bg_row_hover};
-                background: {self._theme.bg_sidebar};
-            }}
-            QWidget#SettingsView QWidget#SettingsNav {{
-                border-right: 1px solid {self._theme.bg_row_hover};
-                background: {self._theme.bg_sidebar};
-            }}
-            QWidget#SettingsView QWidget#Card {{
-                background: {self._theme.bg_card};
-                border: 1px solid {self._theme.bg_row_hover};
-                border-radius: 16px;
-            }}
-            QWidget#SettingsView QLineEdit#SettingsSearch {{
-                background: {self._theme.bg_card};
-                border: 1px solid {self._theme.bg_row_hover};
-                border-radius: 10px;
-                padding: 6px 12px;
-                color: {self._theme.text};
-                font-size: 12px;
-            }}
-            QWidget#SettingsView QLineEdit#SettingsSearch:focus {{
-                border-color: {self._theme.accent};
-            }}
-        """)
+        self._apply_theme_styles()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -404,7 +376,52 @@ class SettingsView(QWidget):
         scroll.setWidget(container)
         scroll.viewport().setStyleSheet(f"background: {bg};")
         container.setStyleSheet(f"#SettingsPageBody {{ background: {bg}; }}")
+        self._scroll_pages.append((scroll, container))
         return scroll
+
+    def _apply_theme_styles(self):
+        t = self._theme
+        self.setStyleSheet(f"""
+            QWidget#SettingsView {{ background: {t.bg_main}; }}
+            QWidget#SettingsView QLabel#SettingsRowTitle {{
+                font-weight: 600; font-size: 13px; color: {t.text};
+            }}
+            QWidget#SettingsView QWidget#SettingsHeader {{
+                border-bottom: 1px solid {t.bg_row_hover};
+                background: {t.bg_sidebar};
+            }}
+            QWidget#SettingsView QWidget#SettingsFooter {{
+                border-top: 1px solid {t.bg_row_hover};
+                background: {t.bg_sidebar};
+            }}
+            QWidget#SettingsView QWidget#SettingsNav {{
+                border-right: 1px solid {t.bg_row_hover};
+                background: {t.bg_sidebar};
+            }}
+            QWidget#SettingsView QWidget#Card {{
+                background: {t.bg_card};
+                border: 1px solid {t.bg_row_hover};
+                border-radius: 16px;
+            }}
+            QWidget#SettingsView QLineEdit#SettingsSearch {{
+                background: {t.bg_card};
+                border: 1px solid {t.bg_row_hover};
+                border-radius: 10px;
+                padding: 6px 12px;
+                color: {t.text};
+                font-size: 12px;
+            }}
+            QWidget#SettingsView QLineEdit#SettingsSearch:focus {{
+                border-color: {t.accent};
+            }}
+        """)
+        bg = t.bg_main
+        for scroll, container in self._scroll_pages:
+            scroll.setStyleSheet(f"QScrollArea {{ background: {bg}; border: none; }}")
+            scroll.viewport().setStyleSheet(f"background: {bg};")
+            container.setStyleSheet(f"#SettingsPageBody {{ background: {bg}; }}")
+        for sw in self.findChildren(_ToggleSwitch):
+            sw.set_accent(t.accent)
 
     def _select_category(self, key: str):
         for k, btn in self._nav_buttons.items():
@@ -627,9 +644,8 @@ class SettingsView(QWidget):
     def _build_storage_page(self) -> QWidget:
         cache_card = self._card("Önbellek Yönetimi")
 
-        count, total = _offline_stats(self.store)
-        self.storage_label = QLabel(
-            f"Çevrimdışı müzikler: {count} şarkı • {_human_size(total)}")
+        # Disk taraması uygulama açılışını yavaşlatmasın; sayfa açılınca refresh_dynamic() doldurur.
+        self.storage_label = QLabel("Çevrimdışı müzikler: hesaplanıyor…")
         self.storage_label.setObjectName("Muted")
         clear_btn = QPushButton("🧹  Çevrimdışı müzikleri temizle")
         clear_btn.setObjectName("Secondary")
@@ -639,8 +655,7 @@ class SettingsView(QWidget):
         cache_card.layout().addWidget(clear_btn)
         cache_card.layout().addSpacing(10)
 
-        thumb_size, covers_size, backups_size = _dir_sizes(self.paths, self.store)
-        self.thumb_label = QLabel(f"Thumbnail önbelleği: {_human_size(thumb_size)}")
+        self.thumb_label = QLabel("Thumbnail önbelleği: hesaplanıyor…")
         self.thumb_label.setObjectName("Muted")
         self.clear_thumb_btn = QPushButton("🧹  Thumbnail önbelleğini temizle")
         self.clear_thumb_btn.setObjectName("Secondary")
@@ -650,9 +665,7 @@ class SettingsView(QWidget):
         cache_card.layout().addWidget(self.clear_thumb_btn)
         cache_card.layout().addSpacing(10)
 
-        self.other_label = QLabel(
-            f"Playlist kapakları: {_human_size(covers_size)} • "
-            f"Otomatik yedekler: {_human_size(backups_size)}")
+        self.other_label = QLabel("Playlist kapakları: — • Otomatik yedekler: —")
         self.other_label.setObjectName("Muted")
         self.other_label.setWordWrap(True)
         cache_card.layout().addWidget(self.other_label)
@@ -759,6 +772,8 @@ class SettingsView(QWidget):
     # gösterilen bilgileri tazeler.
     # ------------------------------------------------------------------
     def refresh_dynamic(self):
+        self._theme = THEMES.get(self.settings.get("theme"), THEMES[DEFAULT_THEME_KEY])
+        self._apply_theme_styles()
         idx = self.theme_combo.findData(self.settings.get("theme"))
         if idx >= 0 and idx != self.theme_combo.currentIndex():
             self.theme_combo.blockSignals(True)
@@ -787,6 +802,19 @@ class SettingsView(QWidget):
             self.language_combo.blockSignals(True)
             self.language_combo.setCurrentIndex(lang_idx)
             self.language_combo.blockSignals(False)
+
+        # Tüm kontrolleri kayıtlı ayarlardan yeniden yükle (İptal sonrası kirli değer kalmasın)
+        self.page_size_spin.setValue(int(self.settings.get("page_size", 50)))
+        self.normalize_check.setChecked(bool(self.settings.get("audio_normalization", False)))
+        self.media_keys_check.setChecked(bool(self.settings.get("global_media_keys", False)))
+        self.tray_check.setChecked(bool(self.settings.get("minimize_to_tray", False)))
+        self.backup_check.setChecked(bool(self.settings.get("backup_enabled", True)))
+        self.dynamic_check.setChecked(bool(self.settings.get("dynamic_theme", True)))
+        self.restore_check.setChecked(bool(self.settings.get("restore_session", True)))
+        self.auto_update_check.setChecked(bool(self.settings.get("auto_update_check", True)))
+        self.auto_ytdlp_check.setChecked(bool(self.settings.get("auto_ytdlp_update", True)))
+        self.crossfade_check.setChecked(bool(self.settings.get("crossfade_enabled", False)))
+        self.crossfade_spin.setValue(int(self.settings.get("crossfade_seconds", 4)))
         self.vocal_remover_check.setChecked(bool(self.settings.get("vocal_remover_enabled", False)))
         self.visualizer_check.setChecked(bool(self.settings.get("visualizer_enabled", True)))
         v_idx = self.visualizer_mode_combo.findData(self.settings.get("visualizer_mode", "bars"))
@@ -795,6 +823,17 @@ class SettingsView(QWidget):
         p_idx = self.visualizer_palette_combo.findData(self.settings.get("visualizer_palette", "dynamic"))
         if p_idx >= 0:
             self.visualizer_palette_combo.setCurrentIndex(p_idx)
+        self.autoplay_check.setChecked(bool(self.settings.get("autoplay_enabled", True)))
+        self.hud_check.setChecked(bool(self.settings.get("hud_overlay_enabled", True)))
+        self.hud_bg_only_check.setChecked(bool(self.settings.get("hud_overlay_only_background", True)))
+        hp_idx = self.hud_pos_combo.findData(self.settings.get("hud_overlay_position", "top-right"))
+        if hp_idx >= 0:
+            self.hud_pos_combo.setCurrentIndex(hp_idx)
+        self.hud_dur_spin.setValue(int(self.settings.get("hud_overlay_duration", 4)))
+        self.smtc_check.setChecked(bool(self.settings.get("smtc_enabled", True)))
+        self.spotify_id_edit.setText(self.settings.get("spotify_client_id", ""))
+        self.spotify_secret_edit.setText(self.settings.get("spotify_client_secret", ""))
+        self.discord_edit.setText(self.settings.get("discord_client_id", ""))
         translate_widget(self)
 
     # --- Tema & dil anında önizleme -----------------------------------
@@ -804,6 +843,7 @@ class SettingsView(QWidget):
             return
         self.settings["theme"] = key
         self._theme = THEMES.get(key, self._theme)
+        self._apply_theme_styles()
         parent = self.window()
         if parent is not None and hasattr(parent, "_reset_accent"):
             parent._reset_accent()
@@ -902,9 +942,17 @@ class SettingsView(QWidget):
             try:
                 get_spotify_user_access_token(
                     client_id, client_secret, self.settings, self._save_settings_file)
-                self.spotifyDone.emit(True, "🟢 Bağlı")
+                try:
+                    self.spotifyDone.emit(True, "🟢 Bağlı")
+                except RuntimeError:
+                    pass
+            except RuntimeError:
+                pass
             except Exception as e:
-                self.spotifyDone.emit(False, f"⚪ Bağlanamadı: {e}")
+                try:
+                    self.spotifyDone.emit(False, f"⚪ Bağlanamadı: {e}")
+                except RuntimeError:
+                    pass
 
         threading.Thread(target=worker, daemon=True).start()
 

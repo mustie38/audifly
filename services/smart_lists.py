@@ -39,8 +39,9 @@ def last_listen_map(refs: list[Ref], history=None) -> dict[str, datetime]:
     out: dict[str, datetime] = {}
     for _, _, s in refs:
         d = _parse(s.get("last_played"))
-        if d:
-            out[s.get("webpage_url") or s.get("local_path") or ""] = d
+        k = _key(s)
+        if d and k and (k not in out or d > out[k]):
+            out[k] = d
     if history is not None:
         for e in history.events():
             d = _parse(e["ts"])

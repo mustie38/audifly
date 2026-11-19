@@ -151,11 +151,10 @@ class SongRow(QWidget):
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(4)
         title_label = QLabel(parsed_title if len(parsed_title) <= 60 else parsed_title[:57] + "...")
-        title_label.setStyleSheet("font-weight: 600;")
+        title_label.setObjectName("RowTitle")
         text_layout.addWidget(title_label)
         self.offline_badge = QLabel("✓")
         self.offline_badge.setObjectName("OfflineBadge")
-        self.offline_badge.setStyleSheet("color: #48C78E; font-weight: bold;")
         self.offline_badge.setToolTip("Çevrimdışı kullanılabilir")
         self.offline_badge.setAccessibleName("Çevrimdışı kullanılabilir")
         self.offline_badge.setVisible(offline_path_for(song) is not None)
@@ -176,15 +175,12 @@ class SongRow(QWidget):
 
         liked = bool(song.get("liked"))
         self.like_btn = QPushButton()
+        self.like_btn.setObjectName("RowActionBtn")
         self.like_btn.setFixedSize(28, 28)
         self.like_btn.setIcon(vicon("heart_filled" if liked else "heart", 14, "#FF6B8A" if liked else "#9EA3B8"))
         self.like_btn.setIconSize(QSize(14, 14))
         self.like_btn.setToolTip("Beğen" if not liked else "Beğeniyi kaldır")
         self.like_btn.setCursor(Qt.PointingHandCursor)
-        self.like_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; border-radius: 14px; }"
-            "QPushButton:hover { background: rgba(255, 255, 255, 0.08); }"
-        )
         self.like_btn.clicked.connect(lambda: self.likeToggled.emit(self.index))
         layout.addWidget(self.like_btn)
 
@@ -195,15 +191,12 @@ class SongRow(QWidget):
         layout.addWidget(duration_label)
 
         more_btn = QPushButton()
+        more_btn.setObjectName("RowActionBtn")
         more_btn.setFixedSize(28, 28)
         more_btn.setIcon(vicon("more", 15, "#9EA3B8"))
         more_btn.setIconSize(QSize(15, 15))
         more_btn.setToolTip("Şarkı seçenekleri")
         more_btn.setCursor(Qt.PointingHandCursor)
-        more_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; border-radius: 14px; }"
-            "QPushButton:hover { background: rgba(255, 255, 255, 0.08); }"
-        )
         more_btn.clicked.connect(self._open_menu)
         layout.addWidget(more_btn)
 

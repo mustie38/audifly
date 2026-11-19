@@ -219,20 +219,18 @@ class PlayerBar(QWidget):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(BAR_SIDE_MARGIN, 0, BAR_SIDE_MARGIN, BAR_BOTTOM_MARGIN)
 
-        # 1) Dış "yüzen kart" katmanı: düz arka plan + karartma + elevation
+        # 1) Dış "yüzen kart" katmanı: düz arka plan + ince cam kenarlık
+        # (Not: QGraphicsDropShadowEffect animasyonlu WaveformStrip alt widget'ı nedeniyle
+        # saniyede ~18 kez tüm barı CPU'da Gaussian-blur'a zorladığı için kullanılmaz.)
         self.bg_frame = QFrame()
         self.bg_frame.setObjectName("PlayerBarBg")
         self.bg_frame.setStyleSheet(f"""
             #PlayerBarBg {{
                 background-color: #100e1a;
+                border: 1px solid rgba(255, 255, 255, 0.08);
                 border-radius: {BAR_RADIUS}px;
             }}
         """)
-        shadow = QGraphicsDropShadowEffect(self.bg_frame)
-        shadow.setBlurRadius(28)
-        shadow.setOffset(0, 6)
-        shadow.setColor(QColor(0, 0, 0, 140))
-        self.bg_frame.setGraphicsEffect(shadow)
 
         # Karartma + hafif mor ton
         self.overlay = QWidget(self.bg_frame)
@@ -541,15 +539,17 @@ class PlayerBar(QWidget):
     def _wire_signals(self):
         self.setStyleSheet(self._icon_btn_hover_qss())
 
-        # Kayıtlı ses seviyesini geri yükle (eskiden her açılışta 80'e sıfırlanıyordu)
-        self.playback.change_volume(int(self.playback.settings.get("_volume", 80)))
+        # Kayıtlı ses seviyesini geri yükle (sinyal bağlantısı ÖNCE yapılmalı ki slider & ikon senkron olsun)
         self.playback.volumeChanged.connect(self.volume_slider.setValue)
+        self.playback.change_volume(int(self.playback.settings.get("_volume", 80)))
         self.playback.songLoading.connect(self._on_song_loading)
         self.playback.songStarted.connect(self._on_song_started)
         self.playback.playStateChanged.connect(self._on_play_state)
         self.playback.positionChanged.connect(self._on_position)
         self.playback.playError.connect(self._on_play_error)
         self.playback.shuffleChanged.connect(self._on_shuffle_changed)
+        if hasattr(self.playback, "repeatChanged"):
+            self.playback.repeatChanged.connect(self._on_repeat_changed)
         self.playback.radioStarted.connect(self._on_radio_started)
         self.playback.radioStopped.connect(self._on_radio_stopped)
         if hasattr(self.playback, "vocalRemoverChanged"):
@@ -724,9 +724,11 @@ class PlayerBar(QWidget):
 
     def _on_sub_label_clicked(self, event):
         if event.button() == Qt.LeftButton:
-            artist = getattr(self, "_current_artist_raw", "") or self._now_sub_raw
-            if artist and artist not in ("YouTube Stream", "Bilinmeyen Sanatçı", "?", ""):
+            artist = getattr(self, "_current_artist_raw", "")
+            if artist and artist not in ("YouTube Stream", "Canlı Radyo", "Bilinmeyen Sanatçı", "?", ""):
                 self.artistClicked.emit(artist)
+                event.accept()
+                return
         super(QLabel, self.now_sub_label).mousePressEvent(event)
 
     def _set_now_text(self, title: str, subtitle: str):
@@ -738,6 +740,7 @@ class PlayerBar(QWidget):
         if not song:
             self._apply_cover_placeholder("?")
             self._set_now_text("Henüz şarkı seçilmedi", "YouTube Stream")
+            self._current_artist_raw = ""
             self.like_btn.set_active(False)
             self._current_key = None
             return
@@ -828,6 +831,8 @@ class PlayerBar(QWidget):
 
     def _on_radio_started(self, station: dict):
         name = station.get("name", "?")
+        self._current_key = None
+        self._current_artist_raw = ""
         self._set_now_text(name, "Canlı Radyo")
         self.current_time_label.setText("CANLI")
         self.total_time_label.setText("")
@@ -876,6 +881,9 @@ class PlayerBar(QWidget):
 
     def _cycle_repeat(self):
         mode = self.playback.cycle_repeat()
+        self._on_repeat_changed(mode)
+
+    def _on_repeat_changed(self, mode: str):
         self.repeat_btn.set_kind("repeat_one" if mode == "one" else "repeat")
         self.repeat_btn.set_active(mode != "off")
 

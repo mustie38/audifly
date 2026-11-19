@@ -238,9 +238,16 @@ class RadioView(QWidget):
         q, c, t = self.radio_query, self.radio_country_filter, self.radio_tag_filter
 
         def worker():
-            stations = fetch_radio_stations(query=q, country=c, tag=t)
+            try:
+                stations = fetch_radio_stations(query=q, country=c, tag=t)
+            except Exception as e:
+                log.warning("Radyo istasyonları alınamadı: %s", e)
+                stations = []
             if seq == self._search_seq:
-                self.stationsFetched.emit(stations)
+                try:
+                    self.stationsFetched.emit(stations)
+                except RuntimeError:
+                    pass
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -249,6 +256,8 @@ class RadioView(QWidget):
         if not self._stations:
             self.status_label.setText(
                 "📡 İstasyon bulunamadı (internet bağlantını veya farklı bir arama terimini kontrol et).")
+        else:
+            self.status_label.setText(f"📡 {len(self._stations)} istasyon listelendi.")
         self._render()
 
     # --- Render ---

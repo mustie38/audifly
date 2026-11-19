@@ -101,15 +101,20 @@ def build_qss(t: Theme) -> str:
     /* ============================================================
        AVATAR — ring efektli, tam oval
        ============================================================ */
-    QLabel#Avatar {{
+    QPushButton#Avatar, QLabel#Avatar {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
             stop:0 {t.accent}, stop:1 {t.accent_dark});
         color: white; 
         border: 2px solid rgba(255, 255, 255, 0.18);
-        border-radius: 20px;
+        border-radius: 17px;
+        padding: 0px;
         font-weight: bold; 
-        font-size: 15px;
-        letter-spacing: 1px;
+        font-size: 14px;
+        letter-spacing: 0px;
+    }}
+    QPushButton#Avatar:hover {{
+        border: 2px solid rgba(255, 255, 255, 0.45);
+        color: white;
     }}
 
     QLabel#NowPlayingHeader {{
@@ -130,7 +135,7 @@ def build_qss(t: Theme) -> str:
     QPushButton:hover {{
         background: rgba(255, 255, 255, 0.10);
         border: 1px solid {t.accent};
-        color: #ffffff;
+        color: {t.text};
     }}
     QPushButton:pressed {{
         background: rgba(255, 255, 255, 0.15);
@@ -186,7 +191,7 @@ def build_qss(t: Theme) -> str:
     QPushButton#Secondary:hover {{
         background: rgba(255, 255, 255, 0.13);
         border: 1px solid {t.accent};
-        color: #ffffff;
+        color: {t.text};
     }}
     QPushButton#Secondary:pressed {{
         background: rgba(255, 255, 255, 0.05);
@@ -235,12 +240,12 @@ def build_qss(t: Theme) -> str:
     QPushButton#NavFolderButton:hover {{
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid {t.accent};
-        color: #ffffff;
+        color: {t.text};
     }}
     QPushButton#NavFolderButton[has_active="true"] {{
         background: rgba(169, 128, 249, 0.16);
         border: 1px solid {t.accent};
-        color: #ffffff;
+        color: {t.text};
     }}
 
     QWidget#SmartFolderContainer {{
@@ -538,6 +543,19 @@ def build_qss(t: Theme) -> str:
 
     QCheckBox::indicator, QRadioButton::indicator {{ 
         width: 18px; height: 18px; border-radius: 9px;
+    }}
+
+    QLabel#RowTitle {{ font-weight: 600; }}
+    QLabel#OfflineBadge {{ color: #48C78E; font-weight: bold; }}
+    QPushButton#RowActionBtn {{
+        background: transparent;
+        border: none;
+        border-radius: 14px;
+        padding: 0px;
+    }}
+    QPushButton#RowActionBtn:hover {{
+        background: rgba(255, 255, 255, 0.08);
+        border: none;
     }}
 
     QToolTip {{

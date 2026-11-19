@@ -76,7 +76,7 @@ class SMTCService(QObject):
     thread'inden gelir; Qt Signal emit etmek güvenlidir (queued connection ile
     GUI thread'ine düşer)."""
     buttonPressed = Signal(str)  # "play" | "pause" | "next" | "previous" | "stop"
-    _coverReady = Signal(str, str, str, str)  # key, yol, başlık, sanatçı
+    _coverReady = Signal(int, str, str, str, str)  # gen, key, yol, başlık, sanatçı
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,6 +87,7 @@ class SMTCService(QObject):
         self._cover_path = None
         self._duration_ms = 0
         self._position_ms = 0
+        self._meta_gen = 0
 
     # --- Yaşam döngüsü ---
     def start(self, hwnd: int):
@@ -153,11 +154,14 @@ class SMTCService(QObject):
         """Şarkı bilgisini yazar. Kapak arka planda hazırlanıp eklenir."""
         if self._smtc is None:
             return
+        self._meta_gen += 1
+        gen = self._meta_gen
         self._set_text(title, artist)
         if thumb_pil is not None or thumb_url:
+            pil_copy = thumb_pil.copy() if thumb_pil is not None else None
             threading.Thread(
                 target=self._prepare_cover_and_update,
-                args=(title, artist, thumb_url, thumb_pil),
+                args=(gen, title, artist, thumb_url, pil_copy),
                 daemon=True).start()
 
     def _set_text(self, title: str, artist: str):
@@ -172,7 +176,7 @@ class SMTCService(QObject):
         except Exception as e:
             log.error("%s %s", "SMTC meta yazılamadı:", e)
 
-    def _prepare_cover_and_update(self, title, artist, thumb_url, pil_img):
+    def _prepare_cover_and_update(self, gen, title, artist, thumb_url, pil_img):
         """Arka plan thread'i: kapak görselini diske yazıp SMTC'ye ekler."""
         if pil_img is not None:
             try:
@@ -186,8 +190,21 @@ class SMTCService(QObject):
                 side = min(w, h)
                 img = img.crop(((w - side) // 2, (h - side) // 2,
                                 (w - side) // 2 + side, (h - side) // 2 + side))
-                img.save(path, "JPEG", quality=90)
-                self._coverReady.emit(key, path, title, artist)
+                fd, tmp_path = tempfile.mkstemp(prefix=".smtc-", suffix=".jpg", dir=_COVER_DIR)
+                os.close(fd)
+                try:
+                    img.save(tmp_path, "JPEG", quality=90)
+                    os.replace(tmp_path, path)
+                except Exception:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+                try:
+                    self._coverReady.emit(gen, key, path, title, artist)
+                except RuntimeError:
+                    pass
                 return
             except Exception as e:
                 log.error("%s %s", "SMTC kapak yazılamadı:", e)
@@ -202,16 +219,30 @@ class SMTCService(QObject):
                 resp = requests.get(thumb_url, timeout=8)
                 resp.raise_for_status()
                 os.makedirs(_COVER_DIR, exist_ok=True)
-                with open(cached, "wb") as f:
-                    f.write(resp.content)
+                fd, tmp_path = tempfile.mkstemp(prefix=".smtc-", suffix=".jpg", dir=_COVER_DIR)
+                try:
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(resp.content)
+                    os.replace(tmp_path, cached)
+                except Exception:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    raise
             except Exception as e:
                 log.error("%s %s", "SMTC kapak indirilemedi:", e)
                 return
-        self._coverReady.emit(key, cached, title, artist)
+        try:
+            self._coverReady.emit(gen, key, cached, title, artist)
+        except RuntimeError:
+            pass
 
-    def _apply_cover(self, key: str, cover_path: str, title: str, artist: str):
+    def _apply_cover(self, gen: int, key: str, cover_path: str, title: str, artist: str):
         if QThread.currentThread() != self.thread():
             log.warning("SMTC kapak güncellemesi GUI thread'i dışında çağrıldı.")
+            return
+        if gen != self._meta_gen:
             return
         if self._smtc is None or not os.path.exists(cover_path):
             return

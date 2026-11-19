@@ -142,9 +142,8 @@ class ListenTogetherDialog(QDialog):
         self.copy_btn.clicked.connect(self._copy_invite)
         self.transfer_btn.clicked.connect(self._transfer)
         self.sync_btn.clicked.connect(self.service.request_sync)
-        self.server_edit.editingFinished.connect(
-            lambda: self.service.wake_server(self.server_edit.text()))
-        service.latencyChanged.connect(lambda _ms: self._refresh())
+        self.server_edit.editingFinished.connect(self._wake_server_now)
+        service.latencyChanged.connect(self._on_latency_changed)
         service.connectProgress.connect(self._on_progress)
         self._progress = ""
         self.queue_add_btn.clicked.connect(self._add_current_to_queue)
@@ -152,9 +151,9 @@ class ListenTogetherDialog(QDialog):
         self.send_btn.clicked.connect(self._send_chat)
         self.chat_edit.returnPressed.connect(self._send_chat)
         service.stateChanged.connect(self._refresh)
-        service.membersChanged.connect(lambda *_: self._refresh())
+        service.membersChanged.connect(self._on_members_changed)
         service.queueChanged.connect(self._refresh_queue)
-        service.chatReceived.connect(lambda *_: self._render_chat())
+        service.chatReceived.connect(self._on_chat_received)
         service.emojiReceived.connect(self._on_emoji)
         self._refresh()
         self._refresh_queue()
@@ -183,10 +182,22 @@ class ListenTogetherDialog(QDialog):
                              self.pw_edit.text(), create=create):
             self._remember()
 
+    def _wake_server_now(self):
+        self.service.wake_server(self.server_edit.text())
+
+    def _on_latency_changed(self, _ms: int):
+        self._refresh()
+
+    def _on_members_changed(self, *_args):
+        self._refresh()
+
+    def _on_chat_received(self, *_args):
+        self._render_chat()
+
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)
         # Ücretsiz sunucu uyuyorsa pencere açılır açılmaz uyandır
-        QTimer.singleShot(0, lambda: self.service.wake_server(self.server_edit.text()))
+        QTimer.singleShot(0, self, self._wake_server_now)
 
     def _copy_invite(self):
         QApplication.clipboard().setText(build_invite(self.service.room, self.server_edit.text()))

@@ -125,10 +125,12 @@ class StatsView(QWidget):
         self.content_layout.addLayout(self.dist_box)
         self.content_layout.addStretch(1)
 
+        self._dirty = True
         self.store.playlistsChanged.connect(self._on_store_changed)
         if self.thumbnails is not None:
             self.thumbnails.thumbnailReady.connect(self._on_thumbnail_ready)
-        self.refresh()
+        if parent is None:
+            self.refresh()
         self.period_combo.currentIndexChanged.connect(self.refresh)
 
     def _on_thumbnail_ready(self, key: str):

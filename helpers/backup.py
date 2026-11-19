@@ -155,7 +155,13 @@ def import_library(store: PlaylistStore, path: str, settings: dict | None = None
         checked = validate_settings(dict(settings))
         # Sayısal/bool alanlar + tema, ekolayzer bantları ve akıllı kurallar doğrulanmış halleriyle
         # alınır; aksi halde bozuk bir yedek oturum içinde (yeniden başlatmaya kadar) bozuk değer bırakırdı.
-        validated_keys = set(_SETTING_RULES) | {"theme", "language", "equalizer_bands", "smart_rules"}
+        validated_keys = (
+            set(_SETTING_RULES)
+            | {
+                "theme", "language", "equalizer_bands", "smart_rules",
+                "visualizer_mode", "visualizer_palette", "hud_overlay_position",
+            }
+        )
         for key in portable_settings:
             if key in validated_keys and key in checked:
                 settings[key] = checked[key]

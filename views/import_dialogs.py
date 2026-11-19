@@ -118,7 +118,10 @@ class SpotifyImportDialog(QDialog):
                            "ayarını kontrol et.")
                 else:
                     msg = (f"Spotify kimlik doğrulaması başarısız (kod {e.status_code}):\n\"{e.detail}\"")
-                self.fetchError.emit(msg)
+                try:
+                    self.fetchError.emit(msg)
+                except RuntimeError:
+                    pass
                 return
             except SpotifyApiError as e:
                 if e.status_code == 404:
@@ -131,13 +134,22 @@ class SpotifyImportDialog(QDialog):
                            "oluşturduğun bir playlist ile dene.")
                 else:
                     msg = f"Spotify API hatası (kod {e.status_code}): \"{e.detail}\""
-                self.fetchError.emit(msg)
+                try:
+                    self.fetchError.emit(msg)
+                except RuntimeError:
+                    pass
                 return
             except Exception as e:
-                self.fetchError.emit(f"Spotify'a bağlanılamadı: {e}")
+                try:
+                    self.fetchError.emit(f"Spotify'a bağlanılamadı: {e}")
+                except RuntimeError:
+                    pass
                 return
 
-            self.tracksFetched.emit(playlist_name, queries)
+            try:
+                self.tracksFetched.emit(playlist_name, queries)
+            except RuntimeError:
+                pass
 
         threading.Thread(target=fetch_worker, daemon=True).start()
 
@@ -180,6 +192,7 @@ class SpotifyImportDialog(QDialog):
         self._running = False
         self.progress_label.setText(f"❌ {message}")
         self.close_btn.setText("Kapat")
+        self.close_btn.setEnabled(True)
 
     def _on_search_finished(self, playlist_name: str, added: int, failed: list, cancelled: bool):
         self._running = False
@@ -195,6 +208,7 @@ class SpotifyImportDialog(QDialog):
             msg = f"✅ '{playlist_name}' — {added}/{total} şarkının tamamı eklendi!"
         self.progress_label.setText(msg)
         self.close_btn.setText("Kapat")
+        self.close_btn.setEnabled(True)
 
         self.store.statusMessage.emit(
             f"Spotify içe aktarma tamamlandı: '{playlist_name}' ({added} şarkı).", "success")
@@ -318,9 +332,15 @@ def import_youtube_playlist(store: PlaylistStore, parent=None):
         try:
             name, songs = extract_youtube_playlist(url)
         except Exception as e:
-            bridge.failed.emit(str(e))
+            try:
+                bridge.failed.emit(str(e))
+            except RuntimeError:
+                pass
             return
-        bridge.resolved.emit(name, songs)
+        try:
+            bridge.resolved.emit(name, songs)
+        except RuntimeError:
+            pass
 
     threading.Thread(target=worker, daemon=True).start()
     store.statusMessage.emit("📥 YouTube playlist alınıyor…", "info")
@@ -384,7 +404,10 @@ def import_playlist_m3u(store: PlaylistStore, parent=None):
                 })
             except Exception as e:
                 log.error("%s %s", f"M3U öğesi çözülemedi ('{url}'):", e)
-        bridge.resolved.emit(items)  # queued connection → GUI thread
+        try:
+            bridge.resolved.emit(items)  # queued connection → GUI thread
+        except RuntimeError:
+            pass
 
     threading.Thread(target=worker, daemon=True).start()
     store.statusMessage.emit("📥 M3U dosyası işleniyor…", "info")
