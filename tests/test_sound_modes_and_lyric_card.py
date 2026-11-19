@@ -96,6 +96,9 @@ def test_equalizer_window_sound_mode_buttons(library_store, qapp, monkeypatch):
 
     monkeypatch.setattr(pb_mod.vlc, "Instance", lambda *a, **k: MagicMock())
     monkeypatch.setattr(pb_mod.vlc, "AudioEqualizer", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(pb_mod.vlc, "libvlc_audio_equalizer_get_band_count", lambda: 10)
+    monkeypatch.setattr(pb_mod.vlc, "libvlc_audio_equalizer_get_preset_count", lambda: 0)
+    monkeypatch.setattr(pb_mod.vlc, "libvlc_audio_equalizer_get_band_frequency", lambda i: 60.0 * (2 ** i))
     settings = {}
     engine = pb_mod.PlaybackEngine(library_store, library_store.paths, settings)
     win = EqualizerWindow(engine, settings, lambda: None)
