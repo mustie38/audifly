@@ -29,9 +29,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=0.8.1">
+  <link rel="stylesheet" href="style.css?v=0.8.2">
 </head>
 <body>
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
   <div class="aura aura-1" aria-hidden="true"></div>
   <div class="aura aura-2" aria-hidden="true"></div>
 
@@ -52,13 +53,28 @@
         <a href="https://github.com/mustie38/audifly" target="_blank" rel="noopener">GitHub</a>
       </div>
       <div class="nav-actions">
+        <div class="theme-dots" role="group" aria-label="Tema Rengi" title="Tema Rengi">
+          <button class="theme-dot active" data-theme="purple" aria-label="Nebula Mor" style="--dot:#a980f9"></button>
+          <button class="theme-dot" data-theme="cyan" aria-label="Okyanus Cyan" style="--dot:#00d2ff"></button>
+          <button class="theme-dot" data-theme="emerald" aria-label="Zümrüt Yeşil" style="--dot:#34d399"></button>
+          <button class="theme-dot" data-theme="sunset" aria-label="Gün Batımı" style="--dot:#fb7185"></button>
+        </div>
         <div class="lang-switch" role="group" aria-label="Language">
           <button class="lang-opt active" id="langTR" data-lang="tr">TR</button>
           <button class="lang-opt" id="langEN" data-lang="en">EN</button>
         </div>
         <a class="btn btn-primary btn-sm" id="navDownload" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener" data-i18n="btn_download_short">İndir</a>
+        <button class="menu-toggle" id="menuToggle" aria-label="Menü" aria-expanded="false">☰</button>
       </div>
     </nav>
+    <div class="mobile-menu" id="mobileMenu" hidden>
+      <a href="#screenshots" data-i18n="nav_screens">Ekran Görüntüleri</a>
+      <a href="#modes" data-i18n="nav_modes">Ses Modları</a>
+      <a href="#features" data-i18n="nav_features">Özellikler</a>
+      <a href="#install" data-i18n="nav_install">Kurulum</a>
+      <a href="#faq" data-i18n="nav_faq">SSS</a>
+      <a href="https://github.com/mustie38/audifly" target="_blank" rel="noopener">GitHub</a>
+    </div>
   </header>
 
   <main id="top">
@@ -371,6 +387,9 @@
     <img id="lbImg" alt="Büyütülmüş ekran görüntüsü">
   </div>
 
-  <script src="app.js?v=0.8.1"></script>
+  <!-- BACK TO TOP -->
+  <button class="back-to-top" id="backToTop" aria-label="Yukarı çık" title="Yukarı çık">↑</button>
+
+  <script src="app.js?v=0.8.2"></script>
 </body>
 </html>

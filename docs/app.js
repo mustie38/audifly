@@ -480,4 +480,94 @@
 
   const yr = document.getElementById("year");
   if (yr) yr.textContent = String(new Date().getFullYear());
+
+  // 8) Canlı Tema Önizleme (Nebula Mor, Okyanus Cyan, Zümrüt Yeşil, Gün Batımı)
+  const THEMES = {
+    purple:  { accent: "#a980f9", dark: "#7b4fe8", cyan: "#00d2ff", hi: "rgba(169, 128, 249, 0.42)", a1: "#8b5cf6", a2: "#00d2ff" },
+    cyan:    { accent: "#00d2ff", dark: "#0284c7", cyan: "#60a5fa", hi: "rgba(0, 210, 255, 0.42)",   a1: "#0284c7", a2: "#38bdf8" },
+    emerald: { accent: "#34d399", dark: "#059669", cyan: "#22d3ee", hi: "rgba(52, 211, 153, 0.42)",  a1: "#10b981", a2: "#06b6d4" },
+    sunset:  { accent: "#fb7185", dark: "#e11d48", cyan: "#f59e0b", hi: "rgba(251, 113, 133, 0.42)", a1: "#f43f5e", a2: "#f59e0b" },
+  };
+  function applyTheme(key, persist = true) {
+    const t = THEMES[key] || THEMES.purple;
+    const root = document.documentElement.style;
+    root.setProperty("--accent", t.accent);
+    root.setProperty("--accent-dark", t.dark);
+    root.setProperty("--cyan", t.cyan);
+    root.setProperty("--border-hi", t.hi);
+    root.setProperty("--aura-1", t.a1);
+    root.setProperty("--aura-2", t.a2);
+    document.querySelectorAll(".theme-dot").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.theme === key);
+    });
+    if (persist) {
+      try { localStorage.setItem("audifly_site_theme", key); } catch (_) {}
+    }
+  }
+  document.querySelectorAll(".theme-dot").forEach(btn => {
+    btn.addEventListener("click", () => applyTheme(btn.dataset.theme));
+  });
+  try {
+    const savedTheme = localStorage.getItem("audifly_site_theme");
+    if (savedTheme && THEMES[savedTheme]) applyTheme(savedTheme, false);
+  } catch (_) {}
+
+  // 9) Mobil Hamburger Menü
+  const menuToggle = document.getElementById("menuToggle");
+  const mobileMenu = document.getElementById("mobileMenu");
+  function setMenuOpen(open) {
+    if (!menuToggle || !mobileMenu) return;
+    mobileMenu.hidden = !open;
+    menuToggle.textContent = open ? "✕" : "☰";
+    menuToggle.setAttribute("aria-expanded", String(open));
+  }
+  if (menuToggle && mobileMenu) {
+    menuToggle.addEventListener("click", () => setMenuOpen(mobileMenu.hidden));
+    mobileMenu.querySelectorAll("a").forEach(a => {
+      a.addEventListener("click", () => setMenuOpen(false));
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !mobileMenu.hidden) setMenuOpen(false);
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 960 && !mobileMenu.hidden) setMenuOpen(false);
+    });
+  }
+
+  // 10) Scroll Reveal Animasyonları
+  const revealTargets = document.querySelectorAll(".stat, .shot-card, .audio-demo, .card, .step, .faq, .cta-box");
+  if ("IntersectionObserver" in window) {
+    revealTargets.forEach((el, idx) => {
+      el.classList.add("reveal");
+      el.style.setProperty("--reveal-delay", `${(idx % 4) * 55}ms`);
+    });
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -30px 0px" });
+    revealTargets.forEach(el => io.observe(el));
+  }
+
+  // 11) Scroll Progress Bar & Yukarı Çık Butonu
+  const scrollProgress = document.getElementById("scrollProgress");
+  const backToTop = document.getElementById("backToTop");
+  function onScroll() {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    if (scrollProgress) {
+      scrollProgress.style.width = `${Math.min(100, (scrollTop / maxScroll) * 100)}%`;
+    }
+    if (backToTop) {
+      backToTop.classList.toggle("show", scrollTop > 420);
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+  if (backToTop) {
+    backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
 })();
