@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audifly Web — Tarayıcıda Müzik Dinle</title>
+  <meta name="description" content="Audifly Web Player: Canlı internet radyoları, YouTube çalma listeleri ve yerel MP3/FLAC dosyalarını 10-band EQ ve Slowed / Speed Up / Nightcore modlarıyla tarayıcında dinle.">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <meta name="theme-color" content="#070811">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="player.css?v=0.8.2">
+</head>
+<body>
+  <div class="web-shell">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sb-top">
+        <a class="sb-brand" href="index.html" title="Ana Sayfaya Dön">
+          <img src="assets/favicon.png" alt="Audifly" width="32" height="32">
+          <span>Audifly <small>WEB</small></span>
+        </a>
+      </div>
+
+      <nav class="sb-nav">
+        <button class="nav-item active" data-view="playlist">🎵 Çalma Listelerim</button>
+        <button class="nav-item" data-view="radio">📻 Canlı Radyo</button>
+        <button class="nav-item" data-view="local">💽 Yerel Dosyalar (MP3/FLAC)</button>
+      </nav>
+
+      <div class="sb-section-hdr">
+        <span>ÇALMA LİSTELERİ</span>
+        <button class="sb-plus" id="newPlaylistBtn" title="Yeni Çalma Listesi">＋</button>
+      </div>
+      <div class="sb-playlists" id="playlistList"></div>
+
+      <div class="sb-footer">
+        <a class="dl-card" href="index.html#top">
+          <strong>⬇ Masaüstü Uygulaması</strong>
+          <span>Çevrimdışı MP3, QR Kumanda, Karaoke & Widget</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-area">
+      <!-- TOP BAR -->
+      <header class="topbar">
+        <form class="yt-add-form" id="ytAddForm">
+          <input type="text" id="ytUrlInput" placeholder="▶ YouTube şarkı linki yapıştır (youtube.com / youtu.be) ve Enter'a bas…" autocomplete="off">
+          <button type="submit" class="btn-accent">＋ Ekle & Çal</button>
+        </form>
+        <div class="mode-strip" id="soundModeBar" title="Ses Efekt Modu">
+          <button class="sm-pill active" data-mode="normal">🎵 Normal</button>
+          <button class="sm-pill" data-mode="slowed">🌙 Slowed</button>
+          <button class="sm-pill" data-mode="speed_up">⚡ Speed Up</button>
+          <button class="sm-pill" data-mode="nightcore">✨ Nightcore</button>
+          <button class="sm-pill" data-mode="bass_boost">🔊 Bass</button>
+        </div>
+      </header>
+
+      <!-- TOAST / STATUS -->
+      <div class="toast" id="toast" hidden></div>
+
+      <!-- VIEW 1: PLAYLIST -->
+      <section class="view active" id="view-playlist">
+        <div class="view-hero">
+          <div class="hero-art" id="plHeroArt">🎵</div>
+          <div>
+            <div class="hero-kicker">ÇALMA LİSTESİ</div>
+            <h1 id="plTitle">Favorilerim</h1>
+            <p id="plSubtitle">0 şarkı • Tarayıcında güvenle saklanır</p>
+            <div class="hero-actions">
+              <button class="btn-accent" id="plPlayAll">▶ Tümünü Çal</button>
+              <button class="btn-ghost" id="plShuffleBtn">🔀 Karışık</button>
+            </div>
+          </div>
+        </div>
+        <div class="track-list" id="trackList"></div>
+      </section>
+
+      <!-- VIEW 2: LIVE RADIO -->
+      <section class="view" id="view-radio">
+        <div class="radio-head">
+          <div>
+            <h1>📻 Canlı İnternet Radyoları</h1>
+            <p class="muted">Türkiye ve dünyadan binlerce canlı radyo istasyonu — tek tıkla anında çal.</p>
+          </div>
+          <form class="radio-search" id="radioSearchForm">
+            <input type="text" id="radioQuery" placeholder="İstasyon veya tür ara (örn. Power, Kral, Lofi)…">
+            <button type="submit" class="btn-accent">Ara</button>
+          </form>
+        </div>
+        <div class="chip-row" id="radioChips">
+          <button class="chip active" data-country="TR" data-tag="">🇹🇷 Türkiye Popüler</button>
+          <button class="chip" data-country="" data-tag="lofi">☕ Lo-Fi / Chill</button>
+          <button class="chip" data-country="TR" data-tag="pop">🎤 Türkçe Pop</button>
+          <button class="chip" data-country="TR" data-tag="rock">🎸 Rock</button>
+          <button class="chip" data-country="" data-tag="hiphop">🔥 Hip-Hop / Rap</button>
+          <button class="chip" data-country="" data-tag="electronic">⚡ Elektronik</button>
+          <button class="chip" data-country="" data-tag="jazz">🎷 Jazz</button>
+        </div>
+        <div class="radio-status muted" id="radioStatus">İstasyonlar yükleniyor…</div>
+        <div class="radio-grid" id="radioGrid"></div>
+      </section>
+
+      <!-- VIEW 3: LOCAL AUDIO FILES -->
+      <section class="view" id="view-local">
+        <div class="dropzone" id="dropZone">
+          <div class="dz-icon">💽</div>
+          <h2>Bilgisayarından MP3 / WAV / FLAC / OGG Sürükle & Bırak</h2>
+          <p class="muted">Dosyalar hiçbir sunucuya yüklenmez — doğrudan tarayıcında gerçek <strong>Web Audio EQ + Slowed / Speed Up / Nightcore / Bass Boost</strong> ve canlı FFT spektrum ile çalar.</p>
+          <label class="btn-accent" style="cursor:pointer;">
+            📂 Dosya Seç
+            <input type="file" id="localFileInput" accept="audio/*" multiple hidden>
+          </label>
+        </div>
+        <div class="track-list" id="localTrackList"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- FLOATING YOUTUBE MINI VIDEO (Required by YouTube IFrame API; toggleable) -->
+  <div class="yt-pip" id="ytPip" hidden>
+    <div class="yt-pip-hdr">
+      <span>▶ YouTube Akışı</span>
+      <button id="ytPipToggle" title="Küçült / Göster">_</button>
+    </div>
+    <div id="ytPlayerMount"></div>
+  </div>
+
+  <!-- BOTTOM PLAYER BAR -->
+  <footer class="player-bar">
+    <div class="pb-left">
+      <div class="pb-cover" id="pbCover">♪</div>
+      <div class="pb-meta">
+        <div class="pb-title" id="pbTitle">Henüz şarkı seçilmedi</div>
+        <div class="pb-artist" id="pbArtist">Radyo seç, YouTube linki yapıştır veya MP3 bırak</div>
+      </div>
+    </div>
+
+    <div class="pb-center">
+      <div class="pb-controls">
+        <button class="pb-btn" id="btnShuffle" title="Karışık">🔀</button>
+        <button class="pb-btn" id="btnPrev" title="Önceki">⏮</button>
+        <button class="pb-play" id="btnPlay" title="Oynat / Duraklat (Space)">▶</button>
+        <button class="pb-btn" id="btnNext" title="Sonraki">⏭</button>
+        <button class="pb-btn" id="btnRepeat" title="Tekrar">🔁</button>
+      </div>
+      <div class="pb-seek-row">
+        <span class="pb-time" id="pbCur">00:00</span>
+        <input type="range" id="pbSeek" min="0" max="1000" value="0">
+        <span class="pb-time" id="pbDur">00:00</span>
+      </div>
+    </div>
+
+    <div class="pb-right">
+      <canvas id="pbViz" width="120" height="34" aria-label="Canlı Spektrum"></canvas>
+      <button class="pb-btn" id="btnMute" title="Sessiz">🔊</button>
+      <input type="range" id="pbVol" min="0" max="100" value="80">
+    </div>
+  </footer>
+
+  <audio id="htmlAudio" crossorigin="anonymous"></audio>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="player.js?v=0.8.2"></script>
+</body>
+</html>
