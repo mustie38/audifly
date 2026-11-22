@@ -34,14 +34,14 @@ def find_csc() -> Path | None:
 
 def build_wasapi_spectrum() -> Path:
     if sys.platform != "win32":
-        print("[build_native] Windows dışı platform — WasapiSpectrum.exe atlanıyor.")
+        print("[build_native] Non-Windows platform - skipping WasapiSpectrum.exe.")
         return OUT_EXE
 
     csc = find_csc()
     if csc is None:
-        raise RuntimeError("Windows yerleşik C# derleyicisi (csc.exe) bulunamadı.")
+        raise RuntimeError("Windows built-in C# compiler (csc.exe) not found.")
     if not SRC_CS.is_file():
-        raise FileNotFoundError(f"Kaynak dosya bulunamadı: {SRC_CS}")
+        raise FileNotFoundError(f"Source file not found: {SRC_CS}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -53,17 +53,17 @@ def build_wasapi_spectrum() -> Path:
         f"/out:{OUT_EXE}",
         str(SRC_CS),
     ]
-    print(f"[build_native] Derleniyor: {SRC_CS.name} -> {OUT_EXE}")
+    print(f"[build_native] Compiling: {SRC_CS.name} -> {OUT_EXE}")
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
-        raise RuntimeError(f"C# derleme hatası:\n{res.stdout}\n{res.stderr}")
+        raise RuntimeError(f"C# compile failed:\n{res.stdout}\n{res.stderr}")
 
-    # Kendi yerleşik FFT öz-testini çalıştır
+    # Run built-in FFT self-test
     test_res = subprocess.run([str(OUT_EXE), "--self-test"], capture_output=True, text=True, timeout=10)
     if test_res.returncode != 0 or "SELF_TEST_OK" not in test_res.stdout:
-        raise RuntimeError(f"WasapiSpectrum self-test başarısız:\n{test_res.stdout}\n{test_res.stderr}")
+        raise RuntimeError(f"WasapiSpectrum self-test failed:\n{test_res.stdout}\n{test_res.stderr}")
 
-    print(f"[build_native] Başarılı ({OUT_EXE.stat().st_size:,} bayt): {test_res.stdout.strip()}")
+    print(f"[build_native] OK ({OUT_EXE.stat().st_size:,} bytes): {test_res.stdout.strip()}")
     return OUT_EXE
 
 
