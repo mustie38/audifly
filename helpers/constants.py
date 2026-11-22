@@ -65,7 +65,7 @@ if not _NODE_AVAILABLE:
     )
 
 
-APP_VERSION = "0.7.0"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
+APP_VERSION = "0.8.0"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
 APP_DISPLAY_NAME = "Audifly"   # kullanıcıya görünen ad (tek nokta)
 LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (göç uyumluluğu)
 
@@ -163,7 +163,9 @@ class AppPaths:
 
 
 DEFAULT_SETTINGS = {
+    "discord_rpc_enabled": True,
     "discord_client_id": DISCORD_CLIENT_ID_DEFAULT,
+    "custom_cache_dir": "",
     "page_size": PAGE_SIZE,
     "thumbnail_max_workers": THUMBNAIL_MAX_WORKERS,
     "audio_normalization": False,

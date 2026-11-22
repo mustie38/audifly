@@ -195,6 +195,25 @@ def logout_current_user():
             log.error("%s %s", "Oturum kapatılamadı:", e)
 
 
+def quick_start_user(username: str = "Misafir") -> tuple[bool, str]:
+    """Şifre oluşturmadan tek tıkla yerel kullanıcı profili başlatır."""
+    clean = (username or "Misafir").strip()
+    if not is_valid_username(clean):
+        return False, "Geçersiz profil adı."
+    users = _load_users()
+    if clean not in users:
+        salt, pw_hash = _hash_password(secrets.token_hex(16))
+        users[clean] = {"salt": salt, "hash": pw_hash, "guest": True}
+        if not _save_users(users):
+            return False, "Profil oluşturulamadı."
+    try:
+        user_data_paths(clean).ensure_dirs()
+    except OSError as e:
+        return False, f"Profil klasörü oluşturulamadı: {e}"
+    save_last_session(clean, True)
+    return True, clean
+
+
 SETTINGS_VERSION = 2
 
 # anahtar -> (tip, min, max). Bozuk/aralık dışı değerler varsayılana döner.
@@ -223,6 +242,7 @@ _SETTING_RULES = {
     "hud_overlay_enabled": (bool,),
     "hud_overlay_duration": (int, 2, 10),
     "hud_overlay_only_background": (bool,),
+    "discord_rpc_enabled": (bool,),
 }
 
 

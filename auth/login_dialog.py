@@ -82,6 +82,18 @@ class LoginDialog(QDialog):
         self.submit_btn.clicked.connect(self._submit)
         card_layout.addWidget(self.submit_btn)
 
+        self.quick_btn = QPushButton("⚡ Hesapsız Hızlı Başla")
+        self.quick_btn.setCursor(Qt.PointingHandCursor)
+        self.quick_btn.setToolTip("Şifre oluşturmadan tek tıkla yerel profil ile başla")
+        self.quick_btn.setStyleSheet(
+            "QPushButton { background: rgba(255, 255, 255, 0.08); color: #e8e6f3; "
+            "border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; "
+            "padding: 9px 14px; font-weight: 600; }"
+            "QPushButton:hover { background: rgba(169, 128, 249, 0.22); border-color: #a980f9; }"
+        )
+        self.quick_btn.clicked.connect(self._quick_start)
+        card_layout.addWidget(self.quick_btn)
+
         root.addWidget(card)
 
         self.toggle_btn = QPushButton("Hesabın yok mu? Kayıt ol")
@@ -118,6 +130,14 @@ class LoginDialog(QDialog):
 
         service.save_last_session(username, self.remember_check.isChecked())
         self.username = username
+        self.accept()
+
+    def _quick_start(self):
+        ok, result = service.quick_start_user("Misafir")
+        if not ok:
+            self.error_label.setText(result)
+            return
+        self.username = result
         self.accept()
 
 

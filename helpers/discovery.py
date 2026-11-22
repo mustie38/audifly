@@ -302,7 +302,11 @@ class DiscoveryService:
         do_major = force or (now - last_updated) > MAJOR_REFRESH_SECONDS
 
         new_sections = []
-        for cat in CATEGORY_DEFS:
+        categories = list(CATEGORY_DEFS)
+        if self.settings.get("language") == "en":
+            global_first = {"global_top", "global_rap", "new_releases", "mood_chill", "mood_night", "throwback"}
+            categories.sort(key=lambda c: (0 if c.get("id") in global_first else 1))
+        for cat in categories:
             old = old_sections.get(cat["id"])
             stale = self._section_is_stale(old, now)
             should_fetch = force or stale or (old is None and do_light)

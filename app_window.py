@@ -105,9 +105,23 @@ class MainWindow(QMainWindow):
         self.downloads.downloadFinished.connect(self._on_download_finished)
         self.downloads.downloadFailed.connect(self._on_download_failed)
 
+        # Özel çevrimdışı indirme klasörü ayarlandıysa uygula
+        self._default_cache_dir = paths.cache_dir
+        custom_dir = (self.settings.get("custom_cache_dir") or "").strip()
+        if custom_dir:
+            try:
+                os.makedirs(custom_dir, exist_ok=True)
+                self.paths.cache_dir = custom_dir
+            except OSError as e:
+                log.warning("Özel önbellek klasörü kullanılamadı (%s): %s", custom_dir, e)
+
         # Discord RPC
         client_id = self.settings.get("discord_client_id", DISCORD_CLIENT_ID_DEFAULT)
-        self.discord_rpc = DiscordRPCService(client_id, self.playback, self)
+        self.discord_rpc = DiscordRPCService(
+            client_id if self.settings.get("discord_rpc_enabled", True) else "",
+            self.playback,
+            self,
+        )
 
         # Ekolayzer + Sözler + Karaoke + Masaüstü Widget pencereleri (tek örnek)
         self._eq_window: EqualizerWindow | None = None
@@ -314,6 +328,11 @@ class MainWindow(QMainWindow):
         self.explore_view.artistRequested.connect(self.open_artist_page)
         self.home_view.artistRequested.connect(self.open_artist_page)
         self.home_view.roomQueueRequested.connect(self.listen.add_to_room_queue)
+        self.home_view.searchRequested.connect(self._open_search_dialog)
+        self.home_view.importSpotifyRequested.connect(
+            lambda: SpotifyImportDialog.prompt_and_run(
+                self.store, self.settings, self.save_settings, self))
+        self.home_view.exploreRequested.connect(self.show_explore_view)
         self.stats_view.artistRequested.connect(self.open_artist_page)
         if not settings.get("now_playing_panel_visible", True):
             self.now_playing_panel.hide()
@@ -1282,6 +1301,24 @@ class MainWindow(QMainWindow):
                     if 0 <= idx < len(songs):
                         self._on_smtc_song_started(pp, idx, songs[idx], False)
         self.store.backup_enabled = bool(self.settings.get("backup_enabled", True))
+        # Özel çevrimdışı indirme klasörünü canlı güncelle
+        custom_dir = (self.settings.get("custom_cache_dir") or "").strip()
+        if custom_dir:
+            try:
+                os.makedirs(custom_dir, exist_ok=True)
+                self.paths.cache_dir = custom_dir
+            except OSError as e:
+                log.warning("Özel önbellek klasörü oluşturulamadı: %s", e)
+        else:
+            self.paths.cache_dir = getattr(self, "_default_cache_dir", self.paths.cache_dir)
+
+        # Discord RPC aç/kapat canlı uygulanır
+        want_discord = bool(self.settings.get("discord_rpc_enabled", True))
+        if not want_discord and self.discord_rpc is not None:
+            self.discord_rpc.close()
+        elif want_discord and (self.discord_rpc is None or self.discord_rpc._closed):
+            cid = self.settings.get("discord_client_id", DISCORD_CLIENT_ID_DEFAULT)
+            self.discord_rpc = DiscordRPCService(cid, self.playback, self)
         # Crossfade ve ses normalizasyonu canlı uygulanır
         self.playback.apply_crossfade_settings(
             self.settings.get("crossfade_enabled", False),

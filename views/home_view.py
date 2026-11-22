@@ -156,6 +156,9 @@ class HomeView(QWidget):
     startRadioRequested = Signal(dict)
     artistRequested = Signal(str)
     roomQueueRequested = Signal(dict)
+    searchRequested = Signal()
+    importSpotifyRequested = Signal()
+    exploreRequested = Signal()
 
     def __init__(self, store: PlaylistStore, playback: PlaybackEngine,
                  thumbnails=None, username: str = "", parent=None):
@@ -241,6 +244,42 @@ class HomeView(QWidget):
         for card in (self.card_songs, self.card_playlists, self.card_time, self.card_liked):
             cards_row.addWidget(card, stretch=1)
         self.content_layout.addLayout(cards_row)
+
+        # --- Yeni Kullanıcı Hoş Geldin Kartı (kütüphane boşken görünür) ---
+        self.onboarding_card = QFrame()
+        self.onboarding_card.setObjectName("Card")
+        ob_lay = QVBoxLayout(self.onboarding_card)
+        ob_lay.setContentsMargins(20, 18, 20, 18)
+        ob_lay.setSpacing(10)
+        ob_title = QLabel("🎵 Audifly'a Hoş Geldin! Hemen Başla:")
+        ob_tf = QFont()
+        ob_tf.setPixelSize(16)
+        ob_tf.setBold(True)
+        ob_title.setFont(ob_tf)
+        ob_lay.addWidget(ob_title)
+        ob_sub = QLabel(
+            "Kütüphanen şu an boş. YouTube'dan şarkı arayabilir, herkese açık bir Spotify "
+            "listesini tek tıkla aktarabilir veya Keşfet sayfasından yeni müzikler bulabilirsin."
+        )
+        ob_sub.setObjectName("Muted")
+        ob_sub.setWordWrap(True)
+        ob_lay.addWidget(ob_sub)
+        ob_btns = QHBoxLayout()
+        ob_btns.setSpacing(10)
+        for label, obj_name, sig in (
+            ("🔍 Şarkı Ara", "Primary", self.searchRequested),
+            ("🎧 Spotify'dan Aktar", "Secondary", self.importSpotifyRequested),
+            ("🧭 Keşfet'e Göz At", "Secondary", self.exploreRequested),
+        ):
+            b = QPushButton(label)
+            b.setObjectName(obj_name)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(sig.emit)
+            ob_btns.addWidget(b)
+        ob_btns.addStretch(1)
+        ob_lay.addLayout(ob_btns)
+        self.onboarding_card.setVisible(False)
+        self.content_layout.addWidget(self.onboarding_card)
 
         # --- Hızlı Erişim ---
         quick_header = QLabel("Hızlı Erişim")
@@ -328,6 +367,8 @@ class HomeView(QWidget):
         self.card_liked.set_data(str(total_liked))
 
         # Hızlı Erişim grid'ini yeniden kur
+        if hasattr(self, "onboarding_card"):
+            self.onboarding_card.setVisible(len(all_songs) == 0)
         while self.quick_grid.count():
             item = self.quick_grid.takeAt(0)
             w = item.widget()

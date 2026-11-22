@@ -282,6 +282,14 @@ class SettingsView(QWidget):
         note.setObjectName("Muted")
         note.setWordWrap(True)
         f.addWidget(note, stretch=1)
+        reset_defaults_btn = QPushButton("🔄 Ayarları Varsayılana Sıfırla")
+        reset_defaults_btn.setObjectName("Secondary")
+        reset_defaults_btn.setCursor(Qt.PointingHandCursor)
+        reset_defaults_btn.setToolTip("Çalma listelerine dokunmadan tüm uygulama tercihlerini fabrika ayarlarına döndürür")
+        reset_defaults_btn.clicked.connect(self._reset_to_defaults)
+        f.addWidget(reset_defaults_btn)
+        f.addStretch(1)
+
         cancel_btn = QPushButton("İptal")
         cancel_btn.setObjectName("Secondary")
         cancel_btn.setCursor(Qt.PointingHandCursor)
@@ -670,6 +678,25 @@ class SettingsView(QWidget):
         self.other_label.setWordWrap(True)
         cache_card.layout().addWidget(self.other_label)
 
+        # Özel çevrimdışı / indirme klasörü
+        cache_card.layout().addSpacing(10)
+        self.cache_dir_edit = QLineEdit(self.settings.get("custom_cache_dir", ""))
+        self.cache_dir_edit.setReadOnly(True)
+        self.cache_dir_edit.setPlaceholderText(getattr(self.paths, "cache_dir", "") or "Varsayılan uygulama klasörü")
+        pick_dir_btn = QPushButton("📂 Klasör Seç…")
+        pick_dir_btn.setObjectName("Secondary")
+        pick_dir_btn.setCursor(Qt.PointingHandCursor)
+        pick_dir_btn.clicked.connect(self._pick_cache_dir)
+        reset_dir_btn = QPushButton("↩ Varsayılan")
+        reset_dir_btn.setObjectName("Secondary")
+        reset_dir_btn.setCursor(Qt.PointingHandCursor)
+        reset_dir_btn.clicked.connect(lambda: self.cache_dir_edit.setText(""))
+        cache_card.layout().addWidget(self._row(
+            "Çevrimdışı indirme klasörü",
+            self._hbox(self.cache_dir_edit, pick_dir_btn, reset_dir_btn),
+            "İndirilen şarkıların kaydedileceği klasör (boş bırakılırsa varsayılan klasör kullanılır).",
+        ))
+
         backup_card = self._card("Yedekleme")
         self.backup_check = self._toggle()
         self.backup_check.setChecked(self.settings.get("backup_enabled", True))
@@ -681,13 +708,23 @@ class SettingsView(QWidget):
 
     def _build_integrations_page(self) -> QWidget:
         spotify_card = self._card("Spotify İçe Aktarma")
+        pub_note = QLabel(
+            "✅ Herkese açık Spotify çalma listelerini hiçbir ayar yapmadan doğrudan içe "
+            "aktarabilirsin. Aşağıdaki Client ID alanı yalnızca kendi gizli listelerin için "
+            "isteğe bağlıdır (gelişmiş)."
+        )
+        pub_note.setObjectName("Muted")
+        pub_note.setWordWrap(True)
+        spotify_card.layout().addWidget(pub_note)
+        spotify_card.layout().addSpacing(6)
+
         form = QFormLayout()
         form.setSpacing(10)
         self.spotify_id_edit = QLineEdit(self.settings.get("spotify_client_id", ""))
-        form.addRow("Client ID:", self.spotify_id_edit)
+        form.addRow("Client ID (isteğe bağlı):", self.spotify_id_edit)
         self.spotify_secret_edit = QLineEdit(self.settings.get("spotify_client_secret", ""))
         self.spotify_secret_edit.setEchoMode(QLineEdit.Password)
-        form.addRow("Client Secret (isteğe bağlı, PKCE ile gerekmez):", self.spotify_secret_edit)
+        form.addRow("Client Secret (PKCE ile gerekmez):", self.spotify_secret_edit)
         spotify_card.layout().addLayout(form)
 
         connected = bool(self.settings.get("spotify_refresh_token"))
@@ -708,17 +745,23 @@ class SettingsView(QWidget):
             self._hbox(self.spotify_connect_btn, self.spotify_disconnect_btn)))
         spotify_card.layout().addWidget(self.spotify_status_label)
         note = QLabel(
-            "Client ID/Secret değerlerini developer.spotify.com/dashboard "
-            "adresinden ücretsiz oluşturabilirsin.")
+            "Client ID değerini developer.spotify.com/dashboard adresinden ücretsiz oluşturabilirsin.")
         note.setObjectName("Muted")
         note.setWordWrap(True)
         spotify_card.layout().addSpacing(6)
         spotify_card.layout().addWidget(note)
 
-        discord_card = self._card("Discord")
+        discord_card = self._card("Discord Rich Presence")
+        self.discord_enabled_check = self._toggle()
+        self.discord_enabled_check.setChecked(bool(self.settings.get("discord_rpc_enabled", True)))
+        discord_card.layout().addWidget(self._row(
+            "Discord'da Çalan Şarkıyı Göster",
+            self.discord_enabled_check,
+            "Discord profilinde şu an dinlediğin şarkıyı ve kapağını canlı paylaşır.",
+        ))
         discord_form = QFormLayout()
         self.discord_edit = QLineEdit(self.settings.get("discord_client_id", ""))
-        discord_form.addRow("Client ID:", self.discord_edit)
+        discord_form.addRow("Özel Client ID (isteğe bağlı):", self.discord_edit)
         discord_card.layout().addLayout(discord_form)
 
         return self._scroll_page(spotify_card, discord_card)
@@ -831,6 +874,8 @@ class SettingsView(QWidget):
             self.hud_pos_combo.setCurrentIndex(hp_idx)
         self.hud_dur_spin.setValue(int(self.settings.get("hud_overlay_duration", 4)))
         self.smtc_check.setChecked(bool(self.settings.get("smtc_enabled", True)))
+        self.discord_enabled_check.setChecked(bool(self.settings.get("discord_rpc_enabled", True)))
+        self.cache_dir_edit.setText(self.settings.get("custom_cache_dir", ""))
         self.spotify_id_edit.setText(self.settings.get("spotify_client_id", ""))
         self.spotify_secret_edit.setText(self.settings.get("spotify_client_secret", ""))
         self.discord_edit.setText(self.settings.get("discord_client_id", ""))
@@ -1043,6 +1088,36 @@ class SettingsView(QWidget):
         else:
             QMessageBox.information(self, "Boş", "Thumbnail önbelleği zaten boş.")
 
+    def _pick_cache_dir(self):
+        from PySide6.QtWidgets import QFileDialog
+        start = self.cache_dir_edit.text().strip() or getattr(self.paths, "cache_dir", "")
+        chosen = QFileDialog.getExistingDirectory(self, "Çevrimdışı İndirme Klasörü Seç", start)
+        if chosen:
+            self.cache_dir_edit.setText(chosen)
+
+    def _reset_to_defaults(self):
+        from mustiefly_qt.helpers.constants import DEFAULT_SETTINGS
+        reply = QMessageBox.question(
+            self,
+            "Ayarları Sıfırla",
+            "Çalma listelerin ve hesabın korunur; yalnızca tüm uygulama tercihleri "
+            "fabrika ayarlarına döndürülür. Devam edilsin mi?",
+        )
+        if reply != QMessageBox.Yes:
+            return
+        keep_keys = {"spotify_refresh_token", "last_session", "radio_favorites"}
+        preserved = {k: self.settings[k] for k in keep_keys if k in self.settings}
+        self.settings.clear()
+        self.settings.update({k: (list(v) if isinstance(v, list) else v) for k, v in DEFAULT_SETTINGS.items()})
+        self.settings.update(preserved)
+        self._save_settings_file()
+        apply_language(self.settings.get("language", DEFAULT_LANGUAGE))
+        self.refresh_dynamic()
+        parent = self.window()
+        if parent is not None and hasattr(parent, "_reset_accent"):
+            parent._reset_accent()
+        self.saved.emit()
+
     def _save_settings_file(self):
         from mustiefly_qt.auth.service import save_settings_for
         save_settings_for(self.paths, self.settings)
@@ -1073,6 +1148,8 @@ class SettingsView(QWidget):
         self.settings["hud_overlay_position"] = self.hud_pos_combo.currentData() or "top-right"
         self.settings["hud_overlay_duration"] = self.hud_dur_spin.value()
         self.settings["smtc_enabled"] = self.smtc_check.isChecked()
+        self.settings["discord_rpc_enabled"] = self.discord_enabled_check.isChecked()
+        self.settings["custom_cache_dir"] = self.cache_dir_edit.text().strip()
         self.settings["spotify_client_id"] = self.spotify_id_edit.text().strip()
         self.settings["spotify_client_secret"] = self.spotify_secret_edit.text().strip()
         self.settings["discord_client_id"] = self.discord_edit.text().strip()

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audifly — Masaüstü Müzik Deneyimi Yeniden Tasarlandı</title>
+  <meta name="description" content="Audifly: Ücretsiz, reklamsız, açık kaynak masaüstü müzik çalar. Audifly Connect QR kumanda, Slowed/Speed Up/Nightcore ses modları, Karaoke, Rainmeter Masaüstü Widget, Birlikte Dinle ve çevrimdışı indirme.">
+  <meta property="og:title" content="Audifly — Masaüstü Müzik Çalar">
+  <meta property="og:description" content="Ücretsiz, reklamsız, ışık hızında masaüstü müzik çalar. QR Telefon Kumandası, Ses Modları, Karaoke, Masaüstü Widget ve daha fazlası.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#070811">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="aura aura-1" aria-hidden="true"></div>
+  <div class="aura aura-2" aria-hidden="true"></div>
+
+  <!-- NAVBAR -->
+  <header class="nav-wrap">
+    <nav class="nav container">
+      <a class="brand" href="#top">
+        <span class="brand-logo" aria-hidden="true">♪</span>
+        <span>Audifly</span>
+        <span class="ver-pill" id="navVersion">v0.8.0</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features" data-i18n="nav_features">Özellikler</a>
+        <a href="#modes" data-i18n="nav_modes">Ses Modları</a>
+        <a href="#install" data-i18n="nav_install">Kurulum</a>
+        <a href="#faq" data-i18n="nav_faq">SSS</a>
+        <a href="https://github.com/mustie38/audifly" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <div class="nav-actions">
+        <button class="lang-btn" id="langToggle" title="Türkçe / English">EN</button>
+        <a class="btn btn-primary btn-sm" id="navDownload" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener" data-i18n="btn_download_short">İndir</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <main id="top">
+    <section class="hero container">
+      <div class="hero-copy">
+        <div class="hero-badge">
+          <span class="dot"></span>
+          <span data-i18n="hero_badge">Açık Kaynak • %100 Ücretsiz • Sıfır Reklam</span>
+        </div>
+        <h1 data-i18n="hero_title">Masaüstü müzik deneyimi, <span class="grad-text">sınırlar olmadan.</span></h1>
+        <p class="hero-sub" data-i18n="hero_sub">
+          YouTube ve Spotify listelerini tek yerde topla; çevrimdışı dinle, tek tıkla <strong>Slowed / Speed Up / Nightcore</strong> yap, telefonundan QR ile yönet ve arkadaşlarınla aynı anda dinle.
+        </p>
+
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" id="heroDownload" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener">
+            <span class="dl-icon">⬇</span>
+            <span data-i18n="btn_download_win">Windows için İndir (.exe)</span>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/mustie38/audifly" target="_blank" rel="noopener" data-i18n="btn_github">
+            GitHub'da İncele →
+          </a>
+        </div>
+
+        <div class="hero-meta">
+          <span id="releaseInfo">Windows 10 / 11 (64-bit) • Kurulum gerektirmez</span>
+          <span>•</span>
+          <span data-i18n="hero_meta_tests">405+ Otomatik Test</span>
+          <span>•</span>
+          <span data-i18n="hero_meta_local">Verilerin %100 Yerel</span>
+        </div>
+      </div>
+
+      <!-- INTERACTIVE AUDIFLY PLAYER MOCKUP -->
+      <div class="hero-visual">
+        <div class="player-mock glass">
+          <div class="mock-topbar">
+            <div class="mac-dots"><span></span><span></span><span></span></div>
+            <div class="mock-search">⚡ Ctrl + K • Ara veya komut çalıştır…</div>
+            <div class="mock-pills">
+              <span class="mini-tag">📱 Connect</span>
+              <span class="mini-tag">🖥️ Widget</span>
+            </div>
+          </div>
+
+          <div class="mock-body">
+            <div class="mock-cover">
+              <div class="cover-art">♪</div>
+              <div class="cover-ring"></div>
+            </div>
+            <div class="mock-info">
+              <div class="mock-kicker" id="mockModeTag">🎵 Normal • 1.00x</div>
+              <div class="mock-title">Gece Yarısı Yankıları</div>
+              <div class="mock-artist">Audifly Studio • Çevrimdışı Hazır ✓</div>
+              <canvas id="heroViz" width="380" height="72" aria-label="Canlı Neon Spektrum"></canvas>
+              <div class="mock-progress">
+                <div class="mock-bar"><div class="mock-fill" id="mockFill"></div></div>
+                <div class="mock-times"><span id="mockCur">01:24</span><span>03:42</span></div>
+              </div>
+              <div class="mock-controls">
+                <button class="mc-btn" id="mockPrev" title="Önceki">⏮</button>
+                <button class="mc-play" id="mockPlay" title="Oynat / Duraklat">⏸</button>
+                <button class="mc-btn" id="mockNext" title="Sonraki">⏭</button>
+                <button class="mc-chip" id="mockVocal">🎙️ Vokal Ayırma</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mock-modes" id="modes">
+            <button class="mode-pill active" data-mode="normal">🎵 Normal</button>
+            <button class="mode-pill" data-mode="slowed">🌙 Slowed</button>
+            <button class="mode-pill" data-mode="speed_up">⚡ Speed Up</button>
+            <button class="mode-pill" data-mode="nightcore">✨ Nightcore</button>
+            <button class="mode-pill" data-mode="bass_boost">🔊 Bass Boost</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS BAR -->
+    <section class="stats container">
+      <div class="stat-item glass">
+        <div class="stat-val">0 ₺</div>
+        <div class="stat-lbl" data-i18n="stat_free">Sonsuza dek ücretsiz & reklamsız</div>
+      </div>
+      <div class="stat-item glass">
+        <div class="stat-val">10-Band</div>
+        <div class="stat-lbl" data-i18n="stat_eq">Canlı EQ, Vokal Ayırma & 6 Ses Modu</div>
+      </div>
+      <div class="stat-item glass">
+        <div class="stat-val">QR</div>
+        <div class="stat-lbl" data-i18n="stat_connect">Uygulamasız Telefon Web Kumandası</div>
+      </div>
+      <div class="stat-item glass">
+        <div class="stat-val">100%</div>
+        <div class="stat-lbl" data-i18n="stat_privacy">Yerel veri — takip ve telemetri yok</div>
+      </div>
+    </section>
+
+    <!-- BENTO FEATURES -->
+    <section class="section container" id="features">
+      <div class="section-head">
+        <span class="kicker" data-i18n="feat_kicker">ÖZELLİKLER</span>
+        <h2 data-i18n="feat_title">Başka hiçbir masaüstü oynatıcıda tek çatı altında olmayan güç</h2>
+        <p data-i18n="feat_sub">Hafif, hızlı ve dinleme keyfi için takıntılı derecede incelikle tasarlandı.</p>
+      </div>
+
+      <div class="bento">
+        <article class="card bento-wide glass">
+          <div class="card-icon ic-green">📱</div>
+          <h3 data-i18n="f1_title">Audifly Connect — QR Kodlu Telefon Kumandası</h3>
+          <p data-i18n="f1_desc">Telefonundan QR kodu okut; hiçbir uygulama indirmeden tarayıcıdan albüm kapağını gör, şarkı değiştir, sesi ayarla, kuyruğu ve tüm çalma listelerini koltuktan yönet.</p>
+          <div class="card-tags"><span>Yerel Wi-Fi</span><span>Token Korumalı</span><span>iOS & Android</span></div>
+        </article>
+
+        <article class="card glass">
+          <div class="card-icon ic-purple">🎧</div>
+          <h3 data-i18n="f2_title">Tek Tık Ses Efekt Modları</h3>
+          <p data-i18n="f2_desc">Herhangi bir şarkıyı canlı olarak <strong>Slowed</strong>, <strong>Speed Up</strong>, <strong>Nightcore</strong>, <strong>Bass Boost</strong> veya komşu dostu <strong>Gece Modu</strong>'nda dinle.</p>
+        </article>
+
+        <article class="card glass">
+          <div class="card-icon ic-cyan">🖥️</div>
+          <h3 data-i18n="f3_title">Masaüstü Şeffaf Widget & Gaming HUD</h3>
+          <p data-i18n="f3_desc">Rainmeter tarzı süzülen cam masaüstü widget'ı (ana pencereyi gizler) ve oyun oynarken ekran köşesinde beliren minimal Gaming HUD.</p>
+        </article>
+
+        <article class="card glass">
+          <div class="card-icon ic-pink">🎤</div>
+          <h3 data-i18n="f4_title">Canlı Karaoke & Söz Kartı (PNG)</h3>
+          <p data-i18n="f4_desc">Senkronize tam ekran Karaoke, tek tıkla <strong>Vokal Ayırıcı (Enstrümantal)</strong> ve sevdiğin sözleri Discord / WhatsApp / Story için estetik PNG kart olarak kopyalama.</p>
+        </article>
+
+        <article class="card glass">
+          <div class="card-icon ic-amber">👥</div>
+          <h3 data-i18n="f5_title">Birlikte Dinle (Anlık Oda Senkronu)</h3>
+          <p data-i18n="f5_desc">Arkadaşlarınla şifreli oda kur; ortak şarkı kuyruğu, canlı sohbet, emoji tepkileri ve milisaniye hassasiyetinde senkronize müzik keyfi.</p>
+        </article>
+
+        <article class="card bento-wide glass">
+          <div class="card-icon ic-blue">✨</div>
+          <h3 data-i18n="f6_title">Akıllı Kütüphane, Parlatıcı & Spotlight (Ctrl + K)</h3>
+          <p data-i18n="f6_desc">Spotify, YouTube, M3U ve yerel MP3/FLAC dosyalarını içe aktar; çevrimdışı indir. <strong>Kütüphane Parlatıcı</strong> ile <code>(Official Video)</code>, <code>[4K]</code>, <code>- Topic</code> çöplerini tek tıkla temizle.</p>
+          <div class="card-tags"><span>Ctrl + K Spotlight</span><span>Çevrimdışı MP3</span><span>Discord RPC & SMTC</span><span>TR / EN</span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- INSTALL STEPS -->
+    <section class="section container" id="install">
+      <div class="section-head">
+        <span class="kicker" data-i18n="inst_kicker">30 SANİYEDE BAŞLA</span>
+        <h2 data-i18n="inst_title">Kurulum & Hızlı Başlangıç</h2>
+      </div>
+      <div class="steps">
+        <div class="step glass">
+          <div class="step-num">1</div>
+          <h3 data-i18n="s1_title">Kurulum Dosyasını İndir</h3>
+          <p data-i18n="s1_desc">Yukarıdaki <strong>Windows için İndir</strong> butonuna tıkla. VLC ses motoru ve FFmpeg paketle birlikte gelir — ek bir şey kurman gerekmez.</p>
+        </div>
+        <div class="step glass">
+          <div class="step-num">2</div>
+          <h3 data-i18n="s2_title">Hesapsız Hızlı Başla</h3>
+          <p data-i18n="s2_desc">İlk açılışta şifre oluşturmak zorunda değilsin: <strong>⚡ Hesapsız Hızlı Başla</strong>'ya tıkla ve anında müziğe geç.</p>
+        </div>
+        <div class="step glass">
+          <div class="step-num">3</div>
+          <h3 data-i18n="s3_title">Listelerini Aktar & Tadını Çıkar</h3>
+          <p data-i18n="s3_desc">Herkese açık Spotify veya YouTube listelerini doğrudan yapıştır, çevrimdışı indir ya da Keşfet'ten yeni parçalar bul.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section container" id="faq">
+      <div class="section-head">
+        <span class="kicker" data-i18n="faq_kicker">SIK SORULAN SORULAR</span>
+        <h2 data-i18n="faq_title">Merak Edilenler</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq glass" open>
+          <summary data-i18n="q1">Audifly gerçekten tamamen ücretsiz ve güvenli mi?</summary>
+          <p data-i18n="a1">Evet. Audifly %100 açık kaynak kodludur; reklam, abonelik veya veri toplama içermez. Tüm çalma listelerin ve ayarların yalnızca kendi bilgisayarında saklanır.</p>
+        </details>
+        <details class="faq glass">
+          <summary data-i18n="q2">Windows SmartScreen uyarısı çıkarsa ne yapmalıyım?</summary>
+          <p data-i18n="a2">Açık kaynak bağımsız uygulamalar ücretli dijital imza sertifikası olmadan paketlendiği için Windows ilk çalıştırmada uyarı gösterebilir. "Ek bilgi → Yine de çalıştır" diyerek güvenle kurabilir veya kaynak kodu GitHub'dan inceleyebilirsin.</p>
+        </details>
+        <details class="faq glass">
+          <summary data-i18n="q3">Spotify listelerimi aktarmak için hesap bağlamam şart mı?</summary>
+          <p data-i18n="a3">Hayır! Herkese açık (public) tüm Spotify çalma listelerini hiçbir API anahtarı veya giriş yapmadan doğrudan linkini yapıştırarak aktarabilirsin.</p>
+        </details>
+        <details class="faq glass">
+          <summary data-i18n="q4">Audifly Connect (Telefon Kumandası) nasıl çalışır?</summary>
+          <p data-i18n="a4">Uygulamadaki 📱 telefon ikonuna tıkladığında bilgisayarında yerel bir Wi-Fi kumanda sayfası açılır. Telefonunla QR kodu okutman yeterli; bilgisayar ve telefon aynı Wi-Fi/modem ağında olmalıdır.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="cta-banner container">
+      <div class="cta-box glass">
+        <h2 data-i18n="cta_title">Müziğini özgürleştirmeye hazır mısın?</h2>
+        <p data-i18n="cta_sub">Hafif, hızlı, modern ve tamamen senin kontrolünde.</p>
+        <div class="hero-cta" style="justify-content:center;">
+          <a class="btn btn-primary btn-lg" id="footerDownload" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener">
+            <span>⬇</span>
+            <span data-i18n="btn_download_win">Windows için İndir (.exe)</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer container">
+    <div>© <span id="year">2026</span> Audifly • <span data-i18n="foot_note">Açık kaynak masaüstü müzik çalar</span></div>
+    <div class="footer-links">
+      <a href="https://github.com/mustie38/audifly" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/mustie38/audifly/releases" target="_blank" rel="noopener" data-i18n="foot_releases">Sürümler</a>
+      <a href="https://github.com/mustie38/audifly/issues" target="_blank" rel="noopener" data-i18n="foot_issues">Sorun Bildir</a>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
