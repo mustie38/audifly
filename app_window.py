@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-
+import os
 from dataclasses import replace
 
 from PySide6.QtCore import Qt, QPropertyAnimation, QTimer, QUrl, Signal
