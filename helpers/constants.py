@@ -65,7 +65,7 @@ if not _NODE_AVAILABLE:
     )
 
 
-APP_VERSION = "0.8.0"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
+APP_VERSION = "0.8.1"   # pyproject.toml ile aynı olmalı (tests/test_diagnostics.py denetler)
 APP_DISPLAY_NAME = "Audifly"   # kullanıcıya görünen ad (tek nokta)
 LEGACY_APP_NAME = "Mustiefly"  # eski sürümlerin ad/klasör/anahtar adı (göç uyumluluğu)
 
