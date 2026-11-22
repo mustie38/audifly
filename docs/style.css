@@ -197,15 +197,19 @@ body {
   overflow: hidden;
   background: #090b15;
   border: 1px solid rgba(255,255,255,0.07);
-  aspect-ratio: 16 / 10;
+  height: 290px;
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .shot-img-wrap img {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  border-radius: 8px;
   display: block;
 }
 .shot-card figcaption { display: flex; flex-direction: column; gap: 4px; padding: 0 4px 4px; }
