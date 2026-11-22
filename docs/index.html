@@ -5,9 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Audifly — Masaüstü Müzik Deneyimi Yeniden Tasarlandı</title>
   <meta name="description" content="Audifly: Ücretsiz, reklamsız, açık kaynak masaüstü müzik çalar. Audifly Connect QR kumanda, Slowed/Speed Up/Nightcore ses modları, Karaoke, Rainmeter Masaüstü Widget, Birlikte Dinle ve çevrimdışı indirme.">
-  <meta property="og:title" content="Audifly — Masaüstü Müzik Çalar">
-  <meta property="og:description" content="Ücretsiz, reklamsız, ışık hızında masaüstü müzik çalar. QR Telefon Kumandası, Ses Modları, Karaoke, Masaüstü Widget ve daha fazlası.">
+  <link rel="canonical" href="https://mustie38.github.io/audifly/">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+
+  <!-- Open Graph (Discord, WhatsApp, LinkedIn, Facebook) -->
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mustie38.github.io/audifly/">
+  <meta property="og:site_name" content="Audifly">
+  <meta property="og:title" content="Audifly — Masaüstü Müzik Deneyimi, Sınırlar Olmadan">
+  <meta property="og:description" content="Ücretsiz, reklamsız, açık kaynak masaüstü müzik çalar. QR Telefon Kumandası, Slowed / Speed Up / Nightcore ses modları, Rainmeter Masaüstü Widget, Karaoke & Söz Kartı.">
+  <meta property="og:image" content="https://mustie38.github.io/audifly/assets/og-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Audifly Masaüstü Müzik Çalar ön izleme kartı">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Audifly — Masaüstü Müzik Çalar">
+  <meta name="twitter:description" content="Ücretsiz, reklamsız masaüstü müzik çalar: QR Telefon Kumandası, Slowed/Speed Up/Nightcore, Rainmeter Widget, Karaoke & Birlikte Dinle.">
+  <meta name="twitter:image" content="https://mustie38.github.io/audifly/assets/og-card.png">
+
   <meta name="theme-color" content="#070811">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,26 +39,30 @@
   <header class="nav-wrap">
     <nav class="nav container">
       <a class="brand" href="#top">
-        <span class="brand-logo" aria-hidden="true">♪</span>
+        <img class="brand-img" src="assets/favicon.png" alt="Audifly Logo" width="34" height="34">
         <span>Audifly</span>
         <span class="ver-pill" id="navVersion">v0.8.0</span>
       </a>
       <div class="nav-links">
-        <a href="#features" data-i18n="nav_features">Özellikler</a>
+        <a href="#screenshots" data-i18n="nav_screens">Ekran Görüntüleri</a>
         <a href="#modes" data-i18n="nav_modes">Ses Modları</a>
+        <a href="#features" data-i18n="nav_features">Özellikler</a>
         <a href="#install" data-i18n="nav_install">Kurulum</a>
         <a href="#faq" data-i18n="nav_faq">SSS</a>
         <a href="https://github.com/mustie38/audifly" target="_blank" rel="noopener">GitHub</a>
       </div>
       <div class="nav-actions">
-        <button class="lang-btn" id="langToggle" title="Türkçe / English">EN</button>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button class="lang-opt active" id="langTR" data-lang="tr">TR</button>
+          <button class="lang-opt" id="langEN" data-lang="en">EN</button>
+        </div>
         <a class="btn btn-primary btn-sm" id="navDownload" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener" data-i18n="btn_download_short">İndir</a>
       </div>
     </nav>
   </header>
 
-  <!-- HERO -->
   <main id="top">
+    <!-- HERO -->
     <section class="hero container">
       <div class="hero-copy">
         <div class="hero-badge">
@@ -58,21 +79,30 @@
             <span class="dl-icon">⬇</span>
             <span data-i18n="btn_download_win">Windows için İndir (.exe)</span>
           </a>
-          <a class="btn btn-ghost btn-lg" href="https://github.com/mustie38/audifly" target="_blank" rel="noopener" data-i18n="btn_github">
-            GitHub'da İncele →
+          <a class="btn btn-ghost btn-lg" href="#modes" data-i18n="btn_try_audio">
+            🎧 Ses Modlarını Dene
           </a>
         </div>
 
-        <div class="hero-meta">
-          <span id="releaseInfo">Windows 10 / 11 (64-bit) • Kurulum gerektirmez</span>
-          <span>•</span>
-          <span data-i18n="hero_meta_tests">405+ Otomatik Test</span>
-          <span>•</span>
-          <span data-i18n="hero_meta_local">Verilerin %100 Yerel</span>
+        <!-- İNDİRME ŞEFFAFLIK ŞERİDİ (Sürüm, Boyut, Kurulum Tipi, SHA-256) -->
+        <div class="dl-meta glass" id="downloadMeta">
+          <div class="dl-meta-row">
+            <span class="dl-tag" id="metaVersion">v0.8.0</span>
+            <span id="metaType" data-i18n="meta_type">Windows 10/11 (64-bit) Kurulum (.exe)</span>
+            <span>•</span>
+            <span id="metaSize">~85 MB</span>
+            <span>•</span>
+            <a class="meta-link" id="metaReleases" href="https://github.com/mustie38/audifly/releases/latest" target="_blank" rel="noopener" data-i18n="meta_all_files">Tüm Dosyalar</a>
+          </div>
+          <div class="dl-sha-row">
+            <span class="sha-label">SHA-256:</span>
+            <code id="metaSha" data-i18n="meta_sha_loading">GitHub Releases üzerinden doğrulanabilir</code>
+            <button class="sha-copy" id="copyShaBtn" hidden data-i18n="btn_copy">Kopyala</button>
+          </div>
         </div>
       </div>
 
-      <!-- INTERACTIVE AUDIFLY PLAYER MOCKUP -->
+      <!-- HERO VISUAL: GERÇEK UYGULAMA ÖNİZLEME + CANLI SPEKTRUM -->
       <div class="hero-visual">
         <div class="player-mock glass">
           <div class="mock-topbar">
@@ -87,12 +117,11 @@
           <div class="mock-body">
             <div class="mock-cover">
               <div class="cover-art">♪</div>
-              <div class="cover-ring"></div>
             </div>
             <div class="mock-info">
               <div class="mock-kicker" id="mockModeTag">🎵 Normal • 1.00x</div>
-              <div class="mock-title">Gece Yarısı Yankıları</div>
-              <div class="mock-artist">Audifly Studio • Çevrimdışı Hazır ✓</div>
+              <div class="mock-title">Dönence</div>
+              <div class="mock-artist">Barış Manço • Çevrimdışı Hazır ✓</div>
               <canvas id="heroViz" width="380" height="72" aria-label="Canlı Neon Spektrum"></canvas>
               <div class="mock-progress">
                 <div class="mock-bar"><div class="mock-fill" id="mockFill"></div></div>
@@ -105,14 +134,6 @@
                 <button class="mc-chip" id="mockVocal">🎙️ Vokal Ayırma</button>
               </div>
             </div>
-          </div>
-
-          <div class="mock-modes" id="modes">
-            <button class="mode-pill active" data-mode="normal">🎵 Normal</button>
-            <button class="mode-pill" data-mode="slowed">🌙 Slowed</button>
-            <button class="mode-pill" data-mode="speed_up">⚡ Speed Up</button>
-            <button class="mode-pill" data-mode="nightcore">✨ Nightcore</button>
-            <button class="mode-pill" data-mode="bass_boost">🔊 Bass Boost</button>
           </div>
         </div>
       </div>
@@ -133,8 +154,90 @@
         <div class="stat-lbl" data-i18n="stat_connect">Uygulamasız Telefon Web Kumandası</div>
       </div>
       <div class="stat-item glass">
-        <div class="stat-val">100%</div>
-        <div class="stat-lbl" data-i18n="stat_privacy">Yerel veri — takip ve telemetri yok</div>
+        <div class="stat-val">405+</div>
+        <div class="stat-lbl" data-i18n="stat_tests">Otomatik test ile doğrulanmış kalite</div>
+      </div>
+    </section>
+
+    <!-- REAL SCREENSHOTS GALLERY -->
+    <section class="section container" id="screenshots">
+      <div class="section-head">
+        <span class="kicker" data-i18n="scr_kicker">GERÇEK EKRAN GÖRÜNTÜLERİ</span>
+        <h2 data-i18n="scr_title">Audifly Windows üzerinde gerçekten nasıl görünüyor?</h2>
+        <p data-i18n="scr_sub">Doğrudan Audifly Qt uygulamasından alınan gerçek arayüz görüntüleri — büyütmek için tıklayabilirsin.</p>
+      </div>
+
+      <div class="gallery-grid">
+        <figure class="shot-card glass" data-zoom="assets/shot-equalizer.png">
+          <div class="shot-img-wrap">
+            <img src="assets/shot-equalizer.png" alt="Audifly 10-Band Ekolayzer ve Ses Efekt Modları" loading="lazy">
+          </div>
+          <figcaption>
+            <strong data-i18n="shot1_t">🎚️ 10-Band Ekolayzer & Tek Tık Ses Modları</strong>
+            <span data-i18n="shot1_d">Slowed, Speed Up, Nightcore, Bass Boost, Gece Modu, Crossfade ve Vokal Ayırıcı tek pencerede.</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot-card glass" data-zoom="assets/shot-connect.png">
+          <div class="shot-img-wrap">
+            <img src="assets/shot-connect.png" alt="Audifly Connect QR Telefon Kumandası" loading="lazy">
+          </div>
+          <figcaption>
+            <strong data-i18n="shot2_t">📱 Audifly Connect (QR Telefon Kumandası)</strong>
+            <span data-i18n="shot2_d">Telefondan QR okut, uygulama indirmeden müziği, sesi ve listeleri yönet.</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot-card glass" data-zoom="assets/shot-widget.png">
+          <div class="shot-img-wrap">
+            <img src="assets/shot-widget.png" alt="Audifly Masaüstü Şeffaf Rainmeter Widget" loading="lazy">
+          </div>
+          <figcaption>
+            <strong data-i18n="shot3_t">🖥️ Masaüstü Şeffaf Widget (Rainmeter Tarzı)</strong>
+            <span data-i18n="shot3_d">Ana pencereyi gizler; masaüstünde süzülen şeffaf cam kart + canlı spektrum.</span>
+          </figcaption>
+        </figure>
+
+        <figure class="shot-card glass" data-zoom="assets/shot-lyric-card.png">
+          <div class="shot-img-wrap">
+            <img src="assets/shot-lyric-card.png" alt="Audifly Paylaşılabilir Şarkı Sözü Kartı" loading="lazy">
+          </div>
+          <figcaption>
+            <strong data-i18n="shot4_t">🖼️ Paylaşılabilir Şarkı Sözü Kartı (PNG)</strong>
+            <span data-i18n="shot4_d">Seçtiğin sözlerden 720×900 estetik kart üretip tek tıkla Discord / WhatsApp'a yapıştır.</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- INTERACTIVE WEB AUDIO SOUND MODES DEMO (#modes) -->
+    <section class="section container" id="modes">
+      <div class="section-head">
+        <span class="kicker" data-i18n="modes_kicker">CANLI SES DEMOSU (BEFORE / AFTER)</span>
+        <h2 data-i18n="modes_title">Ses Modlarını doğrudan tarayıcında test et</h2>
+        <p data-i18n="modes_sub">Aşağıdaki canlı Web Audio demosunu başlat ve modlar arasında geçerek tempo + EQ farkını anında duy.</p>
+      </div>
+
+      <div class="audio-demo glass">
+        <div class="demo-top">
+          <button class="btn btn-primary" id="demoAudioBtn" data-i18n="demo_play">▶ Canlı Ses Demosunu Başlat</button>
+          <div class="demo-readout">
+            <span class="demo-badge" id="demoModeName">🎵 Normal</span>
+            <span class="demo-rate" id="demoRate">1.00x</span>
+            <span class="demo-desc" id="demoDesc" data-i18n="mode_normal_d">Orijinal tempo ve düz ekolayzer</span>
+          </div>
+        </div>
+
+        <div class="demo-pills">
+          <button class="mode-pill active" data-mode="normal">🎵 Normal (1.00x)</button>
+          <button class="mode-pill" data-mode="slowed">🌙 Slowed (0.84x)</button>
+          <button class="mode-pill" data-mode="speed_up">⚡ Speed Up (1.18x)</button>
+          <button class="mode-pill" data-mode="nightcore">✨ Nightcore (1.25x)</button>
+          <button class="mode-pill" data-mode="bass_boost">🔊 Bass Boost</button>
+          <button class="mode-pill" data-mode="night_mode">🌌 Gece Modu</button>
+        </div>
+
+        <div class="eq-bars" id="demoEqBars" aria-label="10-Band EQ Profili"></div>
       </div>
     </section>
 
@@ -261,6 +364,12 @@
       <a href="https://github.com/mustie38/audifly/issues" target="_blank" rel="noopener" data-i18n="foot_issues">Sorun Bildir</a>
     </div>
   </footer>
+
+  <!-- LIGHTBOX FOR SCREENSHOTS -->
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lb-close" id="lbClose" aria-label="Kapat">✕</button>
+    <img id="lbImg" alt="Büyütülmüş ekran görüntüsü">
+  </div>
 
   <script src="app.js"></script>
 </body>
