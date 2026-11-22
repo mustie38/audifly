@@ -77,7 +77,7 @@ def test_fetch_radio_recommendations_with_mocked_ytmusic(monkeypatch):
     assert recs[1]["title"] == "Song Two"
 
 
-def test_start_radio_for_song(library_store):
+def test_start_radio_for_song(library_store, monkeypatch):
     class FakePlayback(QObject):
         songStarted = Signal(str, int, dict, bool)
         playStateChanged = Signal(bool)
@@ -96,8 +96,11 @@ def test_start_radio_for_song(library_store):
         def get_next_index(self):
             return -1
 
+    # Canlı ağ çağrısı / arka plan iş parçacığı başlatmasını engelle (CI GC segfault'unu önler)
+    monkeypatch.setattr(song_radio, "fetch_radio_recommendations", lambda *a, **kw: [])
     playback = FakePlayback()
     service = SongRadioService(library_store, playback)
+    monkeypatch.setattr(service, "_fetch_async", lambda *a, **kw: None)
 
     seed = {
         "title": "Bengü - Saat 3 (Official Video)",
