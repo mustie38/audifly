@@ -370,7 +370,6 @@
 
   // 7) Otomatik Tarayıcı Dili Algılama + TR | EN Anahtarı
   const EN = {
-    nav_web_player: "🎧 Web Player",
     nav_screens: "Screenshots",
     nav_features: "Features",
     nav_modes: "Sound Modes",
@@ -381,7 +380,6 @@
     hero_title: 'Desktop music experience, <span class="grad-text">without limits.</span>',
     hero_sub: "Bring YouTube, Spotify, and local playlists together; download offline, switch to <strong>Slowed / Speed Up / Nightcore</strong> in one click, control via QR from your phone, and listen together with friends.",
     btn_download_win: "Download for Windows (.exe)",
-    btn_web_player: "🎧 Listen on Web",
     btn_try_audio: "🎧 Try Sound Modes",
     meta_type: "Windows 10/11 (64-bit) Installer (.exe)",
     meta_all_files: "All Files",
