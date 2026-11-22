@@ -29,6 +29,13 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QMenu, QWidget
 
+from mustiefly_qt.services.native_spectrum import (
+    acquire_native_spectrum,
+    get_live_spectrum_bands,
+    is_native_spectrum_available,
+    release_native_spectrum,
+)
+
 VISUALIZER_MODES = ("bars", "wave", "mirror", "circular")
 MODE_LABELS = {
     "bars": "📊 Neon Barlar",
@@ -107,6 +114,9 @@ class NeonAudioVisualizer(QWidget):
         self._phase: float = 0.0
         self._beat_energy: float = 0.0
         self._playing: bool = False
+        self._use_native_audio: bool = True
+        self._native_acquired: bool = False
+        self.destroyed.connect(self._release_native_capture)
 
         if self._interactive:
             self.setCursor(Qt.PointingHandCursor)
@@ -161,6 +171,7 @@ class NeonAudioVisualizer(QWidget):
             self._timer.stop()
         elif self._playing and self.isVisible():
             self._timer.start()
+        self._sync_native_capture()
         self.update()
 
     def set_mode(self, mode: str):
@@ -174,6 +185,7 @@ class NeonAudioVisualizer(QWidget):
             self._timer.stop()
         elif self._playing and self.isVisible() and not self._timer.isActive():
             self._timer.start()
+        self._sync_native_capture()
         self.modeChanged.emit(self._mode)
         self.update()
 
@@ -236,20 +248,51 @@ class NeonAudioVisualizer(QWidget):
             "Sağ tık: Mod ve renk paleti menüsü"
         )
 
+    def set_use_native_audio(self, enabled: bool):
+        self._use_native_audio = bool(enabled)
+        self._sync_native_capture()
+
+    def _sync_native_capture(self):
+        want = (
+            self._use_native_audio
+            and self._playing
+            and self.isVisible()
+            and self._enabled
+            and self._mode != "off"
+        )
+        if want and not self._native_acquired:
+            if acquire_native_spectrum():
+                self._native_acquired = True
+        elif not want and self._native_acquired:
+            self._release_native_capture()
+
+    def _release_native_capture(self, *_args):
+        if self._native_acquired:
+            self._native_acquired = False
+            release_native_spectrum()
+
     def set_playing(self, playing: bool):
         self._playing = bool(playing)
         if self._playing and self.isVisible() and self._enabled and self._mode != "off":
             if not self._timer.isActive():
                 self._timer.start()
+        self._sync_native_capture()
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)
         if self._playing and self._enabled and self._mode != "off" and not self._timer.isActive():
             self._timer.start()
+        self._sync_native_capture()
 
     def hideEvent(self, event):  # noqa: N802
         self._timer.stop()
+        self._release_native_capture()
         super().hideEvent(event)
+
+    def closeEvent(self, event):  # noqa: N802
+        self._timer.stop()
+        self._release_native_capture()
+        super().closeEvent(event)
 
     # ------------------------------------------------------------------
     # Etkileşim (Tıklama & Sağ Tık Menüsü)
@@ -301,6 +344,12 @@ class NeonAudioVisualizer(QWidget):
             act = menu.addAction(f"{prefix}{p_label}")
             act.triggered.connect(lambda _=False, k=p_key: self.set_palette(k))
 
+        if is_native_spectrum_available():
+            menu.addSeparator()
+            prefix = "✓ " if self._use_native_audio else "    "
+            nat_act = menu.addAction(f"{prefix}⚡ Canlı Ses Yakalama (C# WASAPI)")
+            nat_act.triggered.connect(lambda _=False: self.set_use_native_audio(not self._use_native_audio))
+
         menu.exec(global_pos)
 
     # ------------------------------------------------------------------
@@ -338,32 +387,41 @@ class NeonAudioVisualizer(QWidget):
             self._beat_energy *= 0.5
 
         n = self._bar_count
+        live_bands = None
+        if self._playing and self._use_native_audio:
+            cand = get_live_spectrum_bands(n)
+            if cand is not None and len(cand) == n and max(cand) > 0.015:
+                live_bands = cand
+
         for i in range(n):
             norm_i = i / max(1, n - 1)  # 0.0 (bas) -> 1.0 (tiz)
             if self._playing:
-                # 1) Alt frekanslar (Sub-bass & Kick: 0.0 - 0.25)
-                bass_weight = max(0.0, 1.0 - norm_i * 3.2)
-                bass_comp = bass_weight * (0.45 + 0.55 * self._beat_energy)
+                if live_bands is not None:
+                    target = max(0.05, min(0.98, live_bands[i]))
+                else:
+                    # 1) Alt frekanslar (Sub-bass & Kick: 0.0 - 0.25)
+                    bass_weight = max(0.0, 1.0 - norm_i * 3.2)
+                    bass_comp = bass_weight * (0.45 + 0.55 * self._beat_energy)
 
-                # 2) Orta frekanslar (Vokal & Melodi: 0.20 - 0.75)
-                mid_wave = (
-                    math.sin(self._phase * 1.3 + i * 0.35) * 0.5
-                    + math.cos(self._phase * 0.8 - i * 0.22) * 0.5
-                )
-                mid_envelope = math.sin(norm_i * math.pi)
-                mid_comp = max(0.0, (0.38 + 0.34 * mid_wave) * mid_envelope)
-                if vocal_cut and 0.25 <= norm_i <= 0.68:
-                    # Enstrümantal mod açıksa orta vokal bantlarında çentik etkisi
-                    mid_comp *= 0.42
+                    # 2) Orta frekanslar (Vokal & Melodi: 0.20 - 0.75)
+                    mid_wave = (
+                        math.sin(self._phase * 1.3 + i * 0.35) * 0.5
+                        + math.cos(self._phase * 0.8 - i * 0.22) * 0.5
+                    )
+                    mid_envelope = math.sin(norm_i * math.pi)
+                    mid_comp = max(0.0, (0.38 + 0.34 * mid_wave) * mid_envelope)
+                    if vocal_cut and 0.25 <= norm_i <= 0.68:
+                        # Enstrümantal mod açıksa orta vokal bantlarında çentik etkisi
+                        mid_comp *= 0.42
 
-                # 3) Üst frekanslar (Tiz & Hi-Hat parıltısı: 0.65 - 1.0)
-                treble_weight = max(0.0, (norm_i - 0.55) * 1.8)
-                treble_comp = treble_weight * random.uniform(0.12, 0.65)
+                    # 3) Üst frekanslar (Tiz & Hi-Hat parıltısı: 0.65 - 1.0)
+                    treble_weight = max(0.0, (norm_i - 0.55) * 1.8)
+                    treble_comp = treble_weight * random.uniform(0.12, 0.65)
 
-                # Rastgele organik canlılık
-                jitter = random.uniform(-0.08, 0.14)
-                target = (bass_comp + mid_comp + treble_comp + jitter) * vol_scale
-                target = max(0.06, min(0.98, target))
+                    # Rastgele organik canlılık
+                    jitter = random.uniform(-0.08, 0.14)
+                    target = (bass_comp + mid_comp + treble_comp + jitter) * vol_scale
+                    target = max(0.06, min(0.98, target))
             else:
                 target = rest_floor
 
